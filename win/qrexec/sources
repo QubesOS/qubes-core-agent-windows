@@ -1,0 +1,23 @@
+TARGETNAME=qrexec_agent
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+
+UMTYPE=console
+USE_MSVCRT=1
+
+
+INCLUDES=$(INCLUDES); \
+                    ..\include;
+
+SOURCES=qrexec_agent.c txrx-vchan.c
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\kernel32.lib \
+        $(SDK_LIB_PATH)\setupapi.lib \
+	..\libs\*\gntmem.lib \
+	..\libs\*\evtchn.lib \
+	..\libs\*\libxs.lib \
+	..\libs\*\libvchan.lib
+
+
