@@ -103,8 +103,13 @@ struct gntmem_handle* gntmem_open() {
 
 void gntmem_close(struct gntmem_handle* h) {
 
-	struct grant_handle* next_grant = h->first_grant;
+	struct grant_handle* next_grant;
 	DWORD transferred;
+
+	if (!h)
+		return;
+
+	next_grant = h->first_grant;
 
 	if(!CancelIo(h->h)) {
 		fprintf(stderr, "Gntmem: Unable to cancel outstanding grants\n");
@@ -151,6 +156,10 @@ int gntmem_set_local_quota(struct gntmem_handle* h, int new_limit) {
 	DWORD bytes_written;
 	OVERLAPPED ol;
 
+
+	if (!h)
+		return -1;
+
 	setlim.new_limit = new_limit;
 	memset(&ol, 0, sizeof(ol));
 	ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -177,6 +186,10 @@ int gntmem_set_global_quota(struct gntmem_handle* h, int new_limit) {
 	struct ioctl_gntmem_set_limit setlim;
 	DWORD bytes_written;
 	OVERLAPPED ol;
+
+
+	if (!h)
+		return -1;
 
 	setlim.new_limit = new_limit;
 	memset(&ol, 0, sizeof(ol));
@@ -206,6 +219,11 @@ void* gntmem_grant_pages_to_domain(struct gntmem_handle* h, domid_t domain, int 
 	struct grant_handle* new_handle;
 	struct ioctl_gntmem_get_grants get_grants;
 	OVERLAPPED ggol;
+	PVOID	pResult;
+
+
+	if (!h)
+		return NULL;
 
 	if(domain < 0)
 		return NULL;
@@ -266,7 +284,9 @@ void* gntmem_grant_pages_to_domain(struct gntmem_handle* h, domid_t domain, int 
 	memcpy(grants_out, (grant_ref_t*)(&(((void**)out_buffer)[1])), sizeof(grant_ref_t) * n_pages);
 	new_handle->next = h->first_grant;
 	h->first_grant = new_handle;
-	return *((void**)out_buffer);
 
+	pResult = *((void**)out_buffer);
+	free(out_buffer);
+	return pResult;
 }
 
