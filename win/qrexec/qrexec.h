@@ -19,15 +19,8 @@
  *
  */
 
-#define QREXEC_DAEMON_SOCKET_DIR "/var/run/qubes"
-#define MAX_FDS 256
-#define MAX_DATA_CHUNK 4096
-
 #define REXEC_PORT 512
 
-#define QREXEC_AGENT_TRIGGER_PATH "/var/run/qubes/qrexec_agent"
-#define QREXEC_AGENT_FDPASS_PATH "/var/run/qubes/qrexec_agent_fdpass"
-#define MEMINFO_WRITER_PIDFILE "/var/run/meminfo-writer.pid"
 
 enum {
 	MSG_CLIENT_TO_SERVER_EXEC_CMDLINE = 0x100,
@@ -64,12 +57,39 @@ struct client_header {
 	unsigned int len;
 };
 
-struct connect_existing_params {
-	char ident[32];
-};
+typedef enum {
+	HTYPE_INVALID = 0,
+	HTYPE_PROCESS,
+	HTYPE_STDOUT,
+	HTYPE_STDERR
+} HANDLE_TYPE;
 
-struct trigger_connect_params {
-	char exec_index[64];
-	char target_vmname[32];
-	struct connect_existing_params process_fds;
-};
+
+typedef struct _HANDLE_INFO {
+	ULONG	uClientNumber;	// number of the repsective CLIENT_INFO in the g_Clients array
+	HANDLE_TYPE	bType;
+} HANDLE_INFO, *PHANDLE_INFO;
+
+#define READ_BUFFER_SIZE	1024
+
+typedef struct _PIPE_DATA {
+	HANDLE	hReadPipe;
+	BOOLEAN	bReadInProgress;
+	OVERLAPPED	olRead;
+	CHAR	ReadBuffer[READ_BUFFER_SIZE];
+} PIPE_DATA, *PPIPE_DATA;
+
+typedef struct _CLIENT_INFO {
+	int	client_id;
+
+	HANDLE	hProcess;
+	HANDLE	hWriteStdinPipe;
+
+	PIPE_DATA	Stdout;
+	PIPE_DATA	Stderr;
+	
+} CLIENT_INFO, *PCLIENT_INFO;
+
+
+#define FREE_CLIENT_SPOT_ID	-1
+#define	MAX_CLIENTS	((MAXIMUM_WAIT_OBJECTS - 1) / 3)

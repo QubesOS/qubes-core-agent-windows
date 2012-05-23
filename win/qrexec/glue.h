@@ -38,4 +38,4 @@ int write_stdin(int fd, int client_id, char *data, int len,
 		struct buffer *buffer);
 void set_nonblock(int fd);
 int fork_and_flush_stdin(int fd, struct buffer *buffer);
-__declspec(dllimport) struct libvchan *ctrl;
+extern struct libvchan *ctrl;

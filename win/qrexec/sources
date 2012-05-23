@@ -5,7 +5,7 @@ TARGETPATH=bin
 
 UMTYPE=console
 USE_MSVCRT=1
-
+C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 
 INCLUDES=$(INCLUDES); \
                     ..\include;
