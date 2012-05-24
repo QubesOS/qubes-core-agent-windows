@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <tchar.h>
+#include <strsafe.h>
 #include "qrexec.h"
 #include "libvchan.h"
 #include "glue.h"
@@ -16,14 +17,14 @@ ULONG64	g_uPipeId = 0;
 
 //#define DISPLAY_CONSOLE_OUTPUT
 
-ULONG ExecutePiped(PUCHAR pszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HANDLE hPipeStderr, HANDLE *phProcess)
+ULONG ExecutePipedW(PWCHAR pwszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HANDLE hPipeStderr, HANDLE *phProcess)
 {
 	PROCESS_INFORMATION	pi;
-	STARTUPINFOA	si;
+	STARTUPINFOW	si;
 	ULONG	uResult;
 
 
-	if (!pszCommand || !phProcess)
+	if (!pwszCommand || !phProcess)
 		return ERROR_INVALID_PARAMETER;
 
 	*phProcess = INVALID_HANDLE_VALUE;
@@ -37,9 +38,9 @@ ULONG ExecutePiped(PUCHAR pszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HAN
 	si.hStdOutput = hPipeStdout;
 	si.hStdError = hPipeStderr;
 
-	if (!CreateProcessA(
+	if (!CreateProcessW(
 			NULL, 
-			pszCommand, 
+			pwszCommand, 
 			NULL, 
 			NULL, 
 			TRUE, // handles are inherited
@@ -50,11 +51,11 @@ ULONG ExecutePiped(PUCHAR pszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HAN
 			&pi)) {
 
 		uResult = GetLastError();
-		fprintf(stderr, "ExecutePiped(): CreateProcessA(\"%s\") failed with error %d\n", pszCommand, uResult);
+		fprintf(stderr, "ExecutePipedW(): CreateProcessW(\"%S\") failed with error %d\n", pwszCommand, uResult);
 		return uResult;
 	}
 
-	fprintf(stderr, "ExecutePiped(): pid %d\n", pi.dwProcessId);
+	fprintf(stderr, "ExecutePipedW(): pid %d\n", pi.dwProcessId);
 
 	*phProcess = pi.hProcess;
 	CloseHandle(pi.hThread);
@@ -66,7 +67,7 @@ ULONG ExecutePiped(PUCHAR pszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HAN
 
 ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUTES *pSecurityAttributes)
 {
-	TCHAR	szPipeName[MAX_PATH];
+	TCHAR	szPipeName[MAX_PATH + 1];
 	HANDLE	hReadPipe;
 	HANDLE	hWritePipe;
 	ULONG	uResult;
@@ -75,7 +76,7 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 	if (!phReadPipe || !phWritePipe)
 		return ERROR_INVALID_PARAMETER;
 
-	_stprintf(szPipeName, TEXT("\\\\.\\pipe\\qrexec.%08x.%I64x"), GetCurrentProcessId(), g_uPipeId++);
+	StringCchPrintf(szPipeName, MAX_PATH, TEXT("\\\\.\\pipe\\qrexec.%08x.%I64x"), GetCurrentProcessId(), g_uPipeId++);
 
 	hReadPipe = CreateNamedPipe(
 			szPipeName,
@@ -274,8 +275,45 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 }
 
 
+ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
+{
+	HRESULT	hResult;
+	ULONG	uResult;
+	size_t	cchUTF8;
+	int	cchUTF16;
+	PWCHAR	pwszUtf16;
 
-ULONG AddClient(int client_id, PUCHAR pszCommand)
+
+	hResult = StringCchLengthA(pszUtf8, STRSAFE_MAX_CCH, &cchUTF8);
+	if (FAILED(hResult)) {
+		fprintf(stderr, "UTF8ToUTF16(): StringCchLengthA() failed with error %d\n", hResult);
+		return hResult;
+	}
+
+	cchUTF16 = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, NULL, 0);
+	if (!cchUTF16) {
+		uResult = GetLastError();
+		fprintf(stderr, "UTF8ToUTF16(): MultiByteToWideChar() failed with error %d\n", uResult);
+		return uResult;
+	}
+
+	pwszUtf16 = malloc(cchUTF16 * sizeof(WCHAR));
+	if (!pwszUtf16)
+		return ERROR_NOT_ENOUGH_MEMORY;
+
+	uResult = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, pwszUtf16, cchUTF16);
+	if (!uResult) {
+		uResult = GetLastError();
+		fprintf(stderr, "UTF8ToUTF16(): MultiByteToWideChar() failed with error %d\n", uResult);
+		return uResult;
+	}
+
+	*ppwszUtf16 = pwszUtf16;
+
+	return ERROR_SUCCESS;
+}
+
+ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 {
 	ULONG	uResult;
 	CLIENT_INFO	ClientInfo;
@@ -284,9 +322,10 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 	HANDLE	hPipeStdin = INVALID_HANDLE_VALUE;
 	ULONG	uClientNumber;
 	SECURITY_ATTRIBUTES	sa;
+	PWCHAR	pwszCommand;
 
 
-	if (!pszCommand)
+	if (!pszUtf8Command)
 		return ERROR_INVALID_PARAMETER;
 
 
@@ -300,6 +339,14 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 
 	if (FindClientById(client_id))
 		return ERROR_ALREADY_EXISTS;
+
+
+	pwszCommand = NULL;
+	uResult = UTF8ToUTF16(pszUtf8Command, &pwszCommand);
+	if (ERROR_SUCCESS != uResult) {
+		fprintf(stderr, "AddClient(): UTF8ToUTF16() failed with error %d\n");
+		return uResult;
+	}
 
 
 	memset(&sa, 0, sizeof(sa));
@@ -339,7 +386,8 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 	// Ensure the write handle to the pipe for STDIN is not inherited.
 	SetHandleInformation(ClientInfo.hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
 
-	uResult = ExecutePiped(pszCommand, hPipeStdin, hPipeStdout, hPipeStderr, &ClientInfo.hProcess);
+	uResult = ExecutePipedW(pwszCommand, hPipeStdin, hPipeStdout, hPipeStderr, &ClientInfo.hProcess);
+	free(pwszCommand);
 
 	CloseHandle(hPipeStdout);
 	CloseHandle(hPipeStderr);
@@ -350,7 +398,7 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 
 		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
 		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
-		fprintf(stderr, "AddClient(): ExecutePiped() failed with error %d\n", uResult);
+		fprintf(stderr, "AddClient(): ExecutePipedW() failed with error %d\n", uResult);
 		return uResult;
 	}
 
