@@ -360,12 +360,14 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 
 	uResult = InitReadPipe(&ClientInfo.Stdout, &hPipeStdout, PTYPE_STDOUT);
 	if (ERROR_SUCCESS != uResult) {
+		free(pwszCommand);
 		fprintf(stderr, "AddClient(): InitReadPipe(STDOUT) failed with error %d\n", uResult);
 		return uResult;
 	}
 	uResult = InitReadPipe(&ClientInfo.Stderr, &hPipeStderr, PTYPE_STDERR);
 	if (ERROR_SUCCESS != uResult) {
 		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
+		free(pwszCommand);
 		fprintf(stderr, "AddClient(): InitReadPipe(STDERR) failed with error %d\n", uResult);
 		return uResult;
 	}
@@ -378,6 +380,7 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
 		CloseHandle(hPipeStdout);
 		CloseHandle(hPipeStderr);
+		free(pwszCommand);
 
 		fprintf(stderr, "AddClient(): CreatePipe(STDIN) failed with error %d\n", uResult);
 		return uResult;
