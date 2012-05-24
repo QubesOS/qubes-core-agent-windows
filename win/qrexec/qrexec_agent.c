@@ -14,6 +14,8 @@ HANDLE_INFO	g_HandlesInfo[MAXIMUM_WAIT_OBJECTS];
 ULONG64	g_uPipeId = 0;
 
 
+//#define DISPLAY_CONSOLE_OUTPUT
+
 ULONG ExecutePiped(PUCHAR pszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HANDLE hPipeStderr, HANDLE *phProcess)
 {
 	PROCESS_INFORMATION	pi;
@@ -112,7 +114,7 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 }
 
 
-ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe)
+ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 {
 	SECURITY_ATTRIBUTES	sa;
 	ULONG	uResult;
@@ -141,25 +143,32 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe)
 	// Ensure the read handle to the pipe is not inherited.
 	SetHandleInformation(pPipeData->hReadPipe, HANDLE_FLAG_INHERIT, 0);
 
+	pPipeData->bPipeType = bPipeType;
 
 	return ERROR_SUCCESS;
 }
 
 
-ULONG CloseReadPipeHandles(PIPE_DATA *pPipeData)
+VOID ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
 {
-	if (!pPipeData)
-		return ERROR_INVALID_PARAMETER;
+	struct server_header s_hdr;
 
-	if (pPipeData->olRead.hEvent)
-		CloseHandle(pPipeData->olRead.hEvent);
 
-	if (pPipeData->hReadPipe)
-		CloseHandle(pPipeData->hReadPipe);
-
-	return ERROR_SUCCESS;
+	s_hdr.type = type;
+	s_hdr.client_id = client_id;
+	s_hdr.len = uDataSize;
+	write_all_vchan_ext(&s_hdr, sizeof s_hdr);
+	write_all_vchan_ext(pData, uDataSize);
 }
 
+
+void send_exit_code(int client_id, int status)
+{
+	ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status));
+	fprintf(stderr, "send_exit_code(): Send exit code %d for client_id %d\n",
+		status,
+		client_id);
+}
 
 PCLIENT_INFO FindClientById(int client_id)
 {
@@ -172,6 +181,98 @@ PCLIENT_INFO FindClientById(int client_id)
 
 	return NULL;
 }
+
+
+VOID ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
+{
+	DWORD	dwRead;
+	int	message_type;
+	PCLIENT_INFO	pClientInfo;
+
+
+	if (!pPipeData)
+		return;
+
+	pClientInfo = FindClientById(client_id);
+	if (!pClientInfo)
+		return;
+
+	if (pClientInfo->bReadingIsDisabled)
+		// The client does not want to receive any data from this console.
+		return;
+
+	pPipeData->bReadInProgress = FALSE;
+	pPipeData->bDataIsReady = FALSE;
+
+
+	switch (pPipeData->bPipeType) {
+	case PTYPE_STDOUT:
+		message_type = MSG_AGENT_TO_SERVER_STDOUT;
+		break;
+	case PTYPE_STDERR:
+		message_type = MSG_AGENT_TO_SERVER_STDERR;
+		break;
+	default:
+		return;
+	}
+
+
+	dwRead = 0;
+	GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE);
+
+	if (dwRead)
+		ReturnData(client_id, message_type, pPipeData->ReadBuffer, dwRead);
+}
+
+
+ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
+{
+	ULONG	uResult;
+
+
+	if (!pPipeData)
+		return ERROR_INVALID_PARAMETER;
+
+
+	uResult = ERROR_SUCCESS;
+
+	if (pPipeData->olRead.hEvent) {
+
+		if (pPipeData->bDataIsReady)
+			ReturnPipeData(client_id, pPipeData);
+
+		// ReturnPipeData() clears both bDataIsReady and bReadInProgress, but they cannot be ever set to a non-FALSE value at the same time.
+		// So, if the above ReturnPipeData() has been executed (bDataIsReady was not FALSE), then bReadInProgress was FALSE
+		// and this branch wouldn't be executed anyways.
+		if (pPipeData->bReadInProgress) {
+
+			// If bReadInProgress is not FALSE then hReadPipe must be a valid handle for which an
+			// asynchornous read has been issued.
+			if (CancelIo(pPipeData->hReadPipe)) {
+
+				// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
+				// OVERLAPPED structure.
+				WaitForSingleObject(pPipeData->olRead.hEvent, INFINITE);
+
+				// See if there is something to return.
+				ReturnPipeData(client_id, pPipeData);
+
+			} else {
+				uResult = GetLastError();
+				fprintf(stderr, "CloseReadPipeHandles(): CancelIo() failed with error %d\n", uResult);
+			}
+		}
+
+		CloseHandle(pPipeData->olRead.hEvent);
+	}
+
+	if (pPipeData->hReadPipe)
+		// Can close the pipe only when there is no pending IO in progress.
+		CloseHandle(pPipeData->hReadPipe);
+
+	return uResult;
+}
+
 
 
 ULONG AddClient(int client_id, PUCHAR pszCommand)
@@ -200,8 +301,6 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 	if (FindClientById(client_id))
 		return ERROR_ALREADY_EXISTS;
 
-	fprintf(stderr, "AddClient(): New client %d\n", uClientNumber);
-
 
 	memset(&sa, 0, sizeof(sa));
 	sa.nLength = sizeof(sa);
@@ -212,14 +311,14 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 	memset(&ClientInfo, 0, sizeof(ClientInfo));
 	ClientInfo.client_id = client_id;
 
-	uResult = InitReadPipe(&ClientInfo.Stdout, &hPipeStdout);
+	uResult = InitReadPipe(&ClientInfo.Stdout, &hPipeStdout, PTYPE_STDOUT);
 	if (ERROR_SUCCESS != uResult) {
 		fprintf(stderr, "AddClient(): InitReadPipe(STDOUT) failed with error %d\n", uResult);
 		return uResult;
 	}
-	uResult = InitReadPipe(&ClientInfo.Stderr, &hPipeStderr);
+	uResult = InitReadPipe(&ClientInfo.Stderr, &hPipeStderr, PTYPE_STDERR);
 	if (ERROR_SUCCESS != uResult) {
-		CloseReadPipeHandles(&ClientInfo.Stdout);
+		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
 		fprintf(stderr, "AddClient(): InitReadPipe(STDERR) failed with error %d\n", uResult);
 		return uResult;
 	}
@@ -228,8 +327,8 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 	if (!CreatePipe(&hPipeStdin, &ClientInfo.hWriteStdinPipe, &sa, 0)) {
 		uResult = GetLastError();
 
-		CloseReadPipeHandles(&ClientInfo.Stdout);
-		CloseReadPipeHandles(&ClientInfo.Stderr);
+		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
+		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
 		CloseHandle(hPipeStdout);
 		CloseHandle(hPipeStderr);
 
@@ -249,16 +348,35 @@ ULONG AddClient(int client_id, PUCHAR pszCommand)
 	if (ERROR_SUCCESS != uResult) {
 		CloseHandle(ClientInfo.hWriteStdinPipe);
 
-		CloseReadPipeHandles(&ClientInfo.Stdout);
-		CloseReadPipeHandles(&ClientInfo.Stderr);
+		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
+		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
 		fprintf(stderr, "AddClient(): ExecutePiped() failed with error %d\n", uResult);
 		return uResult;
 	}
 
 	g_Clients[uClientNumber] = ClientInfo;
+	fprintf(stderr, "AddClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
 	return ERROR_SUCCESS;
 }
+
+
+VOID RemoveClient(PCLIENT_INFO pClientInfo)
+{
+	if (!pClientInfo)
+		return;
+
+	CloseHandle(pClientInfo->hProcess);
+	CloseHandle(pClientInfo->hWriteStdinPipe);
+
+	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
+	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
+
+	fprintf(stderr, "RemoveClient(): Client %d removed\n", pClientInfo->client_id);
+
+	pClientInfo->client_id = FREE_CLIENT_SPOT_ID;
+}
+
 
 void handle_exec(int client_id, int len)
 {
@@ -276,7 +394,9 @@ void handle_exec(int client_id, int len)
 
 	uResult = AddClient(client_id, buf);
 	if (ERROR_SUCCESS == uResult)
-		fprintf(stderr, "executed %s\n", buf);
+		fprintf(stderr, "handle_exec(): Executed %s\n", buf);
+	else
+		fprintf(stderr, "handle_exec(): AddClient(\"%s\") failed with error %d\n", buf, uResult);
 
 	free(buf);
 }
@@ -297,7 +417,10 @@ void handle_just_exec(int client_id, int len)
 
 	uResult = AddClient(client_id, buf);
 	if (ERROR_SUCCESS == uResult)
-		fprintf(stderr, "executed %s\n", buf);
+		fprintf(stderr, "handle_just_exec(): Executed (nowait) %s\n", buf);
+	else
+		fprintf(stderr, "handle_just_exec(): AddClient(\"%s\") failed with error %d\n", buf, uResult);
+
 	free(buf);
 }
 
@@ -313,6 +436,10 @@ void handle_input(int client_id, int len)
 	if (!pClientInfo)
 		return;
 
+	if (!len) {
+		RemoveClient(pClientInfo);
+		return;
+	}
 
 	buf = malloc(len + 1);
 	if (!buf)
@@ -320,7 +447,6 @@ void handle_input(int client_id, int len)
 	buf[len] = 0;
 
 	read_all_vchan_ext(buf, len);
-//	fprintf(stderr, "%s\n", buf);
 
 	if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
 		fprintf(stderr, "handle_input(): WriteFile() failed with error %d\n", GetLastError());
@@ -329,8 +455,17 @@ void handle_input(int client_id, int len)
 	free(buf);
 }
 
+void set_blocked_outerr(int client_id, BOOLEAN bBlockOutput)
+{
+	PCLIENT_INFO	pClientInfo;
 
 
+	pClientInfo = FindClientById(client_id);
+	if (!pClientInfo)
+		return;
+
+	pClientInfo->bReadingIsDisabled = bBlockOutput;
+}
 
 void handle_server_data()
 {
@@ -343,11 +478,11 @@ void handle_server_data()
 	switch (s_hdr.type) {
 	case MSG_XON:
 		fprintf(stderr, "MSG_XON\n");
-//		set_blocked_outerr(s_hdr.client_id, 0);
+		set_blocked_outerr(s_hdr.client_id, FALSE);
 		break;
 	case MSG_XOFF:
 		fprintf(stderr, "MSG_XOFF\n");
-//		set_blocked_outerr(s_hdr.client_id, 1);
+		set_blocked_outerr(s_hdr.client_id, TRUE);
 		break;
 	case MSG_SERVER_TO_AGENT_CONNECT_EXISTING:
 		fprintf(stderr, "MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
@@ -367,7 +502,7 @@ void handle_server_data()
 		break;
 	case MSG_SERVER_TO_AGENT_CLIENT_END:
 		fprintf(stderr, "MSG_SERVER_TO_AGENT_CLIENT_END\n");
-//		remove_process(s_hdr.client_id, -1);
+		RemoveClient(FindClientById(s_hdr.client_id));
 		break;
 	default:
 		fprintf(stderr, "msg type from daemon is %d ?\n",
@@ -392,7 +527,7 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 
 	uResult = ERROR_SUCCESS;
 
-	if (!pPipeData->bReadInProgress) {
+	if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady) {
 
 		memset(&pPipeData->ReadBuffer, 0, READ_BUFFER_SIZE);
 
@@ -406,15 +541,25 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 			// Last error is usually ERROR_IO_PENDING here because of the asynchronous read.
 			// But if the process has closed it would be ERROR_BROKEN_PIPE.
 			uResult = GetLastError();
+			if (ERROR_IO_PENDING == uResult)
+				pPipeData->bReadInProgress = TRUE;
+
+		} else {
+			// The read has completed synchronously. 
+			// The event in the OVERLAPPED structure should be signalled by now.
+			pPipeData->bDataIsReady = TRUE;
+
+			// Do not set bReadInProgress to TRUE in this case because if the pipes are to be closed
+			// before the next read IO starts then there will be no IO to cancel.
+			// bReadInProgress indicates to the CloseReadPipeHandles() that the IO should be canceled.
+
+			// If after the WaitFormultipleObjects() this event is not chosen because of
+			// some other event is also signaled, we will not rewrite the data in the buffer
+			// on the next iteration of FillAsyncIoData() because bDataIsReady is set.
 		}
 	}
 
-	if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult) {
-
-		// Even if IO does not block (uResult is ERROR_SUCCESS) the overlapped event should be signaled, 
-		// and we read the data later when WaitForMultipleObjects() returns.
-
-		pPipeData->bReadInProgress = TRUE;
+	if (pPipeData->bReadInProgress || pPipeData->bDataIsReady) {
 
 		g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
 		g_HandlesInfo[uEventNumber].bType = bHandleType;
@@ -426,45 +571,6 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 }
 
 
-VOID ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
-{
-	struct server_header s_hdr;
-
-
-	s_hdr.type = type;
-	s_hdr.client_id = client_id;
-	s_hdr.len = uDataSize;
-	write_all_vchan_ext(&s_hdr, sizeof s_hdr);
-	write_all_vchan_ext(pData, uDataSize);
-}
-
-
-void send_exit_code(int client_id, int status)
-{
-	ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status));
-	fprintf(stderr, "send_exit_code(): Send exit code %d for client_id %d\n",
-		status,
-		client_id);
-}
-
-
-VOID ReturnPipeData(int client_id, PIPE_DATA *pPipeData, int type)
-{
-	DWORD	dwRead;
-
-
-	if (!pPipeData)
-		return;
-
-
-	pPipeData->bReadInProgress = FALSE;
-
-	dwRead = 0;
-	GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE);
-
-	if (dwRead)
-		ReturnData(client_id, type, pPipeData->ReadBuffer, dwRead);
-}
 
 
 VOID __cdecl main()
@@ -478,7 +584,6 @@ VOID __cdecl main()
 	DWORD	dwExitCode;
 	BOOLEAN	bVchanIoInProgress;
 	ULONG	uResult;
-
 
 	peer_server_init(REXEC_PORT);
 	evtchn = libvchan_fd_for_select(ctrl);
@@ -526,8 +631,11 @@ VOID __cdecl main()
 				g_HandlesInfo[uEventNumber].bType = HTYPE_PROCESS;
 				g_WatchedEvents[uEventNumber++] = g_Clients[uClientNumber].hProcess;
 
-				FillAsyncIoData(uEventNumber++, uClientNumber, HTYPE_STDOUT, &g_Clients[uClientNumber].Stdout);
-				FillAsyncIoData(uEventNumber++, uClientNumber, HTYPE_STDERR, &g_Clients[uClientNumber].Stderr);
+				if (!g_Clients[uClientNumber].bReadingIsDisabled) {
+					// Skip those clients which have received MSG_XOFF.
+					FillAsyncIoData(uEventNumber++, uClientNumber, HTYPE_STDOUT, &g_Clients[uClientNumber].Stdout);
+					FillAsyncIoData(uEventNumber++, uClientNumber, HTYPE_STDERR, &g_Clients[uClientNumber].Stderr);
+				}
 			}
 		}
 
@@ -551,23 +659,23 @@ VOID __cdecl main()
 //			fprintf(stderr, "client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_STDOUT:
+#ifdef DISPLAY_CONSOLE_OUTPUT
 					printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout.ReadBuffer);
-
+#endif
 
 					ReturnPipeData(
 						g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
-						&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout,
-						MSG_AGENT_TO_SERVER_STDOUT);
+						&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout);
 					break;
 
 				case HTYPE_STDERR:
+#ifdef DISPLAY_CONSOLE_OUTPUT
 					printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr.ReadBuffer);
-
+#endif
 
 					ReturnPipeData(
 						g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
-						&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr,
-						MSG_AGENT_TO_SERVER_STDERR);
+						&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
 					break;
 
 				case HTYPE_PROCESS:
@@ -576,16 +684,10 @@ VOID __cdecl main()
 
 					dwExitCode = ERROR_SUCCESS;
 					GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode);
-
-					CloseHandle(pClientInfo->hProcess);
-					CloseHandle(pClientInfo->hWriteStdinPipe);
-
-					CloseReadPipeHandles(&pClientInfo->Stdout);
-					CloseReadPipeHandles(&pClientInfo->Stderr);
-
 					send_exit_code(pClientInfo->client_id, dwExitCode);
 
-					pClientInfo->client_id = FREE_CLIENT_SPOT_ID;
+					RemoveClient(pClientInfo);
+					break;
 			}
 		} else {
 			fprintf(stderr, "WaitForMultipleObjects() failed, last error %d\n", GetLastError());

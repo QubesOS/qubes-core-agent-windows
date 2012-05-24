@@ -64,19 +64,26 @@ typedef enum {
 	HTYPE_STDERR
 } HANDLE_TYPE;
 
+typedef enum {
+	PTYPE_INVALID = 0,
+	PTYPE_STDOUT,
+	PTYPE_STDERR
+} PIPE_TYPE;
 
 typedef struct _HANDLE_INFO {
 	ULONG	uClientNumber;	// number of the repsective CLIENT_INFO in the g_Clients array
 	HANDLE_TYPE	bType;
 } HANDLE_INFO, *PHANDLE_INFO;
 
-#define READ_BUFFER_SIZE	1024
+#define READ_BUFFER_SIZE	512
 
-typedef struct _PIPE_DATA {
+typedef struct _PIPE_DATA {	
 	HANDLE	hReadPipe;
+	PIPE_TYPE	bPipeType;
 	BOOLEAN	bReadInProgress;
+	BOOLEAN	bDataIsReady;
 	OVERLAPPED	olRead;
-	CHAR	ReadBuffer[READ_BUFFER_SIZE];
+	CHAR	ReadBuffer[READ_BUFFER_SIZE + 1];
 } PIPE_DATA, *PPIPE_DATA;
 
 typedef struct _CLIENT_INFO {
@@ -84,6 +91,8 @@ typedef struct _CLIENT_INFO {
 
 	HANDLE	hProcess;
 	HANDLE	hWriteStdinPipe;
+
+	BOOLEAN	bReadingIsDisabled;
 
 	PIPE_DATA	Stdout;
 	PIPE_DATA	Stderr;
