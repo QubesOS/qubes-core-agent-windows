@@ -10,7 +10,7 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 INCLUDES=$(INCLUDES); \
                     ..\include;
 
-SOURCES=qrexec_agent.c txrx-vchan.c
+SOURCES=qrexec_agent.c txrx-vchan.c service.c getopt.c log.c errors.mc errors.rc
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \

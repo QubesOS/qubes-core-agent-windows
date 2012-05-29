@@ -1,11 +1,4 @@
-#include <windows.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <tchar.h>
-#include <strsafe.h>
-#include "qrexec.h"
-#include "libvchan.h"
-#include "glue.h"
+#include "qrexec_agent.h"
 
 
 CLIENT_INFO	g_Clients[MAX_CLIENTS];
@@ -15,7 +8,8 @@ HANDLE_INFO	g_HandlesInfo[MAXIMUM_WAIT_OBJECTS];
 ULONG64	g_uPipeId = 0;
 
 
-//#define DISPLAY_CONSOLE_OUTPUT
+extern HANDLE	g_hStopServiceEvent;
+
 
 ULONG ExecutePipedW(PWCHAR pwszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, HANDLE hPipeStderr, HANDLE *phProcess)
 {
@@ -51,11 +45,11 @@ ULONG ExecutePipedW(PWCHAR pwszCommand, HANDLE hPipeStdin, HANDLE hPipeStdout, H
 			&pi)) {
 
 		uResult = GetLastError();
-		fprintf(stderr, "ExecutePipedW(): CreateProcessW(\"%S\") failed with error %d\n", pwszCommand, uResult);
+		lprintf_err(uResult, "ExecutePipedW(): CreateProcessW(\"%S\")", pwszCommand);
 		return uResult;
 	}
 
-	fprintf(stderr, "ExecutePipedW(): pid %d\n", pi.dwProcessId);
+	lprintf("ExecutePipedW(): pid %d\n", pi.dwProcessId);
 
 	*phProcess = pi.hProcess;
 	CloseHandle(pi.hThread);
@@ -89,7 +83,7 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 			pSecurityAttributes);
 	if (!hReadPipe) {
 		uResult = GetLastError();
-		fprintf(stderr, "CreateAsyncPipe(): CreateNamedPipe() failed with error %d\n", uResult);
+		lprintf_err(uResult, "CreateAsyncPipe(): CreateNamedPipe()");
 		return uResult;
 	}
 
@@ -104,7 +98,7 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 	if (INVALID_HANDLE_VALUE == hWritePipe) {
 		uResult = GetLastError();
 		CloseHandle(hReadPipe);
-		fprintf(stderr, "CreateAsyncPipe(): CreateFile() failed with error %d\n", uResult);
+		lprintf_err(uResult, "CreateAsyncPipe(): CreateFile()");
 		return uResult;
 	}
 
@@ -137,7 +131,7 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 	uResult = CreateAsyncPipe(&pPipeData->hReadPipe, phWritePipe, &sa);
 	if (ERROR_SUCCESS != uResult) {
 		CloseHandle(pPipeData->olRead.hEvent);
-		fprintf(stderr, "InitReadPipe(): CreateAsyncPipe() returned %d\n", uResult);
+		lprintf_err(uResult, "InitReadPipe(): CreateAsyncPipe()");
 		return uResult;
 	}
 
@@ -150,7 +144,7 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 }
 
 
-VOID ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
+ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
 {
 	struct server_header s_hdr;
 
@@ -158,17 +152,40 @@ VOID ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
 	s_hdr.type = type;
 	s_hdr.client_id = client_id;
 	s_hdr.len = uDataSize;
-	write_all_vchan_ext(&s_hdr, sizeof s_hdr);
-	write_all_vchan_ext(pData, uDataSize);
+	if (write_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
+		lprintf_err(ERROR_INVALID_FUNCTION, "ReturnData(): write_all_vchan_ext(s_hdr)");
+		return ERROR_INVALID_FUNCTION;
+	}
+
+	if (!uDataSize)
+		return ERROR_SUCCESS;
+
+	if (write_all_vchan_ext(pData, uDataSize) <= 0) {
+		lprintf_err(ERROR_INVALID_FUNCTION, "ReturnData(): write_all_vchan_ext(data, %d)", uDataSize);
+		return ERROR_INVALID_FUNCTION;
+	}
+
+	Sleep(1);
+
+	return ERROR_SUCCESS;
 }
 
 
-void send_exit_code(int client_id, int status)
+ULONG send_exit_code(int client_id, int status)
 {
-	ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status));
-	fprintf(stderr, "send_exit_code(): Send exit code %d for client_id %d\n",
-		status,
-		client_id);
+	ULONG	uResult;
+
+
+	uResult = ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status));
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "send_exit_code(): ReturnData()");
+		return uResult;
+	} else
+		lprintf("send_exit_code(): Send exit code %d for client_id %d\n",
+			status,
+			client_id);
+
+	return ERROR_SUCCESS;
 }
 
 PCLIENT_INFO FindClientById(int client_id)
@@ -184,23 +201,26 @@ PCLIENT_INFO FindClientById(int client_id)
 }
 
 
-VOID ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
+ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 {
 	DWORD	dwRead;
 	int	message_type;
 	PCLIENT_INFO	pClientInfo;
+	ULONG	uResult;
 
+
+	uResult = ERROR_SUCCESS;
 
 	if (!pPipeData)
-		return;
+		return ERROR_INVALID_PARAMETER;
 
 	pClientInfo = FindClientById(client_id);
 	if (!pClientInfo)
-		return;
+		return ERROR_FILE_NOT_FOUND;
 
 	if (pClientInfo->bReadingIsDisabled)
 		// The client does not want to receive any data from this console.
-		return;
+		return ERROR_INVALID_FUNCTION;
 
 	pPipeData->bReadInProgress = FALSE;
 	pPipeData->bDataIsReady = FALSE;
@@ -214,15 +234,22 @@ VOID ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 		message_type = MSG_AGENT_TO_SERVER_STDERR;
 		break;
 	default:
-		return;
+		return ERROR_INVALID_FUNCTION;
 	}
 
 
 	dwRead = 0;
 	GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE);
 
-	if (dwRead)
-		ReturnData(client_id, message_type, pPipeData->ReadBuffer, dwRead);
+	uResult = ERROR_SUCCESS;
+
+	if (dwRead) {
+		uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer, dwRead);
+		if (ERROR_SUCCESS != uResult)
+			lprintf_err(uResult, "ReturnPipeData(): ReturnData()");
+	}
+
+	return uResult;
 }
 
 
@@ -260,7 +287,7 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 
 			} else {
 				uResult = GetLastError();
-				fprintf(stderr, "CloseReadPipeHandles(): CancelIo() failed with error %d\n", uResult);
+				lprintf_err(uResult, "CloseReadPipeHandles(): CancelIo()");
 			}
 		}
 
@@ -286,14 +313,14 @@ ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
 
 	hResult = StringCchLengthA(pszUtf8, STRSAFE_MAX_CCH, &cchUTF8);
 	if (FAILED(hResult)) {
-		fprintf(stderr, "UTF8ToUTF16(): StringCchLengthA() failed with error %d\n", hResult);
+		lprintf_err(hResult, "UTF8ToUTF16(): StringCchLengthA()");
 		return hResult;
 	}
 
 	cchUTF16 = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, NULL, 0);
 	if (!cchUTF16) {
 		uResult = GetLastError();
-		fprintf(stderr, "UTF8ToUTF16(): MultiByteToWideChar() failed with error %d\n", uResult);
+		lprintf_err(uResult, "UTF8ToUTF16(): MultiByteToWideChar()");
 		return uResult;
 	}
 
@@ -304,7 +331,7 @@ ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
 	uResult = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, pwszUtf16, cchUTF16);
 	if (!uResult) {
 		uResult = GetLastError();
-		fprintf(stderr, "UTF8ToUTF16(): MultiByteToWideChar() failed with error %d\n", uResult);
+		lprintf_err(uResult, "UTF8ToUTF16(): MultiByteToWideChar()");
 		return uResult;
 	}
 
@@ -344,7 +371,7 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 	pwszCommand = NULL;
 	uResult = UTF8ToUTF16(pszUtf8Command, &pwszCommand);
 	if (ERROR_SUCCESS != uResult) {
-		fprintf(stderr, "AddClient(): UTF8ToUTF16() failed with error %d\n");
+		lprintf_err(uResult, "AddClient(): UTF8ToUTF16()");
 		return uResult;
 	}
 
@@ -361,14 +388,14 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 	uResult = InitReadPipe(&ClientInfo.Stdout, &hPipeStdout, PTYPE_STDOUT);
 	if (ERROR_SUCCESS != uResult) {
 		free(pwszCommand);
-		fprintf(stderr, "AddClient(): InitReadPipe(STDOUT) failed with error %d\n", uResult);
+		lprintf_err(uResult, "AddClient(): InitReadPipe(STDOUT)");
 		return uResult;
 	}
 	uResult = InitReadPipe(&ClientInfo.Stderr, &hPipeStderr, PTYPE_STDERR);
 	if (ERROR_SUCCESS != uResult) {
 		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
 		free(pwszCommand);
-		fprintf(stderr, "AddClient(): InitReadPipe(STDERR) failed with error %d\n", uResult);
+		lprintf_err(uResult, "AddClient(): InitReadPipe(STDERR)");
 		return uResult;
 	}
 
@@ -382,7 +409,7 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 		CloseHandle(hPipeStderr);
 		free(pwszCommand);
 
-		fprintf(stderr, "AddClient(): CreatePipe(STDIN) failed with error %d\n", uResult);
+		lprintf_err(uResult, "AddClient(): CreatePipe(STDIN)");
 		return uResult;
 	}
 
@@ -401,12 +428,12 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 
 		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
 		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
-		fprintf(stderr, "AddClient(): ExecutePipedW() failed with error %d\n", uResult);
+		lprintf_err(uResult, "AddClient(): ExecutePipedW()");
 		return uResult;
 	}
 
 	g_Clients[uClientNumber] = ClientInfo;
-	fprintf(stderr, "AddClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
+	lprintf("AddClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
 	return ERROR_SUCCESS;
 }
@@ -414,7 +441,7 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 
 VOID RemoveClient(PCLIENT_INFO pClientInfo)
 {
-	if (!pClientInfo)
+	if (!pClientInfo || (FREE_CLIENT_SPOT_ID == pClientInfo->client_id))
 		return;
 
 	CloseHandle(pClientInfo->hProcess);
@@ -423,13 +450,23 @@ VOID RemoveClient(PCLIENT_INFO pClientInfo)
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
 
-	fprintf(stderr, "RemoveClient(): Client %d removed\n", pClientInfo->client_id);
+	lprintf("RemoveClient(): Client %d removed\n", pClientInfo->client_id);
 
 	pClientInfo->client_id = FREE_CLIENT_SPOT_ID;
 }
 
+VOID RemoveAllClients()
+{
+	ULONG	uClientNumber;
 
-void handle_exec(int client_id, int len)
+
+	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+		if (FREE_CLIENT_SPOT_ID != g_Clients[uClientNumber].client_id)
+			RemoveClient(&g_Clients[uClientNumber]);
+}
+
+// This will return error only if vchan fails.
+ULONG handle_exec(int client_id, int len)
 {
 	char *buf;
 	ULONG	uResult;
@@ -437,22 +474,28 @@ void handle_exec(int client_id, int len)
 
 	buf = malloc(len + 1);
 	if (!buf)
-		return;
+		return ERROR_SUCCESS;
 	buf[len] = 0;
 
 
-	read_all_vchan_ext(buf, len);
+	if (read_all_vchan_ext(buf, len) <= 0) {
+		free(buf);
+		lprintf_err(ERROR_INVALID_FUNCTION, "handle_exec(): read_all_vchan_ext()");
+		return ERROR_INVALID_FUNCTION;
+	}
 
 	uResult = AddClient(client_id, buf);
 	if (ERROR_SUCCESS == uResult)
-		fprintf(stderr, "handle_exec(): Executed %s\n", buf);
+		lprintf("handle_exec(): Executed %s\n", buf);
 	else
-		fprintf(stderr, "handle_exec(): AddClient(\"%s\") failed with error %d\n", buf, uResult);
+		lprintf_err(uResult, "handle_exec(): AddClient(\"%s\")", buf);
 
 	free(buf);
+	return ERROR_SUCCESS;
 }
 
-void handle_just_exec(int client_id, int len)
+// This will return error only if vchan fails.
+ULONG handle_just_exec(int client_id, int len)
 {
 	char *buf;
 	ULONG	uResult;
@@ -460,23 +503,28 @@ void handle_just_exec(int client_id, int len)
 
 	buf = malloc(len + 1);
 	if (!buf)
-		return;
+		return ERROR_SUCCESS;
 	buf[len] = 0;
 
 
-	read_all_vchan_ext(buf, len);
+	if (read_all_vchan_ext(buf, len) <= 0) {
+		free(buf);
+		lprintf_err(ERROR_INVALID_FUNCTION, "handle_just_exec(): read_all_vchan_ext()");
+		return ERROR_INVALID_FUNCTION;
+	}
 
 	uResult = AddClient(client_id, buf);
 	if (ERROR_SUCCESS == uResult)
-		fprintf(stderr, "handle_just_exec(): Executed (nowait) %s\n", buf);
+		lprintf("handle_just_exec(): Executed (nowait) %s\n", buf);
 	else
-		fprintf(stderr, "handle_just_exec(): AddClient(\"%s\") failed with error %d\n", buf, uResult);
+		lprintf_err(uResult, "handle_just_exec(): AddClient(\"%s\")", buf);
 
 	free(buf);
+	return ERROR_SUCCESS;
 }
 
-
-void handle_input(int client_id, int len)
+// This will return error only if vchan fails.
+ULONG handle_input(int client_id, int len)
 {
 	char *buf;
 	PCLIENT_INFO	pClientInfo;
@@ -485,25 +533,30 @@ void handle_input(int client_id, int len)
 
 	pClientInfo = FindClientById(client_id);
 	if (!pClientInfo)
-		return;
+		return ERROR_SUCCESS;
 
 	if (!len) {
 		RemoveClient(pClientInfo);
-		return;
+		return ERROR_SUCCESS;
 	}
 
 	buf = malloc(len + 1);
 	if (!buf)
-		return;
+		return ERROR_SUCCESS;
 	buf[len] = 0;
 
-	read_all_vchan_ext(buf, len);
+	if (read_all_vchan_ext(buf, len) <= 0) {
+		free(buf);
+		lprintf_err(ERROR_INVALID_FUNCTION, "handle_input(): read_all_vchan_ext()");
+		return ERROR_INVALID_FUNCTION;
+	}
 
 	if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
-		fprintf(stderr, "handle_input(): WriteFile() failed with error %d\n", GetLastError());
+		lprintf_err(GetLastError(), "handle_input(): WriteFile()");
 
 
 	free(buf);
+	return ERROR_SUCCESS;
 }
 
 void set_blocked_outerr(int client_id, BOOLEAN bBlockOutput)
@@ -518,48 +571,76 @@ void set_blocked_outerr(int client_id, BOOLEAN bBlockOutput)
 	pClientInfo->bReadingIsDisabled = bBlockOutput;
 }
 
-void handle_server_data()
+ULONG handle_server_data()
 {
 	struct server_header s_hdr;
+	ULONG	uResult;
 
 
-	read_all_vchan_ext(&s_hdr, sizeof s_hdr);
-//	fprintf(stderr, "got %x %x %x\n", s_hdr.type, s_hdr.client_id, s_hdr.len);
+	if (read_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
+		lprintf_err(ERROR_INVALID_FUNCTION, "handle_server_data(): read_all_vchan_ext()");
+		return ERROR_INVALID_FUNCTION;
+	}
+
+//	lprintf("got %x %x %x\n", s_hdr.type, s_hdr.client_id, s_hdr.len);
 
 	switch (s_hdr.type) {
 	case MSG_XON:
-		fprintf(stderr, "MSG_XON\n");
+		lprintf("MSG_XON\n");
 		set_blocked_outerr(s_hdr.client_id, FALSE);
 		break;
 	case MSG_XOFF:
-		fprintf(stderr, "MSG_XOFF\n");
+		lprintf("MSG_XOFF\n");
 		set_blocked_outerr(s_hdr.client_id, TRUE);
 		break;
 	case MSG_SERVER_TO_AGENT_CONNECT_EXISTING:
-		fprintf(stderr, "MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
+		lprintf("MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
 //		handle_connect_existing(s_hdr.client_id, s_hdr.len);
 		break;
 	case MSG_SERVER_TO_AGENT_EXEC_CMDLINE:
-		fprintf(stderr, "MSG_SERVER_TO_AGENT_EXEC_CMDLINE\n");
-		handle_exec(s_hdr.client_id, s_hdr.len);
+		lprintf("MSG_SERVER_TO_AGENT_EXEC_CMDLINE\n");
+
+		// This will return error only if vchan fails.
+		uResult = handle_exec(s_hdr.client_id, s_hdr.len);
+		if (ERROR_SUCCESS != uResult) {
+			lprintf_err(uResult, "handle_server_data(): handle_exec()");
+			return uResult;
+		}		
 		break;
+
 	case MSG_SERVER_TO_AGENT_JUST_EXEC:
-		fprintf(stderr, "MSG_SERVER_TO_AGENT_JUST_EXEC\n");
-		handle_just_exec(s_hdr.client_id, s_hdr.len);
+		lprintf("MSG_SERVER_TO_AGENT_JUST_EXEC\n");
+
+		// This will return error only if vchan fails.
+		uResult = handle_just_exec(s_hdr.client_id, s_hdr.len);
+		if (ERROR_SUCCESS != uResult) {
+			lprintf_err(uResult, "handle_server_data(): handle_just_exec()");
+			return uResult;
+		}
 		break;
+
 	case MSG_SERVER_TO_AGENT_INPUT:
-		fprintf(stderr, "MSG_SERVER_TO_AGENT_INPUT\n");
-		handle_input(s_hdr.client_id, s_hdr.len);
+		lprintf("MSG_SERVER_TO_AGENT_INPUT\n");
+
+		// This will return error only if vchan fails.
+		uResult = handle_input(s_hdr.client_id, s_hdr.len);
+		if (ERROR_SUCCESS != uResult) {
+			lprintf_err(uResult, "handle_server_data(): handle_input()");
+			return uResult;
+		}
 		break;
+
 	case MSG_SERVER_TO_AGENT_CLIENT_END:
-		fprintf(stderr, "MSG_SERVER_TO_AGENT_CLIENT_END\n");
+		lprintf("MSG_SERVER_TO_AGENT_CLIENT_END\n");
 		RemoveClient(FindClientById(s_hdr.client_id));
 		break;
 	default:
-		fprintf(stderr, "msg type from daemon is %d ?\n",
+		lprintf("handle_server_data(): Msg type from daemon is %d ?\n",
 			s_hdr.type);
-		exit(1);
+		return ERROR_INVALID_FUNCTION;
 	}
+
+	return ERROR_SUCCESS;
 }
 
 
@@ -624,7 +705,7 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 
 
 
-VOID __cdecl main()
+ULONG WatchForEvents()
 {
 	EVTCHN	evtchn;
 	OVERLAPPED	ol;
@@ -635,8 +716,19 @@ VOID __cdecl main()
 	DWORD	dwExitCode;
 	BOOLEAN	bVchanIoInProgress;
 	ULONG	uResult;
+	BOOLEAN	bVchanReturnedError;
+	BOOLEAN	bVchanClientConnected;
 
-	peer_server_init(REXEC_PORT);
+
+	// This will not block.
+	uResult = peer_server_init(REXEC_PORT);
+	if (uResult) {
+		lprintf_err(ERROR_INVALID_FUNCTION, "main(): peer_server_init()");
+		return ERROR_INVALID_FUNCTION;
+	}
+
+	lprintf("main(): Awaiting for a vchan client\n");
+
 	evtchn = libvchan_fd_for_select(ctrl);
 
 	memset(&ol, 0, sizeof(ol));
@@ -647,13 +739,18 @@ VOID __cdecl main()
 		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
 
 
-
+	bVchanClientConnected = FALSE;
 	bVchanIoInProgress = FALSE;
+	bVchanReturnedError = FALSE;
 
 	for (;;) {
 
 		libvchan_prepare_to_select(ctrl);
 		uEventNumber = 0;
+
+#ifdef BUILD_AS_SERVICE
+		g_WatchedEvents[uEventNumber++] = g_hStopServiceEvent;
+#endif
 
 		uResult = ERROR_SUCCESS;
 		if (!bVchanIoInProgress) {
@@ -661,17 +758,20 @@ VOID __cdecl main()
 			if (!ReadFile(evtchn, &fired_port, sizeof(fired_port), NULL, &ol)) {
 				uResult = GetLastError();
 				if (ERROR_IO_PENDING != uResult) {
-					fprintf(stderr, "Vchan async read failed, last error: %d\n", GetLastError());
-//					CloseHandle(ol.hEvent);
-//					return -1;
+					lprintf_err(uResult, "main(): Vchan async read");
+					bVchanReturnedError = TRUE;
+					break;
 				}
 			}
 
 			bVchanIoInProgress = TRUE;
 		}
 
-		if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult)
+		if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult) {
+			g_HandlesInfo[uEventNumber].uClientNumber = FREE_CLIENT_SPOT_ID;
+			g_HandlesInfo[uEventNumber].bType = HTYPE_VCHAN;
 			g_WatchedEvents[uEventNumber++] = ol.hEvent;
+		}
 
 
 		for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++) {
@@ -690,33 +790,66 @@ VOID __cdecl main()
 			}
 		}
 
-
 		dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
 		if (dwSignaledEvent < MAXIMUM_WAIT_OBJECTS) {
 
-			if (0 == dwSignaledEvent) {
-				// vchan overlapped io has finished
-				if (libvchan_is_eof(ctrl))
+#ifdef BUILD_AS_SERVICE
+			if (0 == dwSignaledEvent)
+				// g_hStopServiceEvent is signaled
+				break;
+#endif
+
+
+//			lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
+			switch (g_HandlesInfo[dwSignaledEvent].bType) {
+				case HTYPE_VCHAN:
+
+					bVchanIoInProgress = FALSE;
+
+					if (!bVchanClientConnected) {
+
+						lprintf("main(): A vchan client has connected\n");
+
+						// Remove the xenstore device/vchan/N entry.
+						uResult = libvchan_server_handle_connected(ctrl);
+						if (uResult) {
+							lprintf_err(ERROR_INVALID_FUNCTION, "main(): libvchan_server_handle_connected()");
+							bVchanReturnedError = TRUE;
+							break;
+						}
+
+						bVchanClientConnected = TRUE;
+						break;
+					}
+
+					if (libvchan_is_eof(ctrl)) {
+						bVchanReturnedError = TRUE;
+						break;
+					}
+
+					while (read_ready_vchan_ext()) {
+						uResult = handle_server_data();
+						if (ERROR_SUCCESS != uResult) {
+							bVchanReturnedError = TRUE;
+							lprintf_err(uResult, "main(): handle_server_data()");
+							break;
+						}
+					}
+					
 					break;
 
-				while (read_ready_vchan_ext())
-					handle_server_data();
-
-				bVchanIoInProgress = FALSE;
-				continue;
-			}
-
-
-//			fprintf(stderr, "client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
-			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_STDOUT:
 #ifdef DISPLAY_CONSOLE_OUTPUT
 					printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout.ReadBuffer);
 #endif
 
-					ReturnPipeData(
-						g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
-						&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout);
+					uResult = ReturnPipeData(
+							g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
+							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout);
+					if (ERROR_SUCCESS != uResult) {
+						bVchanReturnedError = TRUE;
+						lprintf_err(uResult, "main(): ReturnPipeData(STDOUT)");
+					}
 					break;
 
 				case HTYPE_STDERR:
@@ -724,9 +857,13 @@ VOID __cdecl main()
 					printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr.ReadBuffer);
 #endif
 
-					ReturnPipeData(
-						g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
-						&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
+					uResult = ReturnPipeData(
+							g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
+							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
+					if (ERROR_SUCCESS != uResult) {
+						bVchanReturnedError = TRUE;
+						lprintf_err(uResult, "main(): ReturnPipeData(STDERR)");
+					}
 					break;
 
 				case HTYPE_PROCESS:
@@ -735,22 +872,216 @@ VOID __cdecl main()
 
 					dwExitCode = ERROR_SUCCESS;
 					GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode);
-					send_exit_code(pClientInfo->client_id, dwExitCode);
+					uResult = send_exit_code(pClientInfo->client_id, dwExitCode);
+					if (ERROR_SUCCESS != uResult) {
+						bVchanReturnedError = TRUE;
+						lprintf_err(uResult, "main(): send_exit_code()");
+					}
 
 					RemoveClient(pClientInfo);
 					break;
 			}
+
 		} else {
-			fprintf(stderr, "WaitForMultipleObjects() failed, last error %d\n", GetLastError());
+			lprintf_err(GetLastError(), "main(): WaitForMultipleObjects()");
 			break;
 		}
+
+		if (bVchanReturnedError)
+			break;
 
 	}
 
 
-	libvchan_close(ctrl);
+	if (bVchanIoInProgress)
+		if (CancelIo(evtchn))
+			// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
+			// OVERLAPPED structure.
+			WaitForSingleObject(ol.hEvent, INFINITE);
+
+	if (!bVchanClientConnected)
+		// Remove the xenstore device/vchan/N entry.
+		libvchan_server_handle_connected(ctrl);
+
+	// Cancel all the other pending IO.
+	RemoveAllClients();
+
+	if (bVchanClientConnected)
+		libvchan_close(ctrl);
+
+	// This is actually CloseHandle(evtchn)
+	xc_evtchn_close(ctrl->evfd);
+
 	CloseHandle(ol.hEvent);
 
 
+	return bVchanReturnedError ? ERROR_INVALID_FUNCTION : ERROR_SUCCESS;
+}
+
+
+VOID Usage()
+{
+	printf("\nqrexec agent service\n\nUsage: qrexec_agent <-i|-u>\n");
+}
+
+
+ULONG CheckForXenInterface()
+{
+	struct xs_handle	*xs;
+
+
+	xs = xs_domain_open();
+	if (!xs)
+		return ERROR_NOT_SUPPORTED;
+
+	xs_daemon_close(xs);
+	return ERROR_SUCCESS;
+}
+
+
+#ifdef BUILD_AS_SERVICE
+
+ULONG WINAPI ServiceExecutionThread(PVOID pParam)
+{
+	ULONG	uResult;
+
+
+	lprintf("ServiceExecutionThread(): Service started\n");
+
+
+	for (;;) {
+
+		uResult = WatchForEvents();
+		if (ERROR_SUCCESS != uResult)
+			lprintf_err(uResult, "ServiceExecutionThread(): WatchForEvents()");
+
+		if (!WaitForSingleObject(g_hStopServiceEvent, 0))
+			break;
+
+		Sleep(1000);
+	}
+
+	lprintf("ServiceExecutionThread(): Shutting down\n");
+
+	return ERROR_SUCCESS;
+}
+
+ULONG Init(HANDLE *phServiceThread)
+{
+	ULONG	uResult;
+	HANDLE	hThread;
+
+
+
+	*phServiceThread = INVALID_HANDLE_VALUE;
+
+	uResult = CheckForXenInterface();
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "Init(): CheckForXenInterface()");
+		ReportErrorToEventLog(XEN_INTERFACE_NOT_FOUND);
+		return ERROR_NOT_SUPPORTED;
+	}
+
+
+	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ServiceExecutionThread, NULL, 0, NULL);
+	if (!hThread) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "StartServiceThread(): CreateThread()");
+		return uResult;
+	}
+
+	*phServiceThread = hThread;
+
+	return ERROR_SUCCESS;
+}
+
+
+
+
+VOID __cdecl main(ULONG argc, PUCHAR argv[])
+{
+
+	ULONG	uOption;
+	PUCHAR	pszParam;
+	TCHAR	szUserName[UNLEN + 1];
+	TCHAR	szFullPath[MAX_PATH + 1];
+	DWORD	nSize;
+
+
+	SERVICE_TABLE_ENTRY	ServiceTable[] = {
+		{SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)ServiceMain},
+		{NULL,NULL}
+	};
+
+	memset(szUserName, 0, sizeof(szUserName));
+	nSize = RTL_NUMBER_OF(szUserName);
+	if (!GetUserName(szUserName, &nSize)) {
+		lprintf_err(GetLastError(), "main(): GetUserName()");
+		return;
+	}
+
+
+	if ((1 == argc) && _tcscmp(szUserName, TEXT("SYSTEM"))) {
+		Usage();
+		return;
+	}
+
+	if (1 == argc) {
+
+		lprintf("main(): Running as SYSTEM\n");
+
+		if (!StartServiceCtrlDispatcher(ServiceTable))
+			lprintf_err(GetLastError(), "main(): StartServiceCtrlDispatcher()");
+
+		lprintf("main(): Exiting\n");
+		return;
+	}
+
+	memset(szFullPath, 0, sizeof(szFullPath));
+	if (!GetModuleFileName(NULL, szFullPath, RTL_NUMBER_OF(szFullPath) - 1)) {
+		lprintf_err(GetLastError(), "main(): GetModuleFileName()");
+		return;
+	}
+
+	uOption=GetOption(argc, argv, "iu", &pszParam);
+	switch (uOption) {
+	case 'i':
+		InstallService(szFullPath, SERVICE_NAME);
+		break;
+	case 'u':
+		UninstallService(SERVICE_NAME);
+		break;
+	default:
+		Usage();
+	}
+
 	return;
 }
+
+#else
+
+ULONG Init(HANDLE *phServiceThread)
+{
+	return ERROR_SUCCESS;
+}
+
+VOID __cdecl main(ULONG argc, PUCHAR argv[])
+{
+	ULONG	uResult;
+
+
+	if (ERROR_SUCCESS != CheckForXenInterface()) {
+		lprintf("Could not find Xen interface\n");
+		return;
+	}
+
+	for (;;) {
+
+		uResult = WatchForEvents();
+		if (ERROR_SUCCESS != uResult)
+			lprintf_err(uResult, "main(): WatchForEvents()");
+
+		Sleep(1000);
+	}
+}
+#endif

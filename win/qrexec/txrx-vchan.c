@@ -25,7 +25,7 @@
 #include <stdlib.h>
 
 struct libvchan *ctrl;
-static int is_server;
+
 int write_all_vchan_ext(void *buf, int size)
 {
 	int written = 0;
@@ -35,10 +35,9 @@ int write_all_vchan_ext(void *buf, int size)
 		ret =
 		    libvchan_write(ctrl, (char *) buf + written,
 				   size - written);
-		if (ret <= 0) {
-			perror("write");
-			exit(1);
-		}
+		if (ret <= 0) 
+			return ret;
+
 		written += ret;
 	}
 //      fprintf(stderr, "sent %d bytes\n", size);
@@ -54,14 +53,9 @@ int read_all_vchan_ext(void *buf, int size)
 		ret =
 		    libvchan_read(ctrl, (char *) buf + written,
 				  size - written);
-		if (ret == 0) {
-			fprintf(stderr, "EOF\n");
-			exit(1);
-		}
-		if (ret < 0) {
-			perror("read");
-			exit(1);
-		}
+		if (ret <= 0)
+			return ret;
+
 		written += ret;
 	}
 //      fprintf(stderr, "read %d bytes\n", size);
@@ -81,12 +75,10 @@ int buffer_space_vchan_ext()
 
 int peer_server_init(int port)
 {
-	is_server = 1;
 	ctrl = libvchan_server_init(port);
-	if (!ctrl) {
-		perror("libvchan_server_init");
-		exit(1);
-	}
+	if (!ctrl)
+		return 1;
+
 	return 0;
 }
 
