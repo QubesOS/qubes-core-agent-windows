@@ -135,8 +135,13 @@ int __cdecl main(int argc, char **argv)
 		wr = 1;
 	else
 		usage();
-	if (!strcmp(argv[1], "server"))
+	if (!strcmp(argv[1], "server")) {
 		ctrl = libvchan_server_init(atoi(argv[3]));
+		if (ctrl) {
+			libvchan_wait(ctrl);
+			libvchan_server_handle_connected(ctrl);
+		}
+	}
 	else if (!strcmp(argv[1], "client"))
 		ctrl = libvchan_client_init(atoi(argv[3]), atoi(argv[4]));
 	else
