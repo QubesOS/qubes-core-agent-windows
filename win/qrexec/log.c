@@ -1,6 +1,8 @@
 #include "log.h"
 
 
+#ifdef DBG
+
 static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR szFormat, va_list Args)
 {
 	UCHAR	szMessage[2048];
@@ -92,3 +94,4 @@ VOID lprintf_err(ULONG uErrorCode, PUCHAR szFormat, ...)
 	lprintf_main(szMessage, RTL_NUMBER_OF(szMessage), szFormat, Args);
 }
 
+#endif
