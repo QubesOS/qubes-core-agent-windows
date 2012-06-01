@@ -7,6 +7,6 @@
 //  COMMENTS:
 //
 ///////////////////////////////////////////////////////////////////////////////
-
+#include <tchar.h>
 // function prototypes
-int GetOption (int argc, char** argv, char* pszValidOpts, char** ppszParam);
+int GetOption (int argc, TCHAR** argv, TCHAR* pszValidOpts, TCHAR** ppszParam);

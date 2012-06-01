@@ -5,12 +5,14 @@
 #include <tchar.h>
 #include <strsafe.h>
 #include <lmcons.h>
+#include "common.h"
 #include "qrexec.h"
 #include "libvchan.h"
 #include "glue.h"
 #include "service.h"
 #include "getopt.h"
 #include "errors.h"
+#include "exec.h"
 
 //#define DISPLAY_CONSOLE_OUTPUT
 #define BUILD_AS_SERVICE

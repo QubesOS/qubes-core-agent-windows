@@ -1,11 +1,8 @@
 #pragma once
 #include <windows.h>
+#include "common.h"
 #include "log.h"
 
-
-#define	HEARTBEAT_INTERVAL_IN_SECONDS	1
-
-#define SERVICE_NAME	TEXT("qrexec_agent")
 
 
 
