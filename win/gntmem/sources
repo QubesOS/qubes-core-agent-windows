@@ -1,0 +1,23 @@
+TARGETNAME=gntmem
+TARGETTYPE=LIBRARY
+TARGETPATH=..\libs
+
+#BUILD_PASS0_PRODUCES=gntmem
+
+USE_MSVCRT=1
+
+DLLDEF=xengntmem.def
+
+INCLUDES=$(INCLUDES); \
+                    $(DDK_INC_PATH)\wdm; \
+                    ..\include;\
+
+SOURCES=xengntmem.c
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\setupapi.lib     \
+        $(SDK_LIB_PATH)\kernel32.lib    \
+        $(SDK_LIB_PATH)\advapi32.lib
+
+
+

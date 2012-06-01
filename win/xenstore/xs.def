@@ -1,0 +1,28 @@
+;you should put names of all functions here
+;which you want to export
+EXPORTS
+xs_daemon_open
+xs_domain_open
+xs_daemon_open_readonly
+xs_daemon_close
+xs_directory
+xs_read
+xs_write
+xs_mkdir
+xs_rm
+xs_get_permissions
+xs_set_permissions
+xs_watch
+xs_register_watch_event
+xs_unregister_watch_event
+xs_read_watch
+xs_unwatch
+xs_transaction_start
+xs_transaction_end
+xs_introduce_domain
+xs_set_target
+xs_resume_domain
+xs_release_domain
+xs_get_domain_path
+xs_is_domain_introduced
+xs_debug_command
