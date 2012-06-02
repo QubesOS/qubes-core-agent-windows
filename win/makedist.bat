@@ -20,14 +20,14 @@ SET VCHAN_DIR=%CD%\..\vchan
 mkdir symbols\%VERSION%
 
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%CORE_DIR%" && build -cZg"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%CORE_DIR%" && build -cZg"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
