@@ -11,7 +11,8 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
-                    ..\include;
+                    ..\include; \
+                    ..\..\vchan;
 
 SOURCES=qrexec_agent.c txrx-vchan.c service.c getopt.c log.c errors.mc errors.rc exec.c
 
