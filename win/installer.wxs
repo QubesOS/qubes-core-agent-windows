@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi' xmlns:difx='http://schemas.microsoft.com/wix/DifxAppExtension' xmlns:iis='http://schemas.microsoft.com/wix/IIsExtension'>
+  <?if $(env._BUILDARCH) = x86 ?>
+    <?define ARCHDIR = i386 ?>
+  <?elseif $(env._BUILDARCH) = AMD64 ?>
+    <?define ARCHDIR = amd64 ?>
+  <?endif ?>
+
+  <Product Name='Qubes Agent for Windows' Id='*'
+    UpgradeCode='0853bd66-91d5-449c-8450-64af366e42a5'
+    Language='1033' Codepage='1252' Version='$(env.VERSION)' Manufacturer='Invisible Things Lab'>
+
+    <Package Id='*' Keywords='Installer' Description="Qubes Agent for Windows"
+      Comments='no comment' Manufacturer='Invisible Things Lab'
+      InstallerVersion='100' Languages='1033' Compressed='yes' SummaryCodepage='1252' />
+
+    <!-- TODO <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />-->
+
+    <UI>
+      <UIRef Id="WixUI_Mondo" />
+      <UIRef Id="WixUI_ErrorProgressText" />
+    </UI>
+    
+    <Media Id='1' Cabinet='qubescore.cab' EmbedCab='yes' />
+
+    <CustomAction Id='InstallQrexecAgentService' FileKey='qrexec_agent.exe' ExeCommand='-i' Execute='deferred' Return='check'/>
+    <CustomAction Id='UnInstallQrexecAgentService' FileKey='qrexec_agent.exe' ExeCommand='-u' Execute='deferred' Return='check' Impersonate='no'/>
+
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='ProgramFilesFolder' Name='PFiles'>
+        <Directory Id='QubesProgramFilesDir' Name='Qubes'>
+          <Directory Id='BinDir' Name='bin'>
+            <Component Id='QrexecAgent' Guid='0e26617f-e5d9-4943-a08e-cf29013e9d72'>
+              <File Id='qrexec_agent.exe' Name='qrexec_agent.exe' DiskId='1' Source='qrexec\bin\$(var.ARCHDIR)\qrexec_agent.exe' />
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id='QrexecAgent' Title='QrexecAgent' Level='1' AllowAdvertise='no' InstallDefault='local' Absent='disallow'>
+      <ComponentRef Id='QrexecAgent' />
+    </Feature>
+
+    <InstallExecuteSequence>
+      <ScheduleReboot After='InstallFinalize' />
+      <Custom Action='UnInstallQrexecAgentService' Before='StopServices'>$QrexecAgent=2</Custom> 
+      <Custom Action='InstallQrexecAgentService' After='StartServices'>$QrexecAgent>2</Custom> 
+    </InstallExecuteSequence>
+  </Product>
+</Wix>
