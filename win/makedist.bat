@@ -25,6 +25,9 @@ cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%CORE_DIR%" && 
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
+rename qrexec\bin\amd64\qrexec_agent.exe qrexec\bin\amd64\qrexec_agent_debug.exe
+rename qrexec\bin\i386\qrexec_agent.exe qrexec\bin\i386\qrexec_agent_debug.exe
+
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
 cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
