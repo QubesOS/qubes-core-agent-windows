@@ -14,8 +14,6 @@
 #include "errors.h"
 #include "exec.h"
 
-//#define DISPLAY_CONSOLE_OUTPUT
-#define BUILD_AS_SERVICE
 
 
 typedef enum {

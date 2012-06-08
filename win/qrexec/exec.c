@@ -452,6 +452,7 @@ ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName,
 
 ULONG CreatePipedProcessAsCurrentUserW(
 		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
 		HANDLE hPipeStdin,
 		HANDLE hPipeStdout,
 		HANDLE hPipeStderr,
@@ -460,6 +461,7 @@ ULONG CreatePipedProcessAsCurrentUserW(
 	PROCESS_INFORMATION	pi;
 	STARTUPINFOW	si;
 	ULONG	uResult;
+	BOOLEAN	bInheritHandles;
 
 
 	if (!pwszCommand || !phProcess)
@@ -470,18 +472,26 @@ ULONG CreatePipedProcessAsCurrentUserW(
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
 
-	si.dwFlags = STARTF_USESTDHANDLES;
+	bInheritHandles = FALSE;
 
-	si.hStdInput = hPipeStdin;
-	si.hStdOutput = hPipeStdout;
-	si.hStdError = hPipeStderr;
+	if (INVALID_HANDLE_VALUE != hPipeStdin &&
+		INVALID_HANDLE_VALUE != hPipeStdout &&
+		INVALID_HANDLE_VALUE != hPipeStderr) {
+
+		si.dwFlags = STARTF_USESTDHANDLES;	
+		si.hStdInput = hPipeStdin;
+		si.hStdOutput = hPipeStdout;
+		si.hStdError = hPipeStderr;
+
+		bInheritHandles = TRUE;
+	}
 
 	if (!CreateProcessW(
 			NULL, 
 			pwszCommand, 
 			NULL, 
 			NULL, 
-			TRUE, // handles are inherited
+			bInheritHandles, // inherit handles if IO is piped
 			0, 
 			NULL, 
 			NULL, 
@@ -507,12 +517,14 @@ ULONG CreatePipedProcessAsUserW(
 		PWCHAR pwszUserName,
 		PWCHAR pwszUserPassword,
 		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
 		HANDLE hPipeStdin,
 		HANDLE hPipeStdout,
 		HANDLE hPipeStderr,
 		HANDLE *phProcess)
 {
 	DWORD	dwActiveSessionId;
+	DWORD	dwCurrentSessionId;
 	ULONG	uResult;
 	HANDLE	hUserToken;
 	HANDLE	hUserTokenDuplicate;
@@ -522,6 +534,8 @@ ULONG CreatePipedProcessAsUserW(
 	WCHAR	wszLoggedUserName[UNLEN + 1];
 	DWORD	nSize;
 	PROFILEINFO	ProfileInfo;
+	BOOLEAN	bInheritHandles;
+	BOOLEAN	bUserIsLoggedOn;
 
 
 
@@ -529,6 +543,13 @@ ULONG CreatePipedProcessAsUserW(
 		return ERROR_INVALID_PARAMETER;
 
 	*phProcess = INVALID_HANDLE_VALUE;
+
+	if (!ProcessIdToSessionId(GetCurrentProcessId(), &dwCurrentSessionId)) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "CreatePipedProcessAsUserW(): ProcessIdToSessionId()");
+		return uResult;
+	}
+
 
 	dwActiveSessionId = WTSGetActiveConsoleSessionId();
 	if (0xFFFFFFFF == dwActiveSessionId) {
@@ -588,6 +609,7 @@ ULONG CreatePipedProcessAsUserW(
 
 	RevertToSelf();
 
+	bUserIsLoggedOn = FALSE;
 	if (wcscmp(wszLoggedUserName, pwszUserName)) {
 
 		// Current user is not the one specified by pwszUserName. Log on the required user.
@@ -607,18 +629,6 @@ ULONG CreatePipedProcessAsUserW(
 			return uResult;
 		}
 
-		if (!SetTokenInformation(hUserToken, TokenSessionId, &dwActiveSessionId, sizeof(dwActiveSessionId))) {
-			uResult = GetLastError();
-			CloseHandle(hUserToken);
-			lprintf_err(uResult, "CreatePipedProcessAsUserW(): SetTokenInformation()");
-			return uResult;
-		}
-
-
-		uResult = GrantRemoteSessionDesktopAccess(dwActiveSessionId, pwszUserName, NULL);
-		if (ERROR_SUCCESS != uResult)
-			lprintf_err(uResult, "CreatePipedProcessAsUserW(): GrantRemoteSessionDesktopAccess()");
-
 /*
 		memset(&ProfileInfo, 0, sizeof(ProfileInfo));
 		ProfileInfo.dwSize = sizeof(ProfileInfo);
@@ -626,9 +636,30 @@ ULONG CreatePipedProcessAsUserW(
 
 		if (!LoadUserProfile(hUserToken, &ProfileInfo)) {
 			uResult = GetLastError();
-			lprintf_err(uResult, "CreatePipedProcessAsUserW(): SetTokenInformation()");
+			lprintf_err(uResult, "CreatePipedProcessAsUserW(): LoadUserProfile()");
 		}
 */
+	} else
+		bUserIsLoggedOn = TRUE;
+
+	if (!bRunInteractively)
+		dwActiveSessionId = dwCurrentSessionId;
+
+	if (!(bUserIsLoggedOn && bRunInteractively)) {
+
+		// Do not do this if the specified user is currently logged on and the process is run interactively
+		// because the user already has all the access to the window station and desktop, and
+		// we don't have to change the session.
+		if (!SetTokenInformation(hUserToken, TokenSessionId, &dwActiveSessionId, sizeof(dwActiveSessionId))) {
+			uResult = GetLastError();
+			CloseHandle(hUserToken);
+			lprintf_err(uResult, "CreatePipedProcessAsUserW(): SetTokenInformation()");
+			return uResult;
+		}
+
+		uResult = GrantRemoteSessionDesktopAccess(dwActiveSessionId, pwszUserName, NULL);
+		if (ERROR_SUCCESS != uResult)
+			lprintf_err(uResult, "CreatePipedProcessAsUserW(): GrantRemoteSessionDesktopAccess()");
 	}
 
 
@@ -651,12 +682,21 @@ ULONG CreatePipedProcessAsUserW(
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
 
-	si.dwFlags = STARTF_USESTDHANDLES;
-
 	si.lpDesktop = TEXT("Winsta0\\Default");
-	si.hStdInput = hPipeStdin;
-	si.hStdOutput = hPipeStdout;
-	si.hStdError = hPipeStderr;
+
+	bInheritHandles = FALSE;
+
+	if (INVALID_HANDLE_VALUE != hPipeStdin &&
+		INVALID_HANDLE_VALUE != hPipeStdout &&
+		INVALID_HANDLE_VALUE != hPipeStderr) {
+
+		si.dwFlags = STARTF_USESTDHANDLES;	
+		si.hStdInput = hPipeStdin;
+		si.hStdOutput = hPipeStdout;
+		si.hStdError = hPipeStderr;
+
+		bInheritHandles = TRUE;
+	}
 
 	if (!CreateProcessAsUserW(
 			hUserToken,
@@ -664,7 +704,7 @@ ULONG CreatePipedProcessAsUserW(
 			pwszCommand,
 			NULL,
 			NULL,
-			TRUE, // handles are inherited
+			bInheritHandles, // inherit handles if IO is piped
 			NORMAL_PRIORITY_CLASS | CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT,
 			pEnvironment,
 			NULL,
@@ -693,3 +733,50 @@ ULONG CreatePipedProcessAsUserW(
 
 }
 
+ULONG CreateNormalProcessAsUserW(
+		PWCHAR pwszUserName,
+		PWCHAR pwszUserPassword,
+		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
+		HANDLE *phProcess)
+{
+	ULONG	uResult;
+
+
+	uResult = CreatePipedProcessAsUserW(
+			pwszUserName,
+			pwszUserPassword,
+			pwszCommand,
+			bRunInteractively,
+			INVALID_HANDLE_VALUE,
+			INVALID_HANDLE_VALUE,
+			INVALID_HANDLE_VALUE,
+			phProcess);
+
+	if (ERROR_SUCCESS != uResult)
+		lprintf_err(uResult, "CreateNormalProcessAsUserW(): CreatePipedProcessAsUserW()");
+
+	return uResult;
+}
+
+ULONG CreateNormalProcessAsCurrentUserW(
+		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
+		HANDLE *phProcess)
+{
+	ULONG	uResult;
+
+
+	uResult = CreatePipedProcessAsCurrentUserW(
+			pwszCommand,
+			bRunInteractively,
+			INVALID_HANDLE_VALUE,
+			INVALID_HANDLE_VALUE,
+			INVALID_HANDLE_VALUE,
+			phProcess);
+
+	if (ERROR_SUCCESS != uResult)
+		lprintf_err(uResult, "CreateNormalProcessAsCurrentUserW(): CreatePipedProcessAsCurrentUserW()");
+
+	return uResult;
+}

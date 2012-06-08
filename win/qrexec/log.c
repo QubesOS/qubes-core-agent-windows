@@ -21,7 +21,7 @@ static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR
 
 	printf("%s%s", szMessage, pszErrorText ? pszErrorText : "");
 
-	hLog = CreateFile(SERVICE_LOG, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	hLog = CreateFile(LOG_FILE, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hLog == INVALID_HANDLE_VALUE)
 		return;
 
