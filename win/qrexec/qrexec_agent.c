@@ -532,8 +532,8 @@ ULONG handle_exec(int client_id, int len)
 	free(buf);
 	buf = NULL;
 
-	// Create a non-interactive process and redirect its console IO to vchan.
-	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, FALSE);
+	// Create an interactive process and redirect its console IO to vchan.
+	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, TRUE);
 	if (ERROR_SUCCESS == uResult)
 		lprintf("handle_exec(): Executed %S\n", pwszCommandLine);
 	else {
