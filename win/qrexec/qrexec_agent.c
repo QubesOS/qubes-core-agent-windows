@@ -295,7 +295,48 @@ ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
 	return ERROR_SUCCESS;
 }
 
-ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
+
+ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine)
+{
+	ULONG	uResult;
+	PWCHAR	pwszCommand = NULL;
+	PWCHAR	pwszCommandLine = NULL;
+	PWCHAR	pwSeparator = NULL;
+	PWCHAR	pwszUserName = NULL;
+
+
+	if (!pszUtf8Command)
+		return ERROR_INVALID_PARAMETER;
+
+	*ppwszCommand = NULL;
+	*ppwszUserName = NULL;
+	*ppwszCommandLine = NULL;
+
+	pwszCommand = NULL;
+	uResult = UTF8ToUTF16(pszUtf8Command, &pwszCommand);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "ParseUtf8Command(): UTF8ToUTF16()");
+		return uResult;
+	}
+
+	pwSeparator = wcschr(pwszCommand, L':');
+	if (!pwSeparator) {
+		free(pwszCommand);
+		lprintf("ParseUtf8Command(): Command line is supposed to be in user:command form\n");
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	*pwSeparator = L'\0';
+
+	*ppwszCommand = pwszCommand;
+	*ppwszUserName = pwszCommand;
+	*ppwszCommandLine = ++pwSeparator;
+
+	return ERROR_SUCCESS;
+}
+
+
+ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOLEAN bRunInteractively)
 {
 	ULONG	uResult;
 	CLIENT_INFO	ClientInfo;
@@ -304,14 +345,12 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 	HANDLE	hPipeStdin = INVALID_HANDLE_VALUE;
 	ULONG	uClientNumber;
 	SECURITY_ATTRIBUTES	sa;
-	PWCHAR	pwszCommand;
-	PWCHAR	pwszCommandLine;
-	PWCHAR	pwSeparator;
-	PWCHAR	pwszUserName;
 
 
-	if (!pszUtf8Command)
+	// if pwszUserName is NULL we run the process on behalf of the current user.
+	if (!pwszCommandLine)
 		return ERROR_INVALID_PARAMETER;
+
 
 
 	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
@@ -329,26 +368,15 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 		return ERROR_ALREADY_EXISTS;
 	}
 
-
-	pwszCommand = NULL;
-	uResult = UTF8ToUTF16(pszUtf8Command, &pwszCommand);
-	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "AddClient(): UTF8ToUTF16()");
-		return uResult;
+	if (pwszUserName)
+		lprintf("AddClient(): Running \"%S\" as user \"%S\"\n", pwszCommandLine, pwszUserName);
+	else {
+#ifdef BUILD_AS_SERVICE
+		lprintf("AddClient(): Running \"%S\" as SYSTEM\n", pwszCommandLine);
+#else
+		lprintf("AddClient(): Running \"%S\" as current user\n", pwszCommandLine);
+#endif
 	}
-
-	pwSeparator = wcschr(pwszCommand, L':');
-	if (!pwSeparator) {
-		free(pwszCommand);
-		lprintf("AddClient(): Command line is supposed to be in user:command form\n");
-		return ERROR_INVALID_PARAMETER;
-	}
-
-	*pwSeparator = L'\0';
-	pwszUserName = pwszCommand;
-	pwszCommandLine = ++pwSeparator;
-
-	lprintf("AddClient(): Running \"%S\" under user \"%S\"\n", pwszCommandLine, pwszUserName);
 
 	memset(&sa, 0, sizeof(sa));
 	sa.nLength = sizeof(sa);
@@ -359,16 +387,16 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 	memset(&ClientInfo, 0, sizeof(ClientInfo));
 	ClientInfo.client_id = client_id;
 
+
+
 	uResult = InitReadPipe(&ClientInfo.Stdout, &hPipeStdout, PTYPE_STDOUT);
 	if (ERROR_SUCCESS != uResult) {
-		free(pwszCommand);
 		lprintf_err(uResult, "AddClient(): InitReadPipe(STDOUT)");
 		return uResult;
 	}
 	uResult = InitReadPipe(&ClientInfo.Stderr, &hPipeStderr, PTYPE_STDERR);
 	if (ERROR_SUCCESS != uResult) {
 		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
-		free(pwszCommand);
 		lprintf_err(uResult, "AddClient(): InitReadPipe(STDERR)");
 		return uResult;
 	}
@@ -381,7 +409,6 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
 		CloseHandle(hPipeStdout);
 		CloseHandle(hPipeStderr);
-		free(pwszCommand);
 
 		lprintf_err(uResult, "AddClient(): CreatePipe(STDIN)");
 		return uResult;
@@ -390,24 +417,35 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 	// Ensure the write handle to the pipe for STDIN is not inherited.
 	SetHandleInformation(ClientInfo.hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
 
+
 #ifdef BUILD_AS_SERVICE
-	uResult = CreatePipedProcessAsUserW(
-			pwszUserName,
-			L"userpass",
-			pwszCommandLine,
-			hPipeStdin,
-			hPipeStdout,
-			hPipeStderr,
-			&ClientInfo.hProcess);
+	if (pwszUserName)
+		uResult = CreatePipedProcessAsUserW(
+				pwszUserName,
+				DEFAULT_USER_PASSWORD_UNICODE,
+				pwszCommandLine,
+				bRunInteractively,
+				hPipeStdin,
+				hPipeStdout,
+				hPipeStderr,
+				&ClientInfo.hProcess);
+	else
+		uResult = CreatePipedProcessAsCurrentUserW(
+				pwszCommandLine,
+				bRunInteractively,
+				hPipeStdin,
+				hPipeStdout,
+				hPipeStderr,
+				&ClientInfo.hProcess);
 #else
 	uResult = CreatePipedProcessAsCurrentUserW(
 			pwszCommandLine,
+			bRunInteractively,
 			hPipeStdin,
 			hPipeStdout,
 			hPipeStderr,
 			&ClientInfo.hProcess);
 #endif
-	free(pwszCommand);
 
 	CloseHandle(hPipeStdout);
 	CloseHandle(hPipeStderr);
@@ -418,7 +456,14 @@ ULONG AddClient(int client_id, PUCHAR pszUtf8Command)
 
 		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
 		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
-		lprintf_err(uResult, "AddClient(): CreatePipedProcessAsUserW()");
+#ifdef BUILD_AS_SERVICE
+		if (pwszUserName)
+			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsUserW()");
+		else
+			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUserW()");
+#else
+		lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUserW()");
+#endif
 		return uResult;
 	}
 
@@ -460,6 +505,9 @@ ULONG handle_exec(int client_id, int len)
 {
 	char *buf;
 	ULONG	uResult;
+	PWCHAR	pwszCommand = NULL;
+	PWCHAR	pwszUserName = NULL;
+	PWCHAR	pwszCommandLine = NULL;
 
 
 	buf = malloc(len + 1);
@@ -474,15 +522,26 @@ ULONG handle_exec(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	uResult = AddClient(client_id, buf);
-	if (ERROR_SUCCESS == uResult)
-		lprintf("handle_exec(): Executed %s\n", buf);
-	else {
-		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_exec(): AddClient(\"%s\")", buf);
+	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine);
+	if (ERROR_SUCCESS != uResult) {
+		free(buf);
+		lprintf_err(uResult, "handle_just_exec(): ParseUtf8Command()");
+		return uResult;
 	}
 
 	free(buf);
+	buf = NULL;
+
+	// Create an interactive process and redirect its console IO to vchan.
+	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, TRUE);
+	if (ERROR_SUCCESS == uResult)
+		lprintf("handle_exec(): Executed %S\n", pwszCommandLine);
+	else {
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+		lprintf_err(uResult, "handle_exec(): AddClient(\"%S\")", pwszCommandLine);
+	}
+
+	free(pwszCommand);
 	return ERROR_SUCCESS;
 }
 
@@ -491,6 +550,10 @@ ULONG handle_just_exec(int client_id, int len)
 {
 	char *buf;
 	ULONG	uResult;
+	PWCHAR	pwszCommand = NULL;
+	PWCHAR	pwszUserName = NULL;
+	PWCHAR	pwszCommandLine = NULL;
+	HANDLE	hProcess;
 
 
 	buf = malloc(len + 1);
@@ -505,15 +568,45 @@ ULONG handle_just_exec(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	uResult = AddClient(client_id, buf);
-	if (ERROR_SUCCESS == uResult)
-		lprintf("handle_just_exec(): Executed (nowait) %s\n", buf);
-	else {
-		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_just_exec(): AddClient(\"%s\")", buf);
+
+	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine);
+	if (ERROR_SUCCESS != uResult) {
+		free(buf);
+		lprintf_err(uResult, "handle_just_exec(): ParseUtf8Command()");
+		return uResult;
 	}
 
 	free(buf);
+	buf = NULL;
+
+#ifdef BUILD_AS_SERVICE
+	// Create an interactive process which IO is not redirected anywhere.
+	uResult = CreateNormalProcessAsUserW(
+			pwszUserName,
+			DEFAULT_USER_PASSWORD_UNICODE,
+			pwszCommandLine,
+			TRUE,
+			&hProcess);
+#else
+	uResult = CreateNormalProcessAsCurrentUserW(
+			pwszCommandLine,
+			TRUE,
+			&hProcess);
+#endif
+
+	if (ERROR_SUCCESS == uResult) {
+		CloseHandle(hProcess);
+		lprintf("handle_just_exec(): Executed (nowait) %S\n", pwszCommandLine);
+	} else {
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+#ifdef BUILD_AS_SERVICE
+		lprintf_err(uResult, "handle_just_exec(): CreateNormalProcessAsUserW(\"%S\")", pwszCommandLine);
+#else
+		lprintf_err(uResult, "handle_just_exec(): CreateNormalProcessAsCurrentUserW(\"%S\")", pwszCommandLine);
+#endif
+	}
+
+	free(pwszCommand);
 	return ERROR_SUCCESS;
 }
 

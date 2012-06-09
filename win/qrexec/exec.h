@@ -30,21 +30,38 @@ BOOL WINAPI WTSQueryUserToken(
 
 
 ULONG CreatePipedProcessAsUserW(
-	PWCHAR pwszUserName,
-	PWCHAR pwszUserPassword,
-	PWCHAR pwszCommand,
-	HANDLE hPipeStdin,
-	HANDLE hPipeStdout,
-	HANDLE hPipeStderr,
-	HANDLE *phProcess
+		PWCHAR pwszUserName,
+		PWCHAR pwszUserPassword,
+		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
+		HANDLE hPipeStdin,
+		HANDLE hPipeStdout,
+		HANDLE hPipeStderr,
+		HANDLE *phProcess
 );
 
+ULONG CreateNormalProcessAsUserW(
+		PWCHAR pwszUserName,
+		PWCHAR pwszUserPassword,
+		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
+		HANDLE *phProcess
+);
+
+
 ULONG CreatePipedProcessAsCurrentUserW(
-	PWCHAR pwszCommand,
-	HANDLE hPipeStdin,
-	HANDLE hPipeStdout,
-	HANDLE hPipeStderr,
-	HANDLE *phProcess
+		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
+		HANDLE hPipeStdin,
+		HANDLE hPipeStdout,
+		HANDLE hPipeStderr,
+		HANDLE *phProcess
+);
+
+ULONG CreateNormalProcessAsCurrentUserW(
+		PWCHAR pwszCommand,
+		BOOLEAN bRunInteractively,
+		HANDLE *phProcess
 );
 
 ULONG GrantDesktopAccess(
