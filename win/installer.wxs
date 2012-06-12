@@ -11,10 +11,10 @@
     Language='1033' Codepage='1252' Version='$(env.VERSION)' Manufacturer='Invisible Things Lab'>
 
     <Package Id='*' Keywords='Installer' Description="Qubes Agent for Windows"
-      Comments='no comment' Manufacturer='Invisible Things Lab'
+      Comments='no comment' Manufacturer='Invisible Things Lab' InstallScope='perMachine'
       InstallerVersion='100' Languages='1033' Compressed='yes' SummaryCodepage='1252' />
 
-    <!-- TODO <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />-->
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
 
     <UI>
       <UIRef Id="WixUI_Mondo" />
