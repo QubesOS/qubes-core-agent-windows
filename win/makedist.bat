@@ -17,20 +17,14 @@ rem CALL set_ddk_path_2K.bat
 SET CORE_DIR=%CD%
 SET VCHAN_DIR=%CD%\..\vchan
 
-mkdir symbols\%VERSION%
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%VCHAN_DIR%" && build -cZg && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
-
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ chk x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
 rename qrexec\bin\amd64\qrexec_agent.exe qrexec\bin\amd64\qrexec_agent_debug.exe
 rename qrexec\bin\i386\qrexec_agent.exe qrexec\bin\i386\qrexec_agent_debug.exe
 
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre WIN7 && CD /D "%VCHAN_DIR%" && build -cZg && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg"
-cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre x64 WIN7 && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
+cmd /C "%DDK_PATH%\bin\setenv.bat %DDK_PATH%\ fre x64 WIN7 && CD /D "%VCHAN_DIR%" && build -cZg && CD /D "%CORE_DIR%" && build -cZg && call wix.bat"
 
