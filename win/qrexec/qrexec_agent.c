@@ -296,7 +296,7 @@ ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
 }
 
 
-ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine)
+ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, PBOOLEAN pbRunInteractively)
 {
 	ULONG	uResult;
 	PWCHAR	pwszCommand = NULL;
@@ -305,12 +305,13 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	PWCHAR	pwszUserName = NULL;
 
 
-	if (!pszUtf8Command)
+	if (!pszUtf8Command || !pbRunInteractively)
 		return ERROR_INVALID_PARAMETER;
 
 	*ppwszCommand = NULL;
 	*ppwszUserName = NULL;
 	*ppwszCommandLine = NULL;
+	*pbRunInteractively = TRUE;
 
 	pwszCommand = NULL;
 	uResult = UTF8ToUTF16(pszUtf8Command, &pwszCommand);
@@ -319,18 +320,35 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 		return uResult;
 	}
 
+	pwszUserName = pwszCommand;
 	pwSeparator = wcschr(pwszCommand, L':');
 	if (!pwSeparator) {
 		free(pwszCommand);
-		lprintf("ParseUtf8Command(): Command line is supposed to be in user:command form\n");
+		lprintf("ParseUtf8Command(): Command line is supposed to be in [nogui:]user:command form\n");
 		return ERROR_INVALID_PARAMETER;
 	}
 
 	*pwSeparator = L'\0';
+	pwSeparator++;
 
+	if (!wcscmp(pwszUserName, L"nogui")) {
+		pwszUserName = pwSeparator;
+		pwSeparator = wcschr(pwSeparator, L':');
+		if (!pwSeparator) {
+			free(pwszCommand);
+			lprintf("ParseUtf8Command(): Command line is supposed to be in [nogui:]user:command form\n");
+			return ERROR_INVALID_PARAMETER;
+		}
+
+		*pwSeparator = L'\0';
+		pwSeparator++;
+
+		*pbRunInteractively = FALSE;
+	}
+	
 	*ppwszCommand = pwszCommand;
-	*ppwszUserName = pwszCommand;
-	*ppwszCommandLine = ++pwSeparator;
+	*ppwszUserName = pwszUserName;
+	*ppwszCommandLine = pwSeparator;
 
 	return ERROR_SUCCESS;
 }
@@ -508,6 +526,7 @@ ULONG handle_exec(int client_id, int len)
 	PWCHAR	pwszCommand = NULL;
 	PWCHAR	pwszUserName = NULL;
 	PWCHAR	pwszCommandLine = NULL;
+	BOOLEAN	bRunInteractively;
 
 
 	buf = malloc(len + 1);
@@ -522,18 +541,21 @@ ULONG handle_exec(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine);
+	bRunInteractively = TRUE;
+
+	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine, &bRunInteractively);
 	if (ERROR_SUCCESS != uResult) {
 		free(buf);
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 		lprintf_err(uResult, "handle_just_exec(): ParseUtf8Command()");
-		return uResult;
+		return ERROR_SUCCESS;
 	}
 
 	free(buf);
 	buf = NULL;
 
-	// Create an interactive process and redirect its console IO to vchan.
-	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, TRUE);
+	// Create a process and redirect its console IO to vchan.
+	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, bRunInteractively);
 	if (ERROR_SUCCESS == uResult)
 		lprintf("handle_exec(): Executed %S\n", pwszCommandLine);
 	else {
@@ -554,6 +576,7 @@ ULONG handle_just_exec(int client_id, int len)
 	PWCHAR	pwszUserName = NULL;
 	PWCHAR	pwszCommandLine = NULL;
 	HANDLE	hProcess;
+	BOOLEAN	bRunInteractively;
 
 
 	buf = malloc(len + 1);
@@ -568,29 +591,31 @@ ULONG handle_just_exec(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
+	bRunInteractively = TRUE;
 
-	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine);
+	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine, &bRunInteractively);
 	if (ERROR_SUCCESS != uResult) {
 		free(buf);
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 		lprintf_err(uResult, "handle_just_exec(): ParseUtf8Command()");
-		return uResult;
+		return ERROR_SUCCESS;
 	}
 
 	free(buf);
 	buf = NULL;
 
 #ifdef BUILD_AS_SERVICE
-	// Create an interactive process which IO is not redirected anywhere.
+	// Create a process which IO is not redirected anywhere.
 	uResult = CreateNormalProcessAsUserW(
 			pwszUserName,
 			DEFAULT_USER_PASSWORD_UNICODE,
 			pwszCommandLine,
-			TRUE,
+			bRunInteractively,
 			&hProcess);
 #else
 	uResult = CreateNormalProcessAsCurrentUserW(
 			pwszCommandLine,
-			TRUE,
+			bRunInteractively,
 			&hProcess);
 #endif
 
