@@ -643,12 +643,13 @@ ULONG handle_input(int client_id, int len)
 	DWORD	dwWritten;
 
 
+	// If pClientInfo is NULL after this it means we couldn't find a specified client.
+	// Read and discard any data in the channel in this case.
 	pClientInfo = FindClientById(client_id);
-	if (!pClientInfo)
-		return ERROR_SUCCESS;
 
 	if (!len) {
-		RemoveClient(pClientInfo);
+		if (pClientInfo)
+			RemoveClient(pClientInfo);
 		return ERROR_SUCCESS;
 	}
 
@@ -663,8 +664,10 @@ ULONG handle_input(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
-		lprintf_err(GetLastError(), "handle_input(): WriteFile()");
+	if (pClientInfo) {
+		if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
+			lprintf_err(GetLastError(), "handle_input(): WriteFile()");
+	}
 
 
 	free(buf);
