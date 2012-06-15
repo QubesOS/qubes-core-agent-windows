@@ -14,7 +14,8 @@
 
     <Package Id='*' Keywords='Installer' Description="Qubes Agent for Windows"
       Comments='no comment' Manufacturer='Invisible Things Lab' InstallScope='perMachine'
-      InstallerVersion='200' Languages='1033' Compressed='yes' SummaryCodepage='1252' />
+      InstallerVersion='200' Languages='1033' Compressed='yes' SummaryCodepage='1252'
+      InstallPrivileges="elevated" />
 
     <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
 
@@ -24,6 +25,8 @@
     </UI>
 
     <Media Id='1' Cabinet='qubescore.cab' EmbedCab='yes' />
+
+    <MajorUpgrade AllowDowngrades="yes"/>
 
     <Directory Id='TARGETDIR' Name='SourceDir'>
       <Directory Id='$(var.PFILESDIR)'>
