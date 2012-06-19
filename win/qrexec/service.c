@@ -461,7 +461,8 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 	if (ERROR_SUCCESS != uResult)
 		lprintf_err(uResult, "InstallService(): CreateApplicationEventSource()");
 
-	
+
+#ifdef START_SERVICE_AFTER_INSTALLATION
 	uResult = ChangeServiceState(SERVICE_RUNNING, hService, &dwCurrentState, &dwExitCode, NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "InstallService(): ChangeServiceState()");
@@ -477,6 +478,7 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 			lprintf("InstallService(): Service is not running, current state is %d\n", dwCurrentState);
 	} else
 		lprintf("InstallService(): Service is running\n");
+#endif
 
 	CloseServiceHandle(hService);
 	CloseServiceHandle(hScm);
