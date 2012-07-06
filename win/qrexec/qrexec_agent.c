@@ -7,6 +7,7 @@ HANDLE_INFO	g_HandlesInfo[MAXIMUM_WAIT_OBJECTS];
 
 ULONG64	g_uPipeId = 0;
 
+CRITICAL_SECTION	g_ClientsCriticalSection;
 
 extern HANDLE	g_hStopServiceEvent;
 #ifndef BUILD_AS_SERVICE
@@ -354,6 +355,132 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 }
 
 
+ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *phPipeStdout, HANDLE *phPipeStderr)
+{
+	ULONG	uResult;
+	SECURITY_ATTRIBUTES	sa;
+	HANDLE	hPipeStdin = INVALID_HANDLE_VALUE;
+	HANDLE	hPipeStdout = INVALID_HANDLE_VALUE;
+	HANDLE	hPipeStderr = INVALID_HANDLE_VALUE;
+
+
+	if (!pClientInfo || !phPipeStdin || !phPipeStdout || !phPipeStderr)
+		return ERROR_INVALID_PARAMETER;
+
+
+	memset(&sa, 0, sizeof(sa));
+	sa.nLength = sizeof(sa);
+	sa.bInheritHandle = TRUE; 
+	sa.lpSecurityDescriptor = NULL; 
+
+
+
+	uResult = InitReadPipe(&pClientInfo->Stdout, &hPipeStdout, PTYPE_STDOUT);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "CreateClientPipes(): InitReadPipe(STDOUT)");
+		return uResult;
+	}
+	uResult = InitReadPipe(&pClientInfo->Stderr, &hPipeStderr, PTYPE_STDERR);
+	if (ERROR_SUCCESS != uResult) {
+
+		CloseHandle(pClientInfo->Stdout.hReadPipe);
+		CloseHandle(hPipeStdout);
+
+		lprintf_err(uResult, "CreateClientPipes(): InitReadPipe(STDERR)");
+		return uResult;
+	}
+
+
+	if (!CreatePipe(&hPipeStdin, &pClientInfo->hWriteStdinPipe, &sa, 0)) {
+		uResult = GetLastError();
+
+		CloseHandle(pClientInfo->Stdout.hReadPipe);
+		CloseHandle(pClientInfo->Stderr.hReadPipe);
+		CloseHandle(hPipeStdout);
+		CloseHandle(hPipeStderr);
+
+		lprintf_err(uResult, "CreateClientPipes(): CreatePipe(STDIN)");
+		return uResult;
+	}
+
+	// Ensure the write handle to the pipe for STDIN is not inherited.
+	SetHandleInformation(pClientInfo->hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
+
+	*phPipeStdin = hPipeStdin;
+	*phPipeStdout = hPipeStdout;
+	*phPipeStderr = hPipeStderr;
+
+	return ERROR_SUCCESS;
+}
+
+
+// This routine may be called by pipe server threads, hence the critical section around g_Clients array is required.
+ULONG ReserveClientNumber(int client_id, PULONG puClientNumber)
+{
+	ULONG	uClientNumber;
+
+
+	EnterCriticalSection(&g_ClientsCriticalSection);
+
+	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+		if (FREE_CLIENT_SPOT_ID == g_Clients[uClientNumber].client_id)
+			break;
+
+	if (MAX_CLIENTS == uClientNumber) {
+		// There is no space for watching for another process
+		LeaveCriticalSection(&g_ClientsCriticalSection);
+		lprintf("ReserveClientNumber(): The maximum number of running processes (%d) has been reached\n", MAX_CLIENTS);
+		return ERROR_TOO_MANY_CMDS;
+	}
+
+	if (FindClientById(client_id)) {
+		LeaveCriticalSection(&g_ClientsCriticalSection);
+		lprintf("ReserveClientNumber(): A client with the same id (#%d) already exists\n", client_id);
+		return ERROR_ALREADY_EXISTS;
+	}
+
+	g_Clients[uClientNumber].bClientIsReady = FALSE;
+	g_Clients[uClientNumber].client_id = client_id;
+	*puClientNumber = uClientNumber;
+
+	LeaveCriticalSection(&g_ClientsCriticalSection);
+
+	return ERROR_SUCCESS;
+}
+
+
+ULONG ReleaseClientNumber(ULONG uClientNumber)
+{
+	if (uClientNumber >= MAX_CLIENTS)
+		return ERROR_INVALID_PARAMETER;
+
+	EnterCriticalSection(&g_ClientsCriticalSection);
+
+	g_Clients[uClientNumber].bClientIsReady = FALSE;
+	g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
+
+	LeaveCriticalSection(&g_ClientsCriticalSection);
+
+	return ERROR_SUCCESS;
+}
+
+
+ULONG AddFilledClientInfo(ULONG uClientNumber, PCLIENT_INFO pClientInfo)
+{
+	if (!pClientInfo || uClientNumber >= MAX_CLIENTS)
+		return ERROR_INVALID_PARAMETER;
+
+	EnterCriticalSection(&g_ClientsCriticalSection);
+
+	g_Clients[uClientNumber] = *pClientInfo;
+	g_Clients[uClientNumber].bClientIsReady = TRUE;
+
+	LeaveCriticalSection(&g_ClientsCriticalSection);
+
+	return ERROR_SUCCESS;
+}
+
+
 ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOLEAN bRunInteractively)
 {
 	ULONG	uResult;
@@ -362,7 +489,6 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 	HANDLE	hPipeStderr = INVALID_HANDLE_VALUE;
 	HANDLE	hPipeStdin = INVALID_HANDLE_VALUE;
 	ULONG	uClientNumber;
-	SECURITY_ATTRIBUTES	sa;
 
 
 	// if pwszUserName is NULL we run the process on behalf of the current user.
@@ -370,21 +496,12 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 		return ERROR_INVALID_PARAMETER;
 
 
-
-	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-		if (FREE_CLIENT_SPOT_ID == g_Clients[uClientNumber].client_id)
-			break;
-
-	if (MAX_CLIENTS == uClientNumber) {
-		// There is no space for watching for another process
-		lprintf("AddClient(): The maximum number of running processes (%d) has been reached\n", MAX_CLIENTS);
-		return ERROR_TOO_MANY_CMDS;
+	uResult = ReserveClientNumber(client_id, &uClientNumber);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "AddClient(): ReserveClientNumber()");
+		return uResult;
 	}
 
-	if (FindClientById(client_id)) {
-		lprintf("AddClient(): A client with the same id (#%d) already exists\n", client_id);
-		return ERROR_ALREADY_EXISTS;
-	}
 
 	if (pwszUserName)
 		lprintf("AddClient(): Running \"%S\" as user \"%S\"\n", pwszCommandLine, pwszUserName);
@@ -396,45 +513,16 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 #endif
 	}
 
-	memset(&sa, 0, sizeof(sa));
-	sa.nLength = sizeof(sa);
-	sa.bInheritHandle = TRUE; 
-	sa.lpSecurityDescriptor = NULL; 
-
-
 	memset(&ClientInfo, 0, sizeof(ClientInfo));
 	ClientInfo.client_id = client_id;
 
 
-
-	uResult = InitReadPipe(&ClientInfo.Stdout, &hPipeStdout, PTYPE_STDOUT);
+	uResult = CreateClientPipes(&ClientInfo, &hPipeStdin, &hPipeStdout, &hPipeStderr);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "AddClient(): InitReadPipe(STDOUT)");
+		ReleaseClientNumber(uClientNumber);
+		lprintf_err(uResult, "AddClient(): CreateClientPipes()");
 		return uResult;
 	}
-	uResult = InitReadPipe(&ClientInfo.Stderr, &hPipeStderr, PTYPE_STDERR);
-	if (ERROR_SUCCESS != uResult) {
-		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
-		lprintf_err(uResult, "AddClient(): InitReadPipe(STDERR)");
-		return uResult;
-	}
-
-
-	if (!CreatePipe(&hPipeStdin, &ClientInfo.hWriteStdinPipe, &sa, 0)) {
-		uResult = GetLastError();
-
-		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
-		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
-		CloseHandle(hPipeStdout);
-		CloseHandle(hPipeStderr);
-
-		lprintf_err(uResult, "AddClient(): CreatePipe(STDIN)");
-		return uResult;
-	}
-
-	// Ensure the write handle to the pipe for STDIN is not inherited.
-	SetHandleInformation(ClientInfo.hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
-
 
 #ifdef BUILD_AS_SERVICE
 	if (pwszUserName)
@@ -470,10 +558,12 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 	CloseHandle(hPipeStdin);
 
 	if (ERROR_SUCCESS != uResult) {
-		CloseHandle(ClientInfo.hWriteStdinPipe);
+		ReleaseClientNumber(uClientNumber);
 
-		CloseReadPipeHandles(client_id, &ClientInfo.Stdout);
-		CloseReadPipeHandles(client_id, &ClientInfo.Stderr);
+		CloseHandle(ClientInfo.hWriteStdinPipe);
+		CloseHandle(ClientInfo.Stdout.hReadPipe);
+		CloseHandle(ClientInfo.Stderr.hReadPipe);
+
 #ifdef BUILD_AS_SERVICE
 		if (pwszUserName)
 			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsUserW()");
@@ -485,14 +575,52 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 		return uResult;
 	}
 
-	g_Clients[uClientNumber] = ClientInfo;
+	uResult = AddFilledClientInfo(uClientNumber, &ClientInfo);
+	if (ERROR_SUCCESS != uResult) {
+		ReleaseClientNumber(uClientNumber);
+
+		CloseHandle(ClientInfo.hWriteStdinPipe);
+		CloseHandle(ClientInfo.Stdout.hReadPipe);
+		CloseHandle(ClientInfo.Stderr.hReadPipe);
+		CloseHandle(ClientInfo.hProcess);
+
+		lprintf_err(uResult, "AddClient(): AddFilledClientInfo()");
+		return uResult;
+	}
+
 	lprintf("AddClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
 	return ERROR_SUCCESS;
 }
 
 
-VOID RemoveClient(PCLIENT_INFO pClientInfo)
+ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
+{
+	ULONG	uClientNumber;
+	ULONG	uResult;
+
+
+	if (!pClientInfo)
+		return ERROR_INVALID_PARAMETER;
+
+
+	uResult = ReserveClientNumber(client_id, &uClientNumber);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "AddExistingClient(): ReserveClientNumber()");
+		return uResult;
+	}
+
+	uResult = AddFilledClientInfo(uClientNumber, pClientInfo);
+	if (ERROR_SUCCESS != uResult) {
+		ReleaseClientNumber(uClientNumber);
+		lprintf_err(uResult, "AddExistingClient(): AddFilledClientInfo()");
+		return uResult;
+	}
+
+	return ERROR_SUCCESS;
+}
+
+VOID RemoveClientNoLocks(PCLIENT_INFO pClientInfo)
 {
 	if (!pClientInfo || (FREE_CLIENT_SPOT_ID == pClientInfo->client_id))
 		return;
@@ -503,19 +631,32 @@ VOID RemoveClient(PCLIENT_INFO pClientInfo)
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
 
-	lprintf("RemoveClient(): Client %d removed\n", pClientInfo->client_id);
+	lprintf("RemoveClientNoLocks(): Client %d removed\n", pClientInfo->client_id);
 
 	pClientInfo->client_id = FREE_CLIENT_SPOT_ID;
+	pClientInfo->bClientIsReady = FALSE;
+}
+
+VOID RemoveClient(PCLIENT_INFO pClientInfo)
+{
+	EnterCriticalSection(&g_ClientsCriticalSection);
+
+	RemoveClientNoLocks(pClientInfo);
+
+	LeaveCriticalSection(&g_ClientsCriticalSection);
 }
 
 VOID RemoveAllClients()
 {
 	ULONG	uClientNumber;
 
+	EnterCriticalSection(&g_ClientsCriticalSection);
 
 	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
 		if (FREE_CLIENT_SPOT_ID != g_Clients[uClientNumber].client_id)
-			RemoveClient(&g_Clients[uClientNumber]);
+			RemoveClientNoLocks(&g_Clients[uClientNumber]);
+
+	LeaveCriticalSection(&g_ClientsCriticalSection);
 }
 
 // This will return error only if vchan fails.
@@ -850,10 +991,6 @@ ULONG WatchForEvents()
 	ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
 
-	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
-
-
 	bVchanClientConnected = FALSE;
 	bVchanIoInProgress = FALSE;
 	bVchanReturnedError = FALSE;
@@ -887,9 +1024,11 @@ ULONG WatchForEvents()
 		}
 
 
+		EnterCriticalSection(&g_ClientsCriticalSection);
+
 		for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++) {
 
-			if (FREE_CLIENT_SPOT_ID != g_Clients[uClientNumber].client_id) {
+			if (g_Clients[uClientNumber].bClientIsReady) {
 
 				g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
 				g_HandlesInfo[uEventNumber].bType = HTYPE_PROCESS;
@@ -902,6 +1041,8 @@ ULONG WatchForEvents()
 				}
 			}
 		}
+		LeaveCriticalSection(&g_ClientsCriticalSection);
+
 
 		dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
 		if (dwSignaledEvent < MAXIMUM_WAIT_OBJECTS) {
@@ -910,6 +1051,18 @@ ULONG WatchForEvents()
 				// g_hStopServiceEvent is signaled
 				break;
 
+
+			// Do not have to lock g_Clients here because other threads may only call 
+			// ReserveClientNumber()/ReleaseClientNumber()/AddFilledClientInfo()
+			// which operate on different uClientNumbers than those specified for WaitForMultipleObjects().
+
+			// The other threads cannot call RemoveClient(), for example, they
+			// operate only on newly allocated uClientNumbers.
+
+			// So here in this thread we may call FindByClientId() with no locks safely.
+
+			// When this thread (in this switch) calls RemoveClient() later the g_Clients
+			// list will be locked as usual.
 
 //			lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
@@ -1057,11 +1210,19 @@ ULONG CheckForXenInterface()
 ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 {
 	ULONG	uResult;
-
+	HANDLE	hTriggerEventsThread;
 
 
 	lprintf("ServiceExecutionThread(): Service started\n");
 
+/*
+	hTriggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WatchForTriggerEvents, NULL, 0, NULL);
+	if (!hTriggerEventsThread) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "ServiceExecutionThread(): CreateThread()");
+		return uResult;
+	}
+*/
 
 	for (;;) {
 
@@ -1075,6 +1236,12 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 		Sleep(1000);
 	}
 
+	lprintf("ServiceExecutionThread(): Waiting for the trigger thread to exit\n");
+//	WaitForSingleObject(hTriggerEventsThread, INFINITE);
+//	CloseHandle(hTriggerEventsThread);
+
+	DeleteCriticalSection(&g_ClientsCriticalSection);
+
 	lprintf("ServiceExecutionThread(): Shutting down\n");
 
 	return ERROR_SUCCESS;
@@ -1086,7 +1253,7 @@ ULONG Init(HANDLE *phServiceThread)
 {
 	ULONG	uResult;
 	HANDLE	hThread;
-
+	ULONG	uClientNumber;
 
 
 	*phServiceThread = INVALID_HANDLE_VALUE;
@@ -1097,6 +1264,22 @@ ULONG Init(HANDLE *phServiceThread)
 		ReportErrorToEventLog(XEN_INTERFACE_NOT_FOUND);
 		return ERROR_NOT_SUPPORTED;
 	}
+
+	// InitializeCriticalSection always succeeds in Vista and later OSes.
+#if NTDDI_VERSION < NTDDI_VISTA
+	__try {
+#endif
+		InitializeCriticalSection(&g_ClientsCriticalSection);
+		InitializeCriticalSection(&g_PipesCriticalSection);
+#if NTDDI_VERSION < NTDDI_VISTA
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
+		return ERROR_NOT_ENOUGH_MEMORY;
+	}
+#endif
+
+	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
 
 
 	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ServiceExecutionThread, NULL, 0, NULL);
@@ -1230,6 +1413,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 #else
 
+// Is not called when built without BUILD_AS_SERVICE definition.
 ULONG Init(HANDLE *phServiceThread)
 {
 	return ERROR_SUCCESS;
@@ -1246,6 +1430,8 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 	CloseHandle(g_hStopServiceEvent);
 	CloseHandle(g_hCleanupFinishedEvent);
 
+	DeleteCriticalSection(&g_ClientsCriticalSection);
+
 	lprintf("CtrlHandler(): Shutdown complete\n");
 	return TRUE;
 }
@@ -1260,17 +1446,19 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 	if (ERROR_SUCCESS != CheckForXenInterface()) {
 		lprintf("main(): Could not find Xen interface\n");
-		return ERROR_NOT_SUPPORTED;
+//		return ERROR_NOT_SUPPORTED;
 	}
 
-	g_hStopServiceEvent = CreateEvent(0, TRUE, FALSE, 0);
+	// Manual reset, initial state is not signaled
+	g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!g_hStopServiceEvent) {
 		uResult = GetLastError();
 		lprintf_err(uResult, "main(): CreateEvent()");
 		return uResult;
 	}
 
-	g_hCleanupFinishedEvent = CreateEvent(0, TRUE, FALSE, 0);
+	// Manual reset, initial state is not signaled
+	g_hCleanupFinishedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!g_hCleanupFinishedEvent) {
 		uResult = GetLastError();
 		CloseHandle(g_hStopServiceEvent);
@@ -1278,7 +1466,18 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		return uResult;
 	}
 
-
+	// InitializeCriticalSection always succeeds in Vista and later OSes.
+#if NTDDI_VERSION < NTDDI_VISTA
+	__try {
+#endif
+		InitializeCriticalSection(&g_ClientsCriticalSection);
+		InitializeCriticalSection(&g_PipesCriticalSection);
+#if NTDDI_VERSION < NTDDI_VISTA
+	} __except(EXCEPTION_EXECUTE_HANDLER) {
+		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
+		return ERROR_NOT_ENOUGH_MEMORY;
+	}
+#endif
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
 
 	ServiceExecutionThread(NULL);
