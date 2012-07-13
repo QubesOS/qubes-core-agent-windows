@@ -93,7 +93,8 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
 	ULONG	uResult;
 
 
-	g_hStopServiceEvent = CreateEvent(0, TRUE, FALSE, 0);
+	// Manual reset, initial state is not signaled
+	g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!g_hStopServiceEvent) {
 		lprintf_err(GetLastError(), "ServiceMain(): CreateEvent()");
 		return;
@@ -194,8 +195,7 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 			sizeof(SERVICE_STATUS_PROCESS),
 			&dwBytesNeeded)) {
 
-			uResult = GetLastError();
-			lprintf_err(uResult, "WaitForService(): QueryServiceStatusEx()");
+			lprintf_err(GetLastError(), "WaitForService(): QueryServiceStatusEx()");
 			break;
 		}
  
