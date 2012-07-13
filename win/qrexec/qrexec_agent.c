@@ -610,12 +610,16 @@ ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
 		return uResult;
 	}
 
+	pClientInfo->client_id = client_id;
+
 	uResult = AddFilledClientInfo(uClientNumber, pClientInfo);
 	if (ERROR_SUCCESS != uResult) {
 		ReleaseClientNumber(uClientNumber);
 		lprintf_err(uResult, "AddExistingClient(): AddFilledClientInfo()");
 		return uResult;
 	}
+
+	lprintf("AddExistingClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
 	return ERROR_SUCCESS;
 }
@@ -657,6 +661,41 @@ VOID RemoveAllClients()
 			RemoveClientNoLocks(&g_Clients[uClientNumber]);
 
 	LeaveCriticalSection(&g_ClientsCriticalSection);
+}
+
+// This will return error only if vchan fails.
+ULONG handle_connect_existing(int client_id, int len)
+{
+	ULONG	uResult;
+	char *buf;
+	PCLIENT_INFO	pClientInfo;
+	DWORD	dwWritten;
+
+
+	if (!len)
+		return ERROR_SUCCESS;
+
+	buf = malloc(len + 1);
+	if (!buf)
+		return ERROR_SUCCESS;
+	buf[len] = 0;
+
+	if (read_all_vchan_ext(buf, len) <= 0) {
+		free(buf);
+		lprintf_err(ERROR_INVALID_FUNCTION, "handle_connect_existing(): read_all_vchan_ext()");
+		return ERROR_INVALID_FUNCTION;
+	}
+
+
+	lprintf("handle_connect_existing(): client %d, ident %s\n", client_id, buf);
+
+	uResult = ProceedWithExecution(client_id, buf);
+	free(buf);
+
+	if (ERROR_SUCCESS != uResult)
+		lprintf_err(uResult, "handle_connect_existing(): ProceedWithExecution()");
+
+	return ERROR_SUCCESS;
 }
 
 // This will return error only if vchan fails.
@@ -851,7 +890,7 @@ ULONG handle_server_data()
 		break;
 	case MSG_SERVER_TO_AGENT_CONNECT_EXISTING:
 		lprintf("MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
-//		handle_connect_existing(s_hdr.client_id, s_hdr.len);
+		handle_connect_existing(s_hdr.client_id, s_hdr.len);
 		break;
 	case MSG_SERVER_TO_AGENT_EXEC_CMDLINE:
 		lprintf("MSG_SERVER_TO_AGENT_EXEC_CMDLINE\n");
@@ -979,11 +1018,11 @@ ULONG WatchForEvents()
 	// This will not block.
 	uResult = peer_server_init(REXEC_PORT);
 	if (uResult) {
-		lprintf_err(ERROR_INVALID_FUNCTION, "main(): peer_server_init()");
+		lprintf_err(ERROR_INVALID_FUNCTION, "WatchForEvents(): peer_server_init()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	lprintf("main(): Awaiting for a vchan client\n");
+	lprintf("WatchForEvents(): Awaiting for a vchan client\n");
 
 	evtchn = libvchan_fd_for_select(ctrl);
 
@@ -1008,7 +1047,7 @@ ULONG WatchForEvents()
 			if (!ReadFile(evtchn, &fired_port, sizeof(fired_port), NULL, &ol)) {
 				uResult = GetLastError();
 				if (ERROR_IO_PENDING != uResult) {
-					lprintf_err(uResult, "main(): Vchan async read");
+					lprintf_err(uResult, "WatchForEvents(): Vchan async read");
 					bVchanReturnedError = TRUE;
 					break;
 				}
@@ -1045,7 +1084,49 @@ ULONG WatchForEvents()
 
 
 		dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
-		if (dwSignaledEvent < MAXIMUM_WAIT_OBJECTS) {
+		if (dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS) {
+
+			uResult = GetLastError();
+			if (ERROR_INVALID_HANDLE != uResult) {
+				lprintf_err(uResult, "WatchForEvents(): WaitForMultipleObjects()");
+				break;
+			}
+
+			// WaitForMultipleObjects() may fail with ERROR_INVALID_HANDLE if the process which just has been added
+			// to the client list terminated before WaitForMultipleObjects(). In this case IO pipe handles are closed
+			// and invalidated, while a process handle is in the signaled state.
+			// Check if any of the processes in the client list is terminated, remove it from the list and try again.
+
+			EnterCriticalSection(&g_ClientsCriticalSection);
+
+			for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++) {
+
+				pClientInfo = &g_Clients[uClientNumber];
+
+				if (!g_Clients[uClientNumber].bClientIsReady)
+					continue;
+
+				if (!GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode)) {
+					lprintf_err(GetLastError(), "WatchForEvents(): GetExitCodeProcess()");
+					dwExitCode = ERROR_SUCCESS;
+				}
+
+				if (STILL_ACTIVE != dwExitCode) {
+
+					uResult = send_exit_code(pClientInfo->client_id, dwExitCode);
+					if (ERROR_SUCCESS != uResult) {
+						bVchanReturnedError = TRUE;
+						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
+					}
+
+					RemoveClientNoLocks(pClientInfo);
+				}
+			}
+			LeaveCriticalSection(&g_ClientsCriticalSection);
+
+			continue;
+
+		} else {
 
 			if (0 == dwSignaledEvent)
 				// g_hStopServiceEvent is signaled
@@ -1072,12 +1153,12 @@ ULONG WatchForEvents()
 
 					if (!bVchanClientConnected) {
 
-						lprintf("main(): A vchan client has connected\n");
+						lprintf("WatchForEvents(): A vchan client has connected\n");
 
 						// Remove the xenstore device/vchan/N entry.
 						uResult = libvchan_server_handle_connected(ctrl);
 						if (uResult) {
-							lprintf_err(ERROR_INVALID_FUNCTION, "main(): libvchan_server_handle_connected()");
+							lprintf_err(ERROR_INVALID_FUNCTION, "WatchForEvents(): libvchan_server_handle_connected()");
 							bVchanReturnedError = TRUE;
 							break;
 						}
@@ -1095,7 +1176,7 @@ ULONG WatchForEvents()
 						uResult = handle_server_data();
 						if (ERROR_SUCCESS != uResult) {
 							bVchanReturnedError = TRUE;
-							lprintf_err(uResult, "main(): handle_server_data()");
+							lprintf_err(uResult, "WatchForEvents(): handle_server_data()");
 							break;
 						}
 					}
@@ -1112,7 +1193,7 @@ ULONG WatchForEvents()
 							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "main(): ReturnPipeData(STDOUT)");
+						lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDOUT)");
 					}
 					break;
 
@@ -1126,7 +1207,7 @@ ULONG WatchForEvents()
 							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "main(): ReturnPipeData(STDERR)");
+						lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDERR)");
 					}
 					break;
 
@@ -1135,24 +1216,21 @@ ULONG WatchForEvents()
 					pClientInfo = &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber];
 
 					if (!GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode)) {
-						lprintf_err(GetLastError(), "main(): GetExitCodeProcess()");
+						lprintf_err(GetLastError(), "WatchForEvents(): GetExitCodeProcess()");
 						dwExitCode = ERROR_SUCCESS;
 					}
 
 					uResult = send_exit_code(pClientInfo->client_id, dwExitCode);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "main(): send_exit_code()");
+						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
 					}
 
 					RemoveClient(pClientInfo);
 					break;
 			}
-
-		} else {
-			lprintf_err(GetLastError(), "main(): WaitForMultipleObjects()");
-			break;
 		}
+
 
 		if (bVchanReturnedError)
 			break;
@@ -1215,14 +1293,14 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 
 	lprintf("ServiceExecutionThread(): Service started\n");
 
-/*
+
 	hTriggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WatchForTriggerEvents, NULL, 0, NULL);
 	if (!hTriggerEventsThread) {
 		uResult = GetLastError();
 		lprintf_err(uResult, "ServiceExecutionThread(): CreateThread()");
 		return uResult;
 	}
-*/
+
 
 	for (;;) {
 
@@ -1237,8 +1315,8 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	}
 
 	lprintf("ServiceExecutionThread(): Waiting for the trigger thread to exit\n");
-//	WaitForSingleObject(hTriggerEventsThread, INFINITE);
-//	CloseHandle(hTriggerEventsThread);
+	WaitForSingleObject(hTriggerEventsThread, INFINITE);
+	CloseHandle(hTriggerEventsThread);
 
 	DeleteCriticalSection(&g_ClientsCriticalSection);
 
@@ -1440,13 +1518,14 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
 	ULONG	uResult;
+	ULONG	uClientNumber;
 
 
 	_tprintf(TEXT("\nqrexec agent console application\n\n"));
 
 	if (ERROR_SUCCESS != CheckForXenInterface()) {
 		lprintf("main(): Could not find Xen interface\n");
-//		return ERROR_NOT_SUPPORTED;
+		return ERROR_NOT_SUPPORTED;
 	}
 
 	// Manual reset, initial state is not signaled
@@ -1479,6 +1558,9 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	}
 #endif
 	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
+
+	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
 
 	ServiceExecutionThread(NULL);
 	SetEvent(g_hCleanupFinishedEvent);

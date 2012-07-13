@@ -69,9 +69,7 @@ ULONG DisconnectAndReconnect(ULONG i)
 	ULONG	uResult;
 
 
-	lprintf("disconnecting pipe %d, state %d\n", i, g_Pipes[i].uState);
-
-	memset(&g_Pipes[i].params, 0, sizeof(g_Pipes[i].params));
+	lprintf("DisconnectAndReconnect(): Disconnecting pipe %d, state %d\n", i, g_Pipes[i].uState);
 
 
 	if (g_Pipes[i].hClientProcess)
@@ -96,6 +94,9 @@ ULONG DisconnectAndReconnect(ULONG i)
 		CloseReadPipeHandles(-1, &g_Pipes[i].ClientInfo.Stderr);
 
 	memset(&g_Pipes[i].ClientInfo, 0, sizeof(g_Pipes[i].ClientInfo));
+	memset(&g_Pipes[i].RemoteHandles, 0, sizeof(g_Pipes[i].RemoteHandles));
+	memset(&g_Pipes[i].params, 0, sizeof(g_Pipes[i].params));
+	g_Pipes[i].assigned_client_id = 0;
 
 	// Disconnect the pipe instance. 
  
@@ -146,24 +147,22 @@ ULONG ClosePipeHandles()
 }
 
 
-ULONG ConnectExisting(HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, HANDLE hReceivedProcessHandle)
+ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, HANDLE hReceivedProcessHandle)
 {
 	ULONG	uResult;
-	HANDLE	hLocalProcessHandle;
 
 
 	if (!pClientInfo || !pparams)
 		return ERROR_INVALID_PARAMETER;
 
-	lprintf("ConnectExisting(): Got the params %s, %s\n", pparams->exec_index, pparams->target_vmname);
-	lprintf("ConnectExisting(): Got the handle 0x%X\n", hReceivedProcessHandle);
+	lprintf("ConnectExisting(): client_id #%d: Got the params \"%s\", vm \"%s\"\n", client_id, pparams->exec_index, pparams->target_vmname);
 
 
 	if (!DuplicateHandle(
 		hClientProcess,
 		hReceivedProcessHandle,
 		GetCurrentProcess(),
-		&hLocalProcessHandle,
+		&pClientInfo->hProcess,
 		0,
 		TRUE,
 		DUPLICATE_SAME_ACCESS)) {
@@ -175,8 +174,15 @@ ULONG ConnectExisting(HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct tr
 	}
 
 
-//	uResult = AddExistingClient(client_id, pClientInfo);
-	CloseHandle(hLocalProcessHandle);
+	uResult = AddExistingClient(client_id, pClientInfo);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "ConnectExisting(): AddExistingClient()");
+		// DisconnectAndReconnect will close all the handles later
+		return uResult;
+	}
+
+	// Clear the handles; now the WatchForEvents thread takes care of them.
+	memset(pClientInfo, 0, sizeof(CLIENT_INFO));
 
 	return ERROR_SUCCESS;
 }
@@ -192,6 +198,8 @@ ULONG ConnectExisting(HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct tr
 ULONG SendParametersToDaemon(ULONG i)
 {
 	HRESULT	hResult;
+	ULONG	uResult;
+	struct	trigger_connect_params	params;
 
 
 	if (i >= INSTANCES)
@@ -210,12 +218,15 @@ ULONG SendParametersToDaemon(ULONG i)
 		return hResult;
 	}
 
-	printf("ident (%d): %s\n", i, g_Pipes[i].params.process_fds.ident);
+	params = g_Pipes[i].params;
 
 	LeaveCriticalSection(&g_PipesCriticalSection);
 
-
-	ProceedWithExecution(g_Pipes[i].params.process_fds.ident);
+	uResult = ReturnData(0, MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING, &params, sizeof(params));
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "SendParametersToDaemon(): ReturnData()");
+		return uResult;
+	}
 
 	return ERROR_SUCCESS;
 }
@@ -242,7 +253,7 @@ ULONG FindPipeByIdent(PUCHAR pszIdent, PULONG puPipeNumber)
 }
 
 
-ULONG ProceedWithExecution(PUCHAR pszIdent)
+ULONG ProceedWithExecution(int assigned_client_id, PUCHAR pszIdent)
 {
 	ULONG	uPipeNumber;
 	ULONG	uResult;
@@ -265,6 +276,8 @@ ULONG ProceedWithExecution(PUCHAR pszIdent)
 		LeaveCriticalSection(&g_PipesCriticalSection);
 		return ERROR_INVALID_PARAMETER;
 	}
+
+	g_Pipes[uPipeNumber].assigned_client_id = assigned_client_id;
 
 	// Signalize that we're allowed to send io handles to qrexec_client_vm.
 	SetEvent(g_hEvents[uPipeNumber]);
@@ -373,7 +386,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 			return dwWait;
 		}
 
-		lprintf("signaled pipe %d, original state %d\n", i, g_Pipes[i].uState);
+		//lprintf("signaled pipe %d, original state %d\n", i, g_Pipes[i].uState);
 
 		// Get the result of the pending operation that has just finished. 
 		if (g_Pipes[i].fPendingIO) {
@@ -391,13 +404,14 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 			switch (g_Pipes[i].uState) {
 			// Pending connect operation
 			case STATE_WAITING_FOR_CLIENT:
-				lprintf("STATE_WAITING_FOR_CLIENT (pending): Accepted connection\n");
 
 				if (!GetNamedPipeClientProcessId(g_Pipes[i].hPipeInst, &uClientProcessId)) {
 					lprintf_err(GetLastError(), "WatchForTriggerEvents(): GetNamedPipeClientProcessId()");
 					DisconnectAndReconnect(i);
 					continue;
 				}
+
+				lprintf("STATE_WAITING_FOR_CLIENT (pending): Accepted connection from the process #%d\n", uClientProcessId);
 
 				g_Pipes[i].hClientProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, uClientProcessId);
 				if (!g_Pipes[i].hClientProcess) {
@@ -450,6 +464,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 				lprintf("STATE_RECEIVING_PROCESS_HANDLE (pending): Received the process handle\n");
 
 				uResult = ConnectExisting(
+						g_Pipes[i].assigned_client_id,
 						g_Pipes[i].hClientProcess, 
 						&g_Pipes[i].ClientInfo, 
 						&g_Pipes[i].params, 
@@ -468,7 +483,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 		}
 
 
-		lprintf("pipe %d, state %d\n", i, g_Pipes[i].uState);
+		//lprintf("pipe %d, state %d\n", i, g_Pipes[i].uState);
 
 		// The pipe state determines which operation to do next. 
 		switch (g_Pipes[i].uState) { 
@@ -643,6 +658,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 				lprintf("STATE_RECEIVING_PROCESS_HANDLE: Received the process handle\n");
 
 				uResult = ConnectExisting(
+						g_Pipes[i].assigned_client_id,
 						g_Pipes[i].hClientProcess, 
 						&g_Pipes[i].ClientInfo, 
 						&g_Pipes[i].params, 

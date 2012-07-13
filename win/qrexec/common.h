@@ -69,3 +69,10 @@ ULONG CloseReadPipeHandles(
 	int client_id, 
 	PIPE_DATA *pPipeData
 );
+
+ULONG ReturnData(
+	int client_id,
+	int type,
+	PVOID pData,
+	ULONG uDataSize
+);

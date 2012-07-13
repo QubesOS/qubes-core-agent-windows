@@ -23,6 +23,7 @@ typedef struct {
 	HANDLE	hPipeInst;
 	ULONG	uState;
 	BOOLEAN	fPendingIO;
+	int	assigned_client_id;
 	struct	trigger_connect_params	params;
 
 	CLIENT_INFO	ClientInfo;
@@ -33,6 +34,13 @@ typedef struct {
 } PIPEINST, *LPPIPEINST;
 
 
-ULONG WINAPI WatchForTriggerEvents(PVOID pParam);
+ULONG WINAPI WatchForTriggerEvents(
+	PVOID pParam
+);
+
+ULONG ProceedWithExecution(
+	int assigned_client_id,
+	PUCHAR pszIdent
+);
+
 extern CRITICAL_SECTION	g_PipesCriticalSection;
-ULONG ProceedWithExecution(PUCHAR pszIdent);
