@@ -121,8 +121,6 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	Sleep(1);
-
 	return ERROR_SUCCESS;
 }
 
@@ -403,6 +401,8 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 		return uResult;
 	}
 
+	pClientInfo->bStdinPipeClosed = FALSE;
+
 	// Ensure the write handle to the pipe for STDIN is not inherited.
 	SetHandleInformation(pClientInfo->hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
 
@@ -630,7 +630,9 @@ VOID RemoveClientNoLocks(PCLIENT_INFO pClientInfo)
 		return;
 
 	CloseHandle(pClientInfo->hProcess);
-	CloseHandle(pClientInfo->hWriteStdinPipe);
+
+	if (!pClientInfo->bStdinPipeClosed)
+		CloseHandle(pClientInfo->hWriteStdinPipe);
 
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
@@ -828,8 +830,10 @@ ULONG handle_input(int client_id, int len)
 	pClientInfo = FindClientById(client_id);
 
 	if (!len) {
-		if (pClientInfo)
-			RemoveClient(pClientInfo);
+		if (pClientInfo) {
+			CloseHandle(pClientInfo->hWriteStdinPipe);
+			pClientInfo->bStdinPipeClosed = TRUE;
+		}
 		return ERROR_SUCCESS;
 	}
 
@@ -844,7 +848,7 @@ ULONG handle_input(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	if (pClientInfo) {
+	if (pClientInfo && !pClientInfo->bStdinPipeClosed) {
 		if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
 			lprintf_err(GetLastError(), "handle_input(): WriteFile()");
 	}
@@ -1013,6 +1017,7 @@ ULONG WatchForEvents()
 	ULONG	uResult;
 	BOOLEAN	bVchanReturnedError;
 	BOOLEAN	bVchanClientConnected;
+	int	client_id;
 
 
 	// This will not block.
@@ -1042,19 +1047,17 @@ ULONG WatchForEvents()
 		g_WatchedEvents[uEventNumber++] = g_hStopServiceEvent;
 
 		uResult = ERROR_SUCCESS;
-		if (!bVchanIoInProgress) {
 
-			if (!ReadFile(evtchn, &fired_port, sizeof(fired_port), NULL, &ol)) {
-				uResult = GetLastError();
-				if (ERROR_IO_PENDING != uResult) {
-					lprintf_err(uResult, "WatchForEvents(): Vchan async read");
-					bVchanReturnedError = TRUE;
-					break;
-				}
+		if (!ReadFile(evtchn, &fired_port, sizeof(fired_port), NULL, &ol)) {
+			uResult = GetLastError();
+			if (ERROR_IO_PENDING != uResult) {
+				lprintf_err(uResult, "WatchForEvents(): Vchan async read");
+				bVchanReturnedError = TRUE;
+				break;
 			}
-
-			bVchanIoInProgress = TRUE;
 		}
+
+		bVchanIoInProgress = TRUE;
 
 		if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult) {
 			g_HandlesInfo[uEventNumber].uClientNumber = FREE_CLIENT_SPOT_ID;
@@ -1131,6 +1134,19 @@ ULONG WatchForEvents()
 			if (0 == dwSignaledEvent)
 				// g_hStopServiceEvent is signaled
 				break;
+
+
+			if (HTYPE_VCHAN != g_HandlesInfo[dwSignaledEvent].bType) {
+				// If this is not a vchan event, cancel the event channel read so that libvchan_write() calls
+				// could issue their own libvchan_wait on the same channel, and not interfere with the
+				// ReadFile(evtchn, ...) above.
+				if (CancelIo(evtchn))
+					// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
+					// OVERLAPPED structure.
+					WaitForSingleObject(ol.hEvent, INFINITE);
+				bVchanIoInProgress = FALSE;
+			}
+
 
 
 			// Do not have to lock g_Clients here because other threads may only call 
@@ -1220,13 +1236,15 @@ ULONG WatchForEvents()
 						dwExitCode = ERROR_SUCCESS;
 					}
 
-					uResult = send_exit_code(pClientInfo->client_id, dwExitCode);
+					client_id = pClientInfo->client_id;
+					RemoveClient(pClientInfo);
+
+					uResult = send_exit_code(client_id, dwExitCode);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
 					}
 
-					RemoveClient(pClientInfo);
 					break;
 			}
 		}

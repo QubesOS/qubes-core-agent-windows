@@ -10,6 +10,99 @@ HANDLE g_hEvents[INSTANCES + 1];
 
 ULONG64	g_uDaemonRequestsCounter = 1;
 
+
+ULONG CreatePipeSecurityDescriptor(PSECURITY_DESCRIPTOR *ppPipeSecurityDescriptor, PACL *ppACL)
+{
+	ULONG	uResult;
+	PSID	pEveryoneSid = NULL;
+	PSID	pAdminSID = NULL;
+	PACL	pACL = NULL;
+	PSECURITY_DESCRIPTOR	pSD = NULL;
+	EXPLICIT_ACCESS	ea[2];
+	SID_IDENTIFIER_AUTHORITY	SIDAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
+
+
+	if (!ppPipeSecurityDescriptor || !ppACL)
+		return ERROR_INVALID_PARAMETER;
+
+	*ppPipeSecurityDescriptor = NULL;
+	*ppACL = NULL;
+
+
+	// Create a well-known SID for the Everyone group.
+	if (!AllocateAndInitializeSid(
+		&SIDAuthWorld,
+		1,
+		SECURITY_WORLD_RID,
+		0, 0, 0, 0, 0, 0, 0,
+		&pEveryoneSid)) {
+
+		uResult = GetLastError();
+		lprintf_err(uResult, "CreatePipeSecurityDescriptor(): AllocateAndInitializeSid()");
+		return uResult;
+	}
+
+	// Initialize an EXPLICIT_ACCESS structure for an ACE.
+	// The ACE will allow Everyone read/write access to the pipe.
+	memset(&ea, 0, sizeof(ea));
+	ea[0].grfAccessPermissions = FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_CREATE_PIPE_INSTANCE | SYNCHRONIZE;
+	ea[0].grfAccessMode = SET_ACCESS;
+	ea[0].grfInheritance= NO_INHERITANCE;
+	ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
+	ea[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
+	ea[0].Trustee.ptstrName = (LPTSTR)pEveryoneSid;
+
+
+	// Create a new ACL that contains the new ACE.
+	uResult = SetEntriesInAcl(1, ea, NULL, &pACL);
+	FreeSid(pEveryoneSid);
+
+	if (ERROR_SUCCESS != uResult) {
+
+		lprintf_err(uResult, "CreatePipeSecurityDescriptor(): SetEntriesInAcl()");
+		return uResult;
+	}
+
+	// Initialize a security descriptor. 
+	pSD = (PSECURITY_DESCRIPTOR)LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
+	if (!pSD) { 
+		LocalFree(pACL);
+
+		lprintf_err(uResult, "CreatePipeSecurityDescriptor(): SetEntriesInAcl()");
+		return uResult;
+	} 
+ 
+	if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION)) { 
+		uResult = GetLastError();
+
+		LocalFree(pACL);
+		LocalFree(pSD);
+
+		lprintf_err(uResult, "CreatePipeSecurityDescriptor(): InitializeSecurityDescriptor()");
+		return uResult;
+	} 
+ 
+	// Add the ACL to the security descriptor.
+	if (!SetSecurityDescriptorDacl(pSD, TRUE, pACL, FALSE)) { 
+		uResult = GetLastError();
+
+		LocalFree(pACL);
+		LocalFree(pSD);
+
+		lprintf_err(uResult, "CreatePipeSecurityDescriptor(): SetSecurityDescriptorDacl()");
+		return uResult;
+	} 
+
+
+	*ppPipeSecurityDescriptor = pSD;
+	*ppACL = pACL;
+
+	return ERROR_SUCCESS;
+}
+
+
+
+
 // This function is called to start an overlapped connect operation.
 // It sets *pbPendingIO to TRUE if an operation is pending or to FALSE if the
 // connection has been completed.
@@ -295,10 +388,23 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 	BOOL	fSuccess; 
 	IO_HANDLES_ARRAY	LocalHandles;
 	ULONG	uClientProcessId;
+	SECURITY_ATTRIBUTES	sa;
+	PSECURITY_DESCRIPTOR	pPipeSecurityDescriptor;
+	PACL	pACL;
 
 
 	lprintf("WatchForTriggerEvents(): Init\n");
 	memset(&g_Pipes, 0, sizeof(g_Pipes));
+
+	uResult = CreatePipeSecurityDescriptor(&pPipeSecurityDescriptor, &pACL);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "WatchForTriggerEvents(): CreatePipeSecurityDescriptor()");
+		return uResult;
+	}
+
+	sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+	sa.bInheritHandle = FALSE;
+	sa.lpSecurityDescriptor = pPipeSecurityDescriptor;
  
 	// The initial loop creates several instances of a named pipe 
 	// along with an event object for each instance. An 
@@ -317,6 +423,8 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 
 		if (g_hEvents[i] == NULL) {
 			uResult = GetLastError();
+			LocalFree(pPipeSecurityDescriptor);
+			LocalFree(pACL);
 			lprintf_err(uResult, "WatchForTriggerEvents(): CreateEvent()");
 			return uResult;
 		} 
@@ -330,10 +438,12 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 					512, // output buffer size 
 					512, // input buffer size 
 					PIPE_TIMEOUT, // client time-out 
-					NULL); // default security attributes 
+					&sa);
 
 		if (INVALID_HANDLE_VALUE == g_Pipes[i].hPipeInst) {
 			uResult = GetLastError();
+			LocalFree(pPipeSecurityDescriptor);
+			LocalFree(pACL);
 			lprintf_err(uResult, "WatchForTriggerEvents(): CreateNamedPipe()");
 			return uResult;
 		}
@@ -347,12 +457,17 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 				&g_Pipes[i].fPendingIO);
 
 		if (ERROR_SUCCESS != uResult) {
+			LocalFree(pPipeSecurityDescriptor);
+			LocalFree(pACL);
 			lprintf_err(uResult, "WatchForTriggerEvents(): ConnectToNewClient()");
 			return uResult;
 		}
 
 		g_Pipes[i].uState = g_Pipes[i].fPendingIO ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
 	}
+
+	LocalFree(pPipeSecurityDescriptor);
+	LocalFree(pACL);
 
 	// Last one will signal the service shutdown.
 	g_hEvents[INSTANCES] = g_hStopServiceEvent;
