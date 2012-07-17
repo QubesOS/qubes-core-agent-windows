@@ -45,6 +45,7 @@ typedef struct _CLIENT_INFO {
 
 	HANDLE	hProcess;
 	HANDLE	hWriteStdinPipe;
+	BOOLEAN	bStdinPipeClosed;
 
 	BOOLEAN	bReadingIsDisabled;
 

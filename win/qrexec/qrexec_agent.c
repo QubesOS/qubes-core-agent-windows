@@ -403,6 +403,8 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 		return uResult;
 	}
 
+	pClientInfo->bStdinPipeClosed = FALSE;
+
 	// Ensure the write handle to the pipe for STDIN is not inherited.
 	SetHandleInformation(pClientInfo->hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
 
@@ -630,7 +632,9 @@ VOID RemoveClientNoLocks(PCLIENT_INFO pClientInfo)
 		return;
 
 	CloseHandle(pClientInfo->hProcess);
-	CloseHandle(pClientInfo->hWriteStdinPipe);
+
+	if (!pClientInfo->bStdinPipeClosed)
+		CloseHandle(pClientInfo->hWriteStdinPipe);
 
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
@@ -828,8 +832,10 @@ ULONG handle_input(int client_id, int len)
 	pClientInfo = FindClientById(client_id);
 
 	if (!len) {
-		if (pClientInfo)
-			RemoveClient(pClientInfo);
+		if (pClientInfo) {
+			CloseHandle(pClientInfo->hWriteStdinPipe);
+			pClientInfo->bStdinPipeClosed = TRUE;
+		}
 		return ERROR_SUCCESS;
 	}
 
@@ -844,7 +850,7 @@ ULONG handle_input(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	if (pClientInfo) {
+	if (pClientInfo && !pClientInfo->bStdinPipeClosed) {
 		if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
 			lprintf_err(GetLastError(), "handle_input(): WriteFile()");
 	}
