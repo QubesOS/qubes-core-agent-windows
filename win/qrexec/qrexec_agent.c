@@ -1019,6 +1019,7 @@ ULONG WatchForEvents()
 	ULONG	uResult;
 	BOOLEAN	bVchanReturnedError;
 	BOOLEAN	bVchanClientConnected;
+	int	client_id;
 
 
 	// This will not block.
@@ -1226,13 +1227,15 @@ ULONG WatchForEvents()
 						dwExitCode = ERROR_SUCCESS;
 					}
 
-					uResult = send_exit_code(pClientInfo->client_id, dwExitCode);
+					client_id = pClientInfo->client_id;
+					RemoveClient(pClientInfo);
+
+					uResult = send_exit_code(client_id, dwExitCode);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
 					}
 
-					RemoveClient(pClientInfo);
 					break;
 			}
 		}
