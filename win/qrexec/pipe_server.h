@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <aclapi.h>
 #include "qrexec.h"
 #include "common.h"
 #include "qrexec.h"
