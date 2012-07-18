@@ -657,7 +657,7 @@ ULONG CreatePipedProcessAsUserW(
 			return uResult;
 		}
 
-		uResult = GrantRemoteSessionDesktopAccess(dwActiveSessionId, pwszUserName, NULL);
+		uResult = GrantRemoteSessionDesktopAccess(dwActiveSessionId, (LPCTSTR)pwszUserName, NULL);
 		if (ERROR_SUCCESS != uResult)
 			lprintf_err(uResult, "CreatePipedProcessAsUserW(): GrantRemoteSessionDesktopAccess()");
 	}
@@ -682,7 +682,7 @@ ULONG CreatePipedProcessAsUserW(
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
 
-	si.lpDesktop = TEXT("Winsta0\\Default");
+	si.lpDesktop = L"Winsta0\\Default";
 
 	bInheritHandles = FALSE;
 

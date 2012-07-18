@@ -35,6 +35,7 @@
             <Directory Id='BinDir' Name='bin'>
               <Component Id='QrexecAgent' Guid='0e26617f-e5d9-4943-a08e-cf29013e9d72'>
                 <File Id='qrexec_agent.exe' Name='qrexec_agent.exe' DiskId='1' Source='qrexec\bin\$(var.ARCHDIR)\qrexec_agent.exe' KeyPath="yes"/>
+                <File Id='qrexec_client_vm.exe' Name='qrexec_client_vm.exe' DiskId='1' Source='qrexec_client_vm\bin\$(var.ARCHDIR)\qrexec_client_vm.exe' KeyPath="no"/>
                 <ServiceInstall
                 Id="ServiceInstaller"
                 Type="ownProcess"

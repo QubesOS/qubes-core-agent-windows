@@ -19,6 +19,7 @@
  *
  */
 
+#pragma once
 #define REXEC_PORT 512
 
 
@@ -52,10 +53,21 @@ struct server_header {
 	unsigned int len;
 };
 
-struct client_header {
-	unsigned int type;
-	unsigned int len;
+struct connect_existing_params {
+	char ident[32];
 };
+
+struct trigger_connect_params {
+	char exec_index[64];
+	char target_vmname[32];
+	struct connect_existing_params process_fds;
+};
+
+typedef struct {
+	HANDLE	hPipeStdin;
+	HANDLE	hPipeStdout;
+	HANDLE	hPipeStderr;
+} IO_HANDLES_ARRAY, *PIO_HANDLES_ARRAY;
 
 #define	ERROR_SET_LINUX		0x00
 #define	ERROR_SET_WINDOWS	0x01

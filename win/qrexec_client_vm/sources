@@ -1,0 +1,20 @@
+TARGETNAME=qrexec_client_vm
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+
+UMTYPE=console
+USE_MSVCRT=1
+
+UMENTRY = wmain
+C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+
+INCLUDES=$(INCLUDES); \
+                    $(SDK_INC_PATH)\..\ddk; \
+                    ..\include; \
+
+SOURCES=qrexec_client_vm.c log.c
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\kernel32.lib
+
