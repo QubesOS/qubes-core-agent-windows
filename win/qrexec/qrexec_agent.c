@@ -1,4 +1,5 @@
 #include "qrexec_agent.h"
+#include <Shlwapi.h>
 
 
 CLIENT_INFO	g_Clients[MAX_CLIENTS];
@@ -253,6 +254,59 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 		CloseHandle(pPipeData->hReadPipe);
 
 	return uResult;
+}
+
+ULONG TextBOMToUTF16(char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
+{
+	UINT CodePage = CP_UTF8;
+	size_t cbSkipChars = 0;
+	size_t cchUTF16;
+	PWCHAR  pwszUtf16;
+	ULONG	uResult;
+
+	// see http://en.wikipedia.org/wiki/Byte-order_mark for explaination of the BOM
+	// encoding
+	if(cbBufLen >= 3 && pszBuf[0] == 0xEF && pszBuf[1] == 0xBB && pszBuf[2] == 0xBF)
+	{
+		cbSkipChars = 3;
+		CodePage = CP_UTF8;
+	}
+	else if(cbBufLen >= 2 && pszBuf[0] == 0xFE && pszBuf[1] == 0xFF)
+	{
+		cbSkipChars = 2;
+		CodePage = 1201; /* UTF16BE */
+		/* FIXME: This doesn't work, MultiByteToWideChar return ERROR_ALREADY_EXISTS */
+	}
+	else if(cbBufLen >= 4 && pszBuf[0] == 0 && pszBuf[1] == 0 && pszBuf[2] == 0xFE && pszBuf[3] == 0xFF)
+	{
+		cbSkipChars = 4;
+		CodePage = 1200; /* UTF16LE */
+		/* FIXME: This doesn't work, MultiByteToWideChar return ERROR_ALREADY_EXISTS */
+	}
+
+	cchUTF16 = MultiByteToWideChar(CodePage, MB_ERR_INVALID_CHARS, pszBuf + cbSkipChars, cbBufLen - cbSkipChars, NULL, 0);
+	if (!cchUTF16) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "TextBOMToUTF16(): MultiByteToWideChar()");
+		return uResult;
+	}
+
+	pwszUtf16 = malloc((cchUTF16 + 1) * sizeof(WCHAR));
+	if (!pwszUtf16)
+		return ERROR_NOT_ENOUGH_MEMORY;
+
+	uResult = MultiByteToWideChar(CodePage, MB_ERR_INVALID_CHARS, pszBuf + cbSkipChars, cbBufLen - cbSkipChars, pwszUtf16, cchUTF16);
+	if (!uResult) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "TextBOMToUTF16(): MultiByteToWideChar()");
+		return uResult;
+	}
+
+	pwszUtf16[uResult] = L'\0';
+
+	*ppwszUtf16 = pwszUtf16;
+
+	return ERROR_SUCCESS;
 }
 
 
@@ -665,6 +719,130 @@ VOID RemoveAllClients()
 	LeaveCriticalSection(&g_ClientsCriticalSection);
 }
 
+// Recognize magic RPC request command ("QUBESRPC") and replace it with real
+// command to be executed, after reading RPC service configuration.
+// pwszCommandLine will be modified (and possibly reallocated)
+// ppwszSourceDomainName will contain source domain (if available) to be set in
+// environment; must be freed by caller
+ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLine, PWCHAR *ppwszSourceDomainName)
+{
+	PWCHAR	pwszServiceName = NULL;
+	PWCHAR	pwszSourceDomainName = NULL;
+	PWCHAR	pwSeparator = NULL;
+	UCHAR	pszBuffer[2*MAX_PATH + 1];
+	WCHAR	pwszServiceFilePath[MAX_PATH + 1];
+	PWCHAR	pwszRawServiceFilePath = NULL;
+	PWCHAR  pwszServiceArgs = NULL;
+	HANDLE	hServiceConfigFile;
+	ULONG	uResult;
+	ULONG	uBytesRead;
+
+	if (wcsncmp(pwszCommandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND))==0) {
+		// RPC_REQUEST_COMMAND contains leading space, so this must succeed
+		pwSeparator = wcschr(pwszCommandLine, L' ');
+		pwSeparator++;
+		pwszServiceName = pwSeparator;
+		pwSeparator = wcschr(pwszServiceName, L' ');
+		if (pwSeparator) {
+			*pwSeparator = L'\0';
+			pwSeparator++;
+			*ppwszSourceDomainName = _wcsdup(pwSeparator);
+		} else {
+			lprintf("InterceptRPCRequest(): No source domain given\n");
+			// Most qrexec services do not use source domain at all, so do not
+			// abort if missing. This can be the case when RPC triggered
+			// manualy using qvm-run (qvm-run -p vmname "QUBESRPC service_name").
+		}
+
+		// build RPC service config file path
+		memset(pwszServiceFilePath, 0, sizeof(pwszServiceFilePath));
+		if (!GetModuleFileName(NULL, pwszServiceFilePath, MAX_PATH)) {
+			uResult = GetLastError();
+			lprintf_err(uResult, "InterceptRPCRequest(): GetModuleFileName()");
+			return uResult;
+		}
+		// cut off file name (qrexec_agent.exe)
+		pwSeparator = wcsrchr(pwszServiceFilePath, L'\\');
+		if (!pwSeparator) {
+			lprintf("InterceptRPCRequest(): Cannot find dir containing qrexec_agent.exe");
+			return ERROR_INVALID_PARAMETER;
+		}
+		*pwSeparator = L'\0';
+		// cut off one dir (bin)
+		pwSeparator = wcsrchr(pwszServiceFilePath, L'\\');
+		if (!pwSeparator) {
+			lprintf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec_agent.exe");
+			return ERROR_INVALID_PARAMETER;
+		}
+		// Leave trailing backslash
+		pwSeparator++;
+		*pwSeparator = L'\0';
+		if (wcslen(pwszServiceFilePath) + wcslen(L"qubes_rpc\\") + wcslen(pwszServiceName) > MAX_PATH) {
+			lprintf("InterceptRPCRequest(): RPC service config file path too long");
+			return ERROR_NOT_ENOUGH_MEMORY;
+		}
+		PathAppend(pwszServiceFilePath, L"qubes_rpc");
+		PathAppend(pwszServiceFilePath, pwszServiceName);
+
+		hServiceConfigFile = CreateFile(pwszServiceFilePath,               // file to open
+				GENERIC_READ,          // open for reading
+				FILE_SHARE_READ,       // share for reading
+				NULL,                  // default security
+				OPEN_EXISTING,         // existing file only
+				FILE_ATTRIBUTE_NORMAL, // normal file
+				NULL);                 // no attr. template
+
+		if (hServiceConfigFile == INVALID_HANDLE_VALUE)
+		{
+			uResult = GetLastError();
+			lprintf_err(uResult, "InterceptRPCRequest(): Failed to open RPC %S configuration file (%S)", pwszServiceName, pwszServiceFilePath);
+			return uResult;
+		}
+		uBytesRead = 0;
+		if (!ReadFile(hServiceConfigFile, pszBuffer, sizeof(pszBuffer), &uBytesRead, NULL)) {
+			uResult = GetLastError();
+			lprintf_err(uResult, "InterceptRPCRequest(): Failed to read RPC %S configuration file (%S)", pwszServiceName, pwszServiceFilePath);
+			CloseHandle(hServiceConfigFile);
+			return uResult;
+		}
+		CloseHandle(hServiceConfigFile);
+
+		uResult = TextBOMToUTF16(pszBuffer, uBytesRead, &pwszRawServiceFilePath);
+		if (uResult != ERROR_SUCCESS) {
+			uResult = GetLastError();
+			lprintf_err(uResult, "InterceptRPCRequest(): Failed to parse UTF8 in RPC %S configuration file (%S)", pwszServiceName, pwszServiceFilePath);
+			return uResult;
+		}
+
+		pwszServiceArgs = PathGetArgs(pwszRawServiceFilePath);
+		PathRemoveArgs(pwszRawServiceFilePath);
+		PathUnquoteSpaces(pwszRawServiceFilePath);
+		if (PathIsRelative(pwszRawServiceFilePath)) {
+			// relative path are based in qubes_rpc_services
+			// reuse separator found when preparing previous file path
+			*pwSeparator = L'\0';
+			PathAppend(pwszServiceFilePath, L"qubes_rpc_services");
+			PathAppend(pwszServiceFilePath, pwszRawServiceFilePath);
+		} else {
+			StringCchCopyW(pwszServiceFilePath, MAX_PATH + 1, pwszRawServiceFilePath);
+		}
+		PathQuoteSpacesW(pwszServiceFilePath);
+		if (pwszServiceArgs && pwszServiceArgs[0] != L'\0') {
+			StringCchCat(pwszServiceFilePath, MAX_PATH + 1, L" ");
+			StringCchCat(pwszServiceFilePath, MAX_PATH + 1, pwszServiceArgs);
+		}
+		free(pwszRawServiceFilePath);
+		*ppwszServiceCommandLine = malloc((wcslen(pwszServiceFilePath) + 1) * sizeof(WCHAR));
+		if (*ppwszServiceCommandLine == NULL) {
+			lprintf_err(ERROR_NOT_ENOUGH_MEMORY, "InterceptRPCRequest()\n");
+			return ERROR_NOT_ENOUGH_MEMORY;
+		}
+		lprintf("InterceptRPCRequest(): RPC %S: %S\n", pwszServiceName, pwszServiceFilePath);
+		StringCchCopyW(*ppwszServiceCommandLine, wcslen(pwszServiceFilePath) + 1, pwszServiceFilePath);
+	}
+	return ERROR_SUCCESS;
+}
+
 // This will return error only if vchan fails.
 ULONG handle_connect_existing(int client_id, int len)
 {
@@ -708,6 +886,8 @@ ULONG handle_exec(int client_id, int len)
 	PWCHAR	pwszCommand = NULL;
 	PWCHAR	pwszUserName = NULL;
 	PWCHAR	pwszCommandLine = NULL;
+	PWCHAR	pwszServiceCommandLine = NULL;
+	PWCHAR	pwszRemoteDomainName = NULL;
 	BOOLEAN	bRunInteractively;
 
 
@@ -736,6 +916,19 @@ ULONG handle_exec(int client_id, int len)
 	free(buf);
 	buf = NULL;
 
+	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
+	if (ERROR_SUCCESS != uResult) {
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+		lprintf_err(uResult, "handle_exec(): InterceptRPCRequest()");
+		return ERROR_SUCCESS;
+	}
+
+	if (pwszServiceCommandLine)
+		pwszCommandLine = pwszServiceCommandLine;
+
+	if (pwszRemoteDomainName)
+		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
+
 	// Create a process and redirect its console IO to vchan.
 	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, bRunInteractively);
 	if (ERROR_SUCCESS == uResult)
@@ -744,6 +937,13 @@ ULONG handle_exec(int client_id, int len)
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 		lprintf_err(uResult, "handle_exec(): AddClient(\"%S\")", pwszCommandLine);
 	}
+
+	if (pwszRemoteDomainName) {
+		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", NULL);
+		free(pwszRemoteDomainName);
+	}
+	if (pwszServiceCommandLine)
+		free(pwszServiceCommandLine);
 
 	free(pwszCommand);
 	return ERROR_SUCCESS;
@@ -757,6 +957,8 @@ ULONG handle_just_exec(int client_id, int len)
 	PWCHAR	pwszCommand = NULL;
 	PWCHAR	pwszUserName = NULL;
 	PWCHAR	pwszCommandLine = NULL;
+	PWCHAR	pwszServiceCommandLine = NULL;
+	PWCHAR	pwszRemoteDomainName = NULL;
 	HANDLE	hProcess;
 	BOOLEAN	bRunInteractively;
 
@@ -786,6 +988,20 @@ ULONG handle_just_exec(int client_id, int len)
 	free(buf);
 	buf = NULL;
 
+	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
+	if (ERROR_SUCCESS != uResult) {
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+		lprintf_err(uResult, "handle_just_exec(): InterceptRPCRequest()");
+		return ERROR_SUCCESS;
+	}
+
+	if (pwszServiceCommandLine)
+		pwszCommandLine = pwszServiceCommandLine;
+
+	if (pwszRemoteDomainName)
+		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
+
+
 #ifdef BUILD_AS_SERVICE
 	// Create a process which IO is not redirected anywhere.
 	uResult = CreateNormalProcessAsUserW(
@@ -812,6 +1028,13 @@ ULONG handle_just_exec(int client_id, int len)
 		lprintf_err(uResult, "handle_just_exec(): CreateNormalProcessAsCurrentUserW(\"%S\")", pwszCommandLine);
 #endif
 	}
+
+	if (pwszRemoteDomainName) {
+		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", NULL);
+		free(pwszRemoteDomainName);
+	}
+	if (pwszServiceCommandLine)
+		free(pwszServiceCommandLine);
 
 	free(pwszCommand);
 	return ERROR_SUCCESS;

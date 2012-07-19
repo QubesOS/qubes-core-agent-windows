@@ -663,7 +663,7 @@ ULONG CreatePipedProcessAsUserW(
 	}
 
 
-	if (!CreateEnvironmentBlock(&pEnvironment, hUserToken, FALSE)) {
+	if (!CreateEnvironmentBlock(&pEnvironment, hUserToken, TRUE)) {
 		uResult = GetLastError();		
 		CloseHandle(hUserToken);
 		lprintf_err(uResult, "CreatePipedProcessAsUserW(): CreateEnvironmentBlock()");
