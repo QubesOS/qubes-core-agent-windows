@@ -74,3 +74,5 @@ typedef struct {
 #define	ERROR_SET_NTSTATUS	0xC0
 
 #define	MAKE_ERROR_RESPONSE(ErrorSet, ErrorCode)	((ErrorSet << 24) | (ErrorCode & 0x00FFFFFF))
+
+#define RPC_REQUEST_COMMAND	L"QUBESRPC "

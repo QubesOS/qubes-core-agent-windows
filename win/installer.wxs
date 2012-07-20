@@ -51,6 +51,10 @@
                 <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="QrexecAgent" Wait="yes" />
               </Component>
             </Directory>
+            <Directory Id='QubesRPCDir' Name='qubes_rpc'>
+            </Directory>
+            <Directory Id='QubesRPCServicesDir' Name='qubes_rpc_services'>
+            </Directory>
           </Directory>
         </Directory>
       </Directory>
