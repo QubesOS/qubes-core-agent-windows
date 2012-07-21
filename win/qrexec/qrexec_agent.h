@@ -34,9 +34,8 @@ typedef struct _HANDLE_INFO {
 
 #define	FREE_CLIENT_SPOT_ID	-1
 
-#ifdef BUILD_AS_SERVICE
-#define	MAX_CLIENTS	((MAXIMUM_WAIT_OBJECTS - 2) / 3)
-#else
-#define	MAX_CLIENTS	((MAXIMUM_WAIT_OBJECTS - 1) / 3)
-#endif
+// Besides the processes, for each of which we have 3 events to watch (process termination, stdout, stderr)
+// we have a vchan link event, a stop service event and an "existing client" connect event.
+// So it's maximum - 3, and the rest available are divided by the number of events used for each process.
+#define	MAX_CLIENTS	((MAXIMUM_WAIT_OBJECTS - 3) / 3)
 
