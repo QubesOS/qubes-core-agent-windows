@@ -1,6 +1,7 @@
 #include "qrexec_agent.h"
 #include <Shlwapi.h>
 
+HANDLE	g_hAddExistingClientEvent;
 
 CLIENT_INFO	g_Clients[MAX_CLIENTS];
 HANDLE	g_WatchedEvents[MAXIMUM_WAIT_OBJECTS];
@@ -675,6 +676,8 @@ ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
 
 	lprintf("AddExistingClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
+	SetEvent(g_hAddExistingClientEvent);
+
 	return ERROR_SUCCESS;
 }
 
@@ -1267,7 +1270,11 @@ ULONG WatchForEvents()
 		libvchan_prepare_to_select(ctrl);
 		uEventNumber = 0;
 
+		// Order matters.
 		g_WatchedEvents[uEventNumber++] = g_hStopServiceEvent;
+		g_WatchedEvents[uEventNumber++] = g_hAddExistingClientEvent;
+
+		g_HandlesInfo[0].bType = g_HandlesInfo[1].bType = HTYPE_INVALID;
 
 		uResult = ERROR_SUCCESS;
 
@@ -1370,7 +1377,10 @@ ULONG WatchForEvents()
 				bVchanIoInProgress = FALSE;
 			}
 
-
+			if (1 == dwSignaledEvent)
+				// g_hAddExistingClientEvent is signaled. Since Vchan IO has been canceled,
+				// safely re-iterate the loop and pick up the new handles to watch.
+				continue;
 
 			// Do not have to lock g_Clients here because other threads may only call 
 			// ReserveClientNumber()/ReleaseClientNumber()/AddFilledClientInfo()
@@ -1535,9 +1545,19 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	lprintf("ServiceExecutionThread(): Service started\n");
 
 
+	// Auto reset, initial state is not signaled
+	g_hAddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	if (!g_hAddExistingClientEvent) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "ServiceExecutionThread(): CreateEvent()");
+		return uResult;
+	}
+
+
 	hTriggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WatchForTriggerEvents, NULL, 0, NULL);
 	if (!hTriggerEventsThread) {
 		uResult = GetLastError();
+		CloseHandle(g_hAddExistingClientEvent);
 		lprintf_err(uResult, "ServiceExecutionThread(): CreateThread()");
 		return uResult;
 	}
@@ -1558,6 +1578,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	lprintf("ServiceExecutionThread(): Waiting for the trigger thread to exit\n");
 	WaitForSingleObject(hTriggerEventsThread, INFINITE);
 	CloseHandle(hTriggerEventsThread);
+	CloseHandle(g_hAddExistingClientEvent);
 
 	DeleteCriticalSection(&g_ClientsCriticalSection);
 
