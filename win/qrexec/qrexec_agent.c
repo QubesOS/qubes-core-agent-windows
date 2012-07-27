@@ -257,59 +257,6 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 	return uResult;
 }
 
-ULONG TextBOMToUTF16(char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
-{
-	UINT CodePage = CP_UTF8;
-	size_t cbSkipChars = 0;
-	size_t cchUTF16;
-	PWCHAR  pwszUtf16;
-	ULONG	uResult;
-
-	// see http://en.wikipedia.org/wiki/Byte-order_mark for explaination of the BOM
-	// encoding
-	if(cbBufLen >= 3 && pszBuf[0] == 0xEF && pszBuf[1] == 0xBB && pszBuf[2] == 0xBF)
-	{
-		cbSkipChars = 3;
-		CodePage = CP_UTF8;
-	}
-	else if(cbBufLen >= 2 && pszBuf[0] == 0xFE && pszBuf[1] == 0xFF)
-	{
-		cbSkipChars = 2;
-		CodePage = 1201; /* UTF16BE */
-		/* FIXME: This doesn't work, MultiByteToWideChar return ERROR_ALREADY_EXISTS */
-	}
-	else if(cbBufLen >= 4 && pszBuf[0] == 0 && pszBuf[1] == 0 && pszBuf[2] == 0xFE && pszBuf[3] == 0xFF)
-	{
-		cbSkipChars = 4;
-		CodePage = 1200; /* UTF16LE */
-		/* FIXME: This doesn't work, MultiByteToWideChar return ERROR_ALREADY_EXISTS */
-	}
-
-	cchUTF16 = MultiByteToWideChar(CodePage, MB_ERR_INVALID_CHARS, pszBuf + cbSkipChars, cbBufLen - cbSkipChars, NULL, 0);
-	if (!cchUTF16) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "TextBOMToUTF16(): MultiByteToWideChar()");
-		return uResult;
-	}
-
-	pwszUtf16 = malloc((cchUTF16 + 1) * sizeof(WCHAR));
-	if (!pwszUtf16)
-		return ERROR_NOT_ENOUGH_MEMORY;
-
-	uResult = MultiByteToWideChar(CodePage, MB_ERR_INVALID_CHARS, pszBuf + cbSkipChars, cbBufLen - cbSkipChars, pwszUtf16, cchUTF16);
-	if (!uResult) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "TextBOMToUTF16(): MultiByteToWideChar()");
-		return uResult;
-	}
-
-	pwszUtf16[uResult] = L'\0';
-
-	*ppwszUtf16 = pwszUtf16;
-
-	return ERROR_SUCCESS;
-}
-
 
 ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
 {
@@ -344,7 +291,75 @@ ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
 		return uResult;
 	}
 
+	pwszUtf16[cchUTF16 - 1] = L'\0';
 	*ppwszUtf16 = pwszUtf16;
+
+	return ERROR_SUCCESS;
+}
+
+
+ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
+{
+	size_t cbSkipChars = 0;
+	PWCHAR  pwszUtf16 = NULL;
+	ULONG	uResult;
+	HRESULT	hResult;
+
+
+	if (!pszBuf || !cbBufLen || !ppwszUtf16)
+		return ERROR_INVALID_PARAMETER;
+
+	*ppwszUtf16 = NULL;
+
+	// see http://en.wikipedia.org/wiki/Byte-order_mark for explaination of the BOM
+	// encoding
+	if(cbBufLen >= 3 && pszBuf[0] == 0xEF && pszBuf[1] == 0xBB && pszBuf[2] == 0xBF)
+	{
+		// UTF-8
+		cbSkipChars = 3;
+	}
+	else if(cbBufLen >= 2 && pszBuf[0] == 0xFE && pszBuf[1] == 0xFF)
+	{
+		// UTF-16BE
+		return ERROR_NOT_SUPPORTED;
+	}
+	else if(cbBufLen >= 2 && pszBuf[0] == 0xFF && pszBuf[1] == 0xFE)
+	{
+		// UTF-16LE
+		cbSkipChars = 2;
+
+		pwszUtf16 = malloc(cbBufLen - cbSkipChars + sizeof(WCHAR));
+		if (!pwszUtf16)
+			return ERROR_NOT_ENOUGH_MEMORY;
+
+		hResult = StringCbCopyW(pwszUtf16, cbBufLen - cbSkipChars + sizeof(WCHAR), (STRSAFE_LPCWSTR)(pszBuf + cbSkipChars));
+		if (FAILED(hResult)) {
+			free(pwszUtf16);
+			lprintf_err(hResult, "TextBOMToUTF16(): StringCbCopyW()");
+			return hResult;
+		}
+
+		*ppwszUtf16 = pwszUtf16;
+		return ERROR_SUCCESS;
+	}
+	else if(cbBufLen >= 4 && pszBuf[0] == 0 && pszBuf[1] == 0 && pszBuf[2] == 0xFE && pszBuf[3] == 0xFF)
+	{
+		// UTF-32BE
+		return ERROR_NOT_SUPPORTED;
+	}
+	else if(cbBufLen >= 4 && pszBuf[0] == 0xFF && pszBuf[1] == 0xFE && pszBuf[2] == 0 && pszBuf[3] == 0)
+	{
+		// UTF-32LE
+		return ERROR_NOT_SUPPORTED;
+	}
+
+	// Try UTF-8
+
+	uResult = UTF8ToUTF16(pszBuf + cbSkipChars, ppwszUtf16);
+	if (ERROR_SUCCESS != uResult) {
+		lprintf_err(uResult, "TextBOMToUTF16(): UTF8ToUTF16()");
+		return uResult;
+	}
 
 	return ERROR_SUCCESS;
 }
@@ -732,16 +747,24 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 	PWCHAR	pwszServiceName = NULL;
 	PWCHAR	pwszSourceDomainName = NULL;
 	PWCHAR	pwSeparator = NULL;
-	UCHAR	pszBuffer[2*MAX_PATH + 1];
-	WCHAR	pwszServiceFilePath[MAX_PATH + 1];
+	UCHAR	szBuffer[sizeof(WCHAR) * (MAX_PATH + 1)];
+	WCHAR	wszServiceFilePath[MAX_PATH + 1];
 	PWCHAR	pwszRawServiceFilePath = NULL;
 	PWCHAR  pwszServiceArgs = NULL;
 	HANDLE	hServiceConfigFile;
 	ULONG	uResult;
 	ULONG	uBytesRead;
+	PWCHAR	pwszServiceCommandLine = NULL;
+
+
+	if (!pwszCommandLine || !ppwszServiceCommandLine || !ppwszSourceDomainName)
+		return ERROR_INVALID_PARAMETER;
+
+	*ppwszServiceCommandLine = *ppwszSourceDomainName = NULL;
 
 	if (wcsncmp(pwszCommandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND))==0) {
-		// RPC_REQUEST_COMMAND contains leading space, so this must succeed
+		// RPC_REQUEST_COMMAND contains trailing space, so this must succeed
+#pragma prefast(suppress:28193, "RPC_REQUEST_COMMAND contains trailing space, so this must succeed")
 		pwSeparator = wcschr(pwszCommandLine, L' ');
 		pwSeparator++;
 		pwszServiceName = pwSeparator;
@@ -749,7 +772,11 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (pwSeparator) {
 			*pwSeparator = L'\0';
 			pwSeparator++;
-			*ppwszSourceDomainName = _wcsdup(pwSeparator);
+			pwszSourceDomainName = _wcsdup(pwSeparator);
+			if (!pwszSourceDomainName) {
+				lprintf_err(ERROR_NOT_ENOUGH_MEMORY, "InterceptRPCRequest(): _wcsdup()");
+				return ERROR_NOT_ENOUGH_MEMORY;
+			}
 		} else {
 			lprintf("InterceptRPCRequest(): No source domain given\n");
 			// Most qrexec services do not use source domain at all, so do not
@@ -758,36 +785,44 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		}
 
 		// build RPC service config file path
-		memset(pwszServiceFilePath, 0, sizeof(pwszServiceFilePath));
-		if (!GetModuleFileName(NULL, pwszServiceFilePath, MAX_PATH)) {
+		memset(wszServiceFilePath, 0, sizeof(wszServiceFilePath));
+		if (!GetModuleFileNameW(NULL, wszServiceFilePath, MAX_PATH)) {
 			uResult = GetLastError();
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
 			lprintf_err(uResult, "InterceptRPCRequest(): GetModuleFileName()");
 			return uResult;
 		}
 		// cut off file name (qrexec_agent.exe)
-		pwSeparator = wcsrchr(pwszServiceFilePath, L'\\');
+		pwSeparator = wcsrchr(wszServiceFilePath, L'\\');
 		if (!pwSeparator) {
-			lprintf("InterceptRPCRequest(): Cannot find dir containing qrexec_agent.exe");
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf("InterceptRPCRequest(): Cannot find dir containing qrexec_agent.exe\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 		*pwSeparator = L'\0';
 		// cut off one dir (bin)
-		pwSeparator = wcsrchr(pwszServiceFilePath, L'\\');
+		pwSeparator = wcsrchr(wszServiceFilePath, L'\\');
 		if (!pwSeparator) {
-			lprintf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec_agent.exe");
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec_agent.exe\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 		// Leave trailing backslash
 		pwSeparator++;
 		*pwSeparator = L'\0';
-		if (wcslen(pwszServiceFilePath) + wcslen(L"qubes_rpc\\") + wcslen(pwszServiceName) > MAX_PATH) {
-			lprintf("InterceptRPCRequest(): RPC service config file path too long");
+		if (wcslen(wszServiceFilePath) + wcslen(L"qubes_rpc\\") + wcslen(pwszServiceName) > MAX_PATH) {
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf("InterceptRPCRequest(): RPC service config file path too long\n");
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
-		PathAppend(pwszServiceFilePath, L"qubes_rpc");
-		PathAppend(pwszServiceFilePath, pwszServiceName);
+		PathAppendW(wszServiceFilePath, L"qubes_rpc");
+		PathAppendW(wszServiceFilePath, pwszServiceName);
 
-		hServiceConfigFile = CreateFile(pwszServiceFilePath,               // file to open
+		hServiceConfigFile = CreateFileW(wszServiceFilePath,               // file to open
 				GENERIC_READ,          // open for reading
 				FILE_SHARE_READ,       // share for reading
 				NULL,                  // default security
@@ -798,50 +833,61 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (hServiceConfigFile == INVALID_HANDLE_VALUE)
 		{
 			uResult = GetLastError();
-			lprintf_err(uResult, "InterceptRPCRequest(): Failed to open RPC %S configuration file (%S)", pwszServiceName, pwszServiceFilePath);
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf_err(uResult, "InterceptRPCRequest(): Failed to open RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			return uResult;
 		}
 		uBytesRead = 0;
-		if (!ReadFile(hServiceConfigFile, pszBuffer, sizeof(pszBuffer), &uBytesRead, NULL)) {
+		memset(szBuffer, 0, sizeof(szBuffer));
+		if (!ReadFile(hServiceConfigFile, szBuffer, sizeof(WCHAR) * MAX_PATH, &uBytesRead, NULL)) {
 			uResult = GetLastError();
-			lprintf_err(uResult, "InterceptRPCRequest(): Failed to read RPC %S configuration file (%S)", pwszServiceName, pwszServiceFilePath);
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf_err(uResult, "InterceptRPCRequest(): Failed to read RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			CloseHandle(hServiceConfigFile);
 			return uResult;
 		}
 		CloseHandle(hServiceConfigFile);
 
-		uResult = TextBOMToUTF16(pszBuffer, uBytesRead, &pwszRawServiceFilePath);
+		uResult = TextBOMToUTF16(szBuffer, uBytesRead, &pwszRawServiceFilePath);
 		if (uResult != ERROR_SUCCESS) {
-			uResult = GetLastError();
-			lprintf_err(uResult, "InterceptRPCRequest(): Failed to parse UTF8 in RPC %S configuration file (%S)", pwszServiceName, pwszServiceFilePath);
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf_err(uResult, "InterceptRPCRequest(): Failed to parse the encoding in RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			return uResult;
 		}
 
-		pwszServiceArgs = PathGetArgs(pwszRawServiceFilePath);
-		PathRemoveArgs(pwszRawServiceFilePath);
-		PathUnquoteSpaces(pwszRawServiceFilePath);
-		if (PathIsRelative(pwszRawServiceFilePath)) {
+		pwszServiceArgs = PathGetArgsW(pwszRawServiceFilePath);
+		PathRemoveArgsW(pwszRawServiceFilePath);
+		PathUnquoteSpacesW(pwszRawServiceFilePath);
+		if (PathIsRelativeW(pwszRawServiceFilePath)) {
 			// relative path are based in qubes_rpc_services
 			// reuse separator found when preparing previous file path
 			*pwSeparator = L'\0';
-			PathAppend(pwszServiceFilePath, L"qubes_rpc_services");
-			PathAppend(pwszServiceFilePath, pwszRawServiceFilePath);
+			PathAppendW(wszServiceFilePath, L"qubes_rpc_services");
+			PathAppendW(wszServiceFilePath, pwszRawServiceFilePath);
 		} else {
-			StringCchCopyW(pwszServiceFilePath, MAX_PATH + 1, pwszRawServiceFilePath);
+			StringCchCopyW(wszServiceFilePath, MAX_PATH + 1, pwszRawServiceFilePath);
 		}
-		PathQuoteSpacesW(pwszServiceFilePath);
+		PathQuoteSpacesW(wszServiceFilePath);
 		if (pwszServiceArgs && pwszServiceArgs[0] != L'\0') {
-			StringCchCat(pwszServiceFilePath, MAX_PATH + 1, L" ");
-			StringCchCat(pwszServiceFilePath, MAX_PATH + 1, pwszServiceArgs);
+			StringCchCatW(wszServiceFilePath, MAX_PATH + 1, L" ");
+			StringCchCatW(wszServiceFilePath, MAX_PATH + 1, pwszServiceArgs);
 		}
 		free(pwszRawServiceFilePath);
-		*ppwszServiceCommandLine = malloc((wcslen(pwszServiceFilePath) + 1) * sizeof(WCHAR));
-		if (*ppwszServiceCommandLine == NULL) {
-			lprintf_err(ERROR_NOT_ENOUGH_MEMORY, "InterceptRPCRequest()\n");
+		pwszServiceCommandLine = malloc((wcslen(wszServiceFilePath) + 1) * sizeof(WCHAR));
+		if (pwszServiceCommandLine == NULL) {
+			if (pwszSourceDomainName)
+				free(pwszSourceDomainName);
+			lprintf_err(ERROR_NOT_ENOUGH_MEMORY, "InterceptRPCRequest(): malloc()");
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
-		lprintf("InterceptRPCRequest(): RPC %S: %S\n", pwszServiceName, pwszServiceFilePath);
-		StringCchCopyW(*ppwszServiceCommandLine, wcslen(pwszServiceFilePath) + 1, pwszServiceFilePath);
+		lprintf("InterceptRPCRequest(): RPC %S: %S\n", pwszServiceName, wszServiceFilePath);
+		StringCchCopyW(pwszServiceCommandLine, wcslen(wszServiceFilePath) + 1, wszServiceFilePath);
+
+		*ppwszServiceCommandLine = pwszServiceCommandLine;
+		*ppwszSourceDomainName = pwszSourceDomainName;
 	}
 	return ERROR_SUCCESS;
 }
@@ -921,6 +967,7 @@ ULONG handle_exec(int client_id, int len)
 
 	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
 	if (ERROR_SUCCESS != uResult) {
+		free(pwszCommand);
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 		lprintf_err(uResult, "handle_exec(): InterceptRPCRequest()");
 		return ERROR_SUCCESS;
@@ -930,7 +977,7 @@ ULONG handle_exec(int client_id, int len)
 		pwszCommandLine = pwszServiceCommandLine;
 
 	if (pwszRemoteDomainName)
-		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
+		SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
 
 	// Create a process and redirect its console IO to vchan.
 	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, bRunInteractively);
@@ -942,7 +989,7 @@ ULONG handle_exec(int client_id, int len)
 	}
 
 	if (pwszRemoteDomainName) {
-		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", NULL);
+		SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", NULL);
 		free(pwszRemoteDomainName);
 	}
 	if (pwszServiceCommandLine)
@@ -993,6 +1040,7 @@ ULONG handle_just_exec(int client_id, int len)
 
 	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
 	if (ERROR_SUCCESS != uResult) {
+		free(pwszCommand);
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 		lprintf_err(uResult, "handle_just_exec(): InterceptRPCRequest()");
 		return ERROR_SUCCESS;
@@ -1002,7 +1050,7 @@ ULONG handle_just_exec(int client_id, int len)
 		pwszCommandLine = pwszServiceCommandLine;
 
 	if (pwszRemoteDomainName)
-		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
+		SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
 
 
 #ifdef BUILD_AS_SERVICE
@@ -1033,7 +1081,7 @@ ULONG handle_just_exec(int client_id, int len)
 	}
 
 	if (pwszRemoteDomainName) {
-		SetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", NULL);
+		SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", NULL);
 		free(pwszRemoteDomainName);
 	}
 	if (pwszServiceCommandLine)
