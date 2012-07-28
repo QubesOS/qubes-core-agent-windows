@@ -69,6 +69,20 @@ typedef struct {
 	HANDLE	hPipeStderr;
 } IO_HANDLES_ARRAY, *PIO_HANDLES_ARRAY;
 
+enum {
+	CPR_TYPE_NONE = 0,
+	CPR_TYPE_HANDLE,
+	CPR_TYPE_ERROR_CODE
+};
+
+typedef struct {
+	UCHAR	bType;
+	union {
+		HANDLE	hProcess;
+		DWORD	dwErrorCode;
+	} ResponseData;
+} CREATE_PROCESS_RESPONSE, *PCREATE_PROCESS_RESPONSE;
+
 #define	ERROR_SET_LINUX		0x00
 #define	ERROR_SET_WINDOWS	0x01
 #define	ERROR_SET_NTSTATUS	0xC0

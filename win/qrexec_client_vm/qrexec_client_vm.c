@@ -121,6 +121,43 @@ ULONG UTF16ToUTF8(PWCHAR pwszUtf16, PUCHAR *ppszUtf8)
 }
 #endif
 
+
+ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
+{
+	DWORD	cbWritten;
+	DWORD	cbRead;
+	ULONG	uResult;
+
+
+	if (!pCpr)
+		return ERROR_INVALID_PARAMETER;
+
+	if (!WriteFile(
+			hPipe,
+			pCpr,
+			sizeof(CREATE_PROCESS_RESPONSE),
+			&cbWritten,
+			NULL)) {
+
+		uResult = GetLastError();
+		lprintf_err(uResult, "SendCreateProcessResponse(): WriteFile()");
+		return uResult;
+	}
+
+	if (CPR_TYPE_HANDLE == pCpr->bType) {
+
+		lprintf("Waiting for the server to read the handle, duplicate it and close the pipe\n");
+
+		// Issue a blocking dummy read that will finish when the server disconnects the pipe
+		// after the process handle duplication is complete. We have to wait here because for
+		// the handle to be duplicated successfully this process must be present.
+		ReadFile(hPipe, &cbWritten, 1, &cbRead, NULL);
+	}
+
+	return ERROR_SUCCESS;
+}
+
+
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
 	HANDLE	hPipe;
@@ -133,6 +170,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	HRESULT	hResult;
 	IO_HANDLES_ARRAY	IoHandles;
 	HANDLE	hProcess;
+	CREATE_PROCESS_RESPONSE	CreateProcessResponse;
 
 
 	if (argc < 4) {
@@ -284,38 +322,30 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	CloseHandle(IoHandles.hPipeStderr);
 
 	if (ERROR_SUCCESS != uResult) {
+
 		lprintf_err(uResult, "CreatePipedProcessAsCurrentUser()");
-		CloseHandle(hPipe);
-		return uResult;
+
+		lprintf("Sending the error code to the server\n");
+
+		CreateProcessResponse.bType = CPR_TYPE_ERROR_CODE;
+		CreateProcessResponse.ResponseData.dwErrorCode = uResult;
+
+	} else {
+
+		lprintf("Sending the process handle of the local program to the server\n");
+
+		CreateProcessResponse.bType = CPR_TYPE_HANDLE;
+		CreateProcessResponse.ResponseData.hProcess = hProcess;
 	}
 
-	lprintf("Sending the process handle of the local program to the server\n");
-
-	if (!WriteFile(
-			hPipe,
-			&hProcess,
-			sizeof(HANDLE),
-			&cbWritten,
-			NULL)) {
-
-		uResult = GetLastError();
-		lprintf_err(uResult, "WriteFile()");
-		CloseHandle(hProcess);
-		CloseHandle(hPipe);
-		return uResult;
-	}
-
-	lprintf("Waiting for the server to read the handle, duplicate it and close the pipe\n");
-
-	// Issue a blocking dummy read that will finish when the server disconnects the pipe
-	// after the process handle duplication is complete. We have to wait here because for
-	// the handle to be duplicated successfully this process must be present.
-	ReadFile(hPipe, &params, 1, &cbRead, NULL);
+	SendCreateProcessResponse(hPipe, &CreateProcessResponse);
 
 	lprintf("Closing the pipe\n");
 
 	CloseHandle(hPipe);
-	CloseHandle(hProcess);
+
+	if (ERROR_SUCCESS == uResult)
+		CloseHandle(hProcess);
 
 	return 0;
 }

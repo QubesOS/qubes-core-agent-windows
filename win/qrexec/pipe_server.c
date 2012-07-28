@@ -169,9 +169,7 @@ ULONG DisconnectAndReconnect(ULONG i)
 		CloseHandle(g_Pipes[i].hClientProcess);
 	g_Pipes[i].hClientProcess = 0;
 
-	if (g_Pipes[i].hReceivedProcessHandle)
-		CloseHandle(g_Pipes[i].hReceivedProcessHandle);
-	g_Pipes[i].hReceivedProcessHandle = 0;
+	g_Pipes[i].CreateProcessResponse.bType = CPR_TYPE_NONE;
 
 	if (g_Pipes[i].ClientInfo.hWriteStdinPipe)
 		CloseHandle(g_Pipes[i].ClientInfo.hWriteStdinPipe);
@@ -240,20 +238,32 @@ ULONG ClosePipeHandles()
 }
 
 
-ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, HANDLE hReceivedProcessHandle)
+ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, PCREATE_PROCESS_RESPONSE pCpr)
 {
 	ULONG	uResult;
 
 
-	if (!pClientInfo || !pparams)
+	if (!pClientInfo || !pparams || !pCpr)
 		return ERROR_INVALID_PARAMETER;
 
+
 	lprintf("ConnectExisting(): client_id #%d: Got the params \"%s\", vm \"%s\"\n", client_id, pparams->exec_index, pparams->target_vmname);
+
+	if (CPR_TYPE_ERROR_CODE == pCpr->bType) {
+
+		lprintf("ConnectExisting(): client_id #%d: Process creation failed, got the error code %d\n", client_id, pCpr->ResponseData.dwErrorCode);
+
+		uResult = send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.dwErrorCode));
+		if (ERROR_SUCCESS != uResult)
+			lprintf_err(uResult, "ConnectExisting(): send_exit_code()");
+
+		return uResult;
+	}
 
 
 	if (!DuplicateHandle(
 		hClientProcess,
-		hReceivedProcessHandle,
+		pCpr->ResponseData.hProcess,
 		GetCurrentProcess(),
 		&pClientInfo->hProcess,
 		0,
@@ -570,20 +580,20 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 
 			// Pending read operation
 			case STATE_RECEIVING_PROCESS_HANDLE:
-				if (sizeof(HANDLE) != cbRet) {
-					lprintf("WatchForTriggerEvents(): Wrong incoming process handle size: %d\n", cbRet);
+				if (sizeof(CREATE_PROCESS_RESPONSE) != cbRet) {
+					lprintf("WatchForTriggerEvents(): Wrong incoming create process response size: %d\n", cbRet);
 					DisconnectAndReconnect(i);
 					continue;
 				}
 
-				lprintf("STATE_RECEIVING_PROCESS_HANDLE (pending): Received the process handle\n");
+				lprintf("STATE_RECEIVING_PROCESS_HANDLE (pending): Received the create process response\n");
 
 				uResult = ConnectExisting(
 						g_Pipes[i].assigned_client_id,
 						g_Pipes[i].hClientProcess, 
 						&g_Pipes[i].ClientInfo, 
 						&g_Pipes[i].params, 
-						g_Pipes[i].hReceivedProcessHandle);
+						&g_Pipes[i].CreateProcessResponse);
 				if (ERROR_SUCCESS != uResult)
 					lprintf_err(uResult, "WatchForTriggerEvents(): ConnectExisting()");
 
@@ -760,24 +770,24 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 
 		case STATE_RECEIVING_PROCESS_HANDLE: 
 
-			fSuccess = ReadFile( 
-					g_Pipes[i].hPipeInst, 
-					&g_Pipes[i].hReceivedProcessHandle, 
-					sizeof(HANDLE), 
+			fSuccess = ReadFile(
+					g_Pipes[i].hPipeInst,
+					&g_Pipes[i].CreateProcessResponse,
+					sizeof(CREATE_PROCESS_RESPONSE),
 					&cbRead,
 					&g_Pipes[i].oOverlapped); 
 
 			// The read operation completed successfully. 
 
-			if (fSuccess && sizeof(HANDLE) == cbRead) {
-				lprintf("STATE_RECEIVING_PROCESS_HANDLE: Received the process handle\n");
+			if (fSuccess && sizeof(CREATE_PROCESS_RESPONSE) == cbRead) {
+				lprintf("STATE_RECEIVING_PROCESS_HANDLE: Received the create process response\n");
 
 				uResult = ConnectExisting(
 						g_Pipes[i].assigned_client_id,
 						g_Pipes[i].hClientProcess, 
 						&g_Pipes[i].ClientInfo, 
 						&g_Pipes[i].params, 
-						g_Pipes[i].hReceivedProcessHandle);
+						&g_Pipes[i].CreateProcessResponse);
 				if (ERROR_SUCCESS != uResult)
 					lprintf_err(uResult, "WatchForTriggerEvents(): ConnectExisting()");
 
