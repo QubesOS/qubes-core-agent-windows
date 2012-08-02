@@ -10,6 +10,8 @@ HANDLE_INFO	g_HandlesInfo[MAXIMUM_WAIT_OBJECTS];
 ULONG64	g_uPipeId = 0;
 
 CRITICAL_SECTION	g_ClientsCriticalSection;
+CRITICAL_SECTION	g_VchanCriticalSection;
+
 
 extern HANDLE	g_hStopServiceEvent;
 #ifndef BUILD_AS_SERVICE
@@ -107,22 +109,29 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
 	struct server_header s_hdr;
 
 
+	EnterCriticalSection(&g_VchanCriticalSection);
+
 	s_hdr.type = type;
 	s_hdr.client_id = client_id;
 	s_hdr.len = uDataSize;
 	if (write_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
 		lprintf_err(ERROR_INVALID_FUNCTION, "ReturnData(): write_all_vchan_ext(s_hdr)");
+		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	if (!uDataSize)
+	if (!uDataSize) {
+		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_SUCCESS;
+	}
 
 	if (write_all_vchan_ext(pData, uDataSize) <= 0) {
 		lprintf_err(ERROR_INVALID_FUNCTION, "ReturnData(): write_all_vchan_ext(data, %d)", uDataSize);
+		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_INVALID_FUNCTION;
 	}
 
+	LeaveCriticalSection(&g_VchanCriticalSection);
 	return ERROR_SUCCESS;
 }
 
@@ -1464,8 +1473,11 @@ ULONG WatchForEvents()
 						break;
 					}
 
+					EnterCriticalSection(&g_VchanCriticalSection);
+
 					if (libvchan_is_eof(ctrl)) {
 						bVchanReturnedError = TRUE;
+						LeaveCriticalSection(&g_VchanCriticalSection);
 						break;
 					}
 
@@ -1474,10 +1486,12 @@ ULONG WatchForEvents()
 						if (ERROR_SUCCESS != uResult) {
 							bVchanReturnedError = TRUE;
 							lprintf_err(uResult, "WatchForEvents(): handle_server_data()");
+							LeaveCriticalSection(&g_VchanCriticalSection);
 							break;
 						}
 					}
-					
+
+					LeaveCriticalSection(&g_VchanCriticalSection);
 					break;
 
 				case HTYPE_STDOUT:
@@ -1629,6 +1643,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	CloseHandle(g_hAddExistingClientEvent);
 
 	DeleteCriticalSection(&g_ClientsCriticalSection);
+	DeleteCriticalSection(&g_VchanCriticalSection);
 
 	lprintf("ServiceExecutionThread(): Shutting down\n");
 
@@ -1658,6 +1673,7 @@ ULONG Init(HANDLE *phServiceThread)
 	__try {
 #endif
 		InitializeCriticalSection(&g_ClientsCriticalSection);
+		InitializeCriticalSection(&g_VchanCriticalSection);
 		InitializeCriticalSection(&g_PipesCriticalSection);
 #if NTDDI_VERSION < NTDDI_VISTA
 	} __except(EXCEPTION_EXECUTE_HANDLER) {
@@ -1818,9 +1834,8 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 	CloseHandle(g_hStopServiceEvent);
 	CloseHandle(g_hCleanupFinishedEvent);
 
-	DeleteCriticalSection(&g_ClientsCriticalSection);
-
 	lprintf("CtrlHandler(): Shutdown complete\n");
+	ExitProcess(0);
 	return TRUE;
 }
 
@@ -1860,6 +1875,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	__try {
 #endif
 		InitializeCriticalSection(&g_ClientsCriticalSection);
+		InitializeCriticalSection(&g_VchanCriticalSection);
 		InitializeCriticalSection(&g_PipesCriticalSection);
 #if NTDDI_VERSION < NTDDI_VISTA
 	} __except(EXCEPTION_EXECUTE_HANDLER) {
