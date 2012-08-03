@@ -26,20 +26,25 @@
 
 struct libvchan *ctrl;
 
+
 int write_all_vchan_ext(void *buf, int size)
 {
 	int written = 0;
 	int ret;
 
+	if (!ctrl)
+		return -1;
+
 	while (written < size) {
 		ret =
 		    libvchan_write(ctrl, (char *) buf + written,
 				   size - written);
-		if (ret <= 0) 
+		if (ret <= 0)
 			return ret;
 
 		written += ret;
 	}
+
 //      fprintf(stderr, "sent %d bytes\n", size);
 	return size;
 }

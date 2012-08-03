@@ -77,3 +77,8 @@ ULONG ReturnData(
 	PVOID pData,
 	ULONG uDataSize
 );
+
+ULONG send_exit_code(
+	int client_id,
+	int status
+);
