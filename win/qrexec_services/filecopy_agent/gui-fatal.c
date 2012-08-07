@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <tchar.h>
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
@@ -10,20 +11,20 @@ typedef LONG NTSTATUS;
 
 extern HANDLE STDERR;
 
-static void produce_message(int icon, const PWCHAR fmt, va_list args)
+static void produce_message(int icon, const PTCHAR fmt, va_list args)
 {
 	char *dialog_msg;
-	WCHAR buf[1024];
-	PWCHAR  pMessage = NULL;
+	TCHAR buf[1024];
+	PTCHAR  pMessage = NULL;
 	ULONG	cchErrorTextSize;
 	ULONG   nWritten;
 
-	if (FAILED(StringCchVPrintfW(buf, sizeof(buf), fmt, args))) {
+	if (FAILED(StringCchVPrintf(buf, RTL_NUMBER_OF(buf), fmt, args))) {
 		/* FIXME: some fallback method? */
 		return;
 	}
 
-    cchErrorTextSize = FormatMessageW(
+    cchErrorTextSize = FormatMessage(
                 FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                 NULL,
                 GetLastError(),
@@ -33,29 +34,29 @@ static void produce_message(int icon, const PWCHAR fmt, va_list args)
                 NULL);
 
 	if (cchErrorTextSize > 0) {
-		if (FAILED(StringCchCat(buf, sizeof(buf), L": "))) {
+		if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT(": ")))) {
 			LocalFree(pMessage);
 			return;
 		}
-		if (FAILED(StringCchCat(buf, sizeof(buf), pMessage))) {
+		if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), pMessage))) {
 			LocalFree(pMessage);
 			return;
 		}
 	}
-	if (FAILED(StringCchCat(buf, sizeof(buf), L"\n"))) {
+	if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT("\n")))) {
 		LocalFree(pMessage);
 		return;
 	}
 
 	if (STDERR != INVALID_HANDLE_VALUE) {
 		// message for qrexec log in dom0
-		WriteFile(STDERR, buf, wcslen(buf), &nWritten, NULL);
+		WriteFile(STDERR, buf, _tcslen(buf)*sizeof(TCHAR), &nWritten, NULL);
 	}
-    MessageBoxW(NULL, buf, L"Qubes file copy error", MB_OK | icon); 
+    MessageBox(NULL, buf, TEXT("Qubes file copy error"), MB_OK | icon); 
 	LocalFree(pMessage);
 }
 
-void gui_fatal(const PWCHAR fmt, ...)
+void gui_fatal(const PTCHAR fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -64,7 +65,7 @@ void gui_fatal(const PWCHAR fmt, ...)
 	exit(1);
 }
 
-void gui_nonfatal(const PWCHAR fmt, ...)
+void gui_nonfatal(const PTCHAR fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
