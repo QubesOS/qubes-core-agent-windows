@@ -20,70 +20,70 @@
  */
 
 #include <windows.h>
-#include "libvchan.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
+#include <errno.h>
 
-struct libvchan *ctrl;
-
-
-int write_all_vchan_ext(void *buf, int size)
+void perror_wrapper(char * msg)
 {
-	int written = 0;
-	int ret;
-
-	if (!ctrl)
-		return -1;
-
-	while (written < size) {
-		ret =
-		    libvchan_write(ctrl, (char *) buf + written,
-				   size - written);
-		if (ret <= 0)
-			return ret;
-
-		written += ret;
-	}
-
-//      fprintf(stderr, "sent %d bytes\n", size);
-	return size;
+	/* TODO */
+#if 0
+	lprintf_err(GetLastError(), msg);
+#endif
 }
 
 
-int read_all_vchan_ext(void *buf, int size)
+int write_all(HANDLE fd, void *buf, int size)
 {
 	int written = 0;
 	int ret;
 	while (written < size) {
-		ret =
-		    libvchan_read(ctrl, (char *) buf + written,
-				  size - written);
-		if (ret <= 0)
-			return ret;
-
+		if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
+			perror_wrapper("write");
+			return 0;
+		}
 		written += ret;
+	}
+//      fprintf(stderr, "sent %d bytes\n", size);
+	return 1;
+}
+
+int read_all(HANDLE fd, void *buf, int size)
+{
+	int got_read = 0;
+	int ret;
+	while (got_read < size) {
+		if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
+			perror_wrapper("read");
+			return 0;
+		}
+		if (ret == 0) {
+			errno = 0;
+			fprintf(stderr, "EOF\n");
+			return 0;
+		}
+		got_read += ret;
 	}
 //      fprintf(stderr, "read %d bytes\n", size);
-	return size;
+	return 1;
 }
 
-int read_ready_vchan_ext()
+int copy_fd_all(HANDLE fdout, HANDLE fdin)
 {
-	return libvchan_data_ready(ctrl);
+	int ret;
+	char buf[4096];
+	for (;;) {
+		if (!ReadFile(fdin, buf, sizeof(buf), &ret, NULL)) {
+			perror_wrapper("read");
+			return 0;
+		}
+		if (!ret)
+			break;
+		if (!write_all(fdout, buf, ret)) {
+			perror_wrapper("write");
+			return 0;
+		}
+	}
+	return 1;
 }
-
-int buffer_space_vchan_ext()
-{
-	return libvchan_buffer_space(ctrl);
-}
-
-
-int peer_server_init(int port)
-{
-	ctrl = libvchan_server_init(port);
-	if (!ctrl)
-		return 1;
-
-	return 0;
-}
-

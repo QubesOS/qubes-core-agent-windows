@@ -1,0 +1,24 @@
+TARGETNAME=qfile_agent
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+UMTYPE=console
+USE_MSVCRT=1
+
+UMENTRY = wmain
+C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+
+INCLUDES=$(INCLUDES); \
+                    $(SDK_INC_PATH)\..\ddk; \
+                    ..\filecopy_common; \
+                    ..\..\include;
+    
+SOURCES=qfile-agent.c gui-fatal.c
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\kernel32.lib \
+        $(SDK_LIB_PATH)\Shlwapi.lib \
+        $(SDK_LIB_PATH)\User32.lib \
+        ..\libs\*\filecopy_common.lib \
+        $(SDK_LIB_PATH)\Shell32.lib
+

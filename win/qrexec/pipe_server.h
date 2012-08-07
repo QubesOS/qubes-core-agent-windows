@@ -31,7 +31,7 @@ typedef struct {
 	IO_HANDLES_ARRAY	RemoteHandles;
 
 	HANDLE	hClientProcess;
-	HANDLE	hReceivedProcessHandle;
+	CREATE_PROCESS_RESPONSE	CreateProcessResponse;
 } PIPEINST, *LPPIPEINST;
 
 

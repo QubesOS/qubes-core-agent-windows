@@ -1,1 +1,1 @@
-DIRS = gntmem evtchn xenstore qrexec qrexec_client_vm
+DIRS = gntmem evtchn xenstore qrexec qrexec_client_vm qrexec_services
