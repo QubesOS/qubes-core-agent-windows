@@ -36,6 +36,7 @@
               <Component Id='QrexecAgent' Guid='0e26617f-e5d9-4943-a08e-cf29013e9d72'>
                 <File Id='qrexec_agent.exe' Name='qrexec_agent.exe' DiskId='1' Source='qrexec\bin\$(var.ARCHDIR)\qrexec_agent.exe' KeyPath="yes"/>
                 <File Id='qrexec_client_vm.exe' Name='qrexec_client_vm.exe' DiskId='1' Source='qrexec_client_vm\bin\$(var.ARCHDIR)\qrexec_client_vm.exe' KeyPath="no"/>
+                <File Id='ask_vm_and_run.exe' Name='ask_vm_and_run.exe' DiskId='1' Source='ask_vm_and_run\bin\$(var.ARCHDIR)\ask_vm_and_run.exe' KeyPath="no"/>
                 <ServiceInstall
                 Id="ServiceInstaller"
                 Type="ownProcess"
@@ -54,6 +55,9 @@
             <Directory Id='QubesRPCDir' Name='qubes_rpc'>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes_rpc_services'>
+              <Component Id='QrexecServices' Guid='2543621b-2d67-4726-9a3b-7a1c471a1e19'>
+                <File Id='qfile_agent.exe' Name='qfile_agent.exe' DiskId='1' Source='qrexec_services\filecopy_agent\bin\$(var.ARCHDIR)\qfile_agent.exe' KeyPath="yes"/>
+              </Component>
             </Directory>
           </Directory>
         </Directory>
@@ -62,6 +66,7 @@
 
     <Feature Id='QrexecAgent' Title='QrexecAgent' Level='1' AllowAdvertise='no' InstallDefault='local' Absent='disallow'>
       <ComponentRef Id='QrexecAgent' />
+      <ComponentRef Id='QrexecServices' />
     </Feature>
 
   </Product>
