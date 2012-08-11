@@ -169,10 +169,10 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	PWCHAR	pwszDocuments = NULL;
 	HRESULT	hResult;
 	ULONG	uResult;
+	WCHAR	wszRemoteDomainName[MAX_PATH];
 
 
-//	if (argc < 2)
-//		return;
+
 
 	STDERR = GetStdHandle(STD_ERROR_HANDLE);
 	if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE) {
@@ -190,6 +190,12 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		exit(1);
 	}
 
+	if (!GetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", wszRemoteDomainName, RTL_NUMBER_OF(wszRemoteDomainName))) {
+		uResult = GetLastError();
+		internal_fatal(L"Failed to get a remote domain name, GetEnvironmentVariable() failed with error %d\n", uResult);
+		exit(1);
+	}
+
 	hResult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &pwszDocuments);
 	if (FAILED(hResult)) {
 		internal_fatal(L"Failed to get a path to My Documents, SHGetKnownFolderPath() failed with error 0x%x\n", hResult);
@@ -197,7 +203,13 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	}
 
 
-	hResult = StringCchPrintf(wszIncomingDir, RTL_NUMBER_OF(wszIncomingDir), L"%s\\%s\\from-%s", pwszDocuments, INCOMING_DIR_ROOT, argv[1]);
+	hResult = StringCchPrintf(
+			wszIncomingDir, 
+			RTL_NUMBER_OF(wszIncomingDir), 
+			L"%s\\%s\\from-%s", 
+			pwszDocuments, 
+			INCOMING_DIR_ROOT, 
+			wszRemoteDomainName);
 	CoTaskMemFree(pwszDocuments);
 
 	if (FAILED(hResult)) {
