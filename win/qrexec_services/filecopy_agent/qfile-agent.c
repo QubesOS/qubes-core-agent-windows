@@ -7,14 +7,9 @@
 #include <Shellapi.h>
 #include <ioall.h>
 #include <gui-fatal.h>
+#include "gui-progress.h"
 #include "filecopy.h"
 #include "crc32.h"
-
-enum {
-	PROGRESS_FLAG_NORMAL,
-	PROGRESS_FLAG_INIT,
-	PROGRESS_FLAG_DONE
-};
 
 HANDLE STDIN = INVALID_HANDLE_VALUE;
 HANDLE STDOUT = INVALID_HANDLE_VALUE;
@@ -39,41 +34,15 @@ int write_all_with_crc(HANDLE hOutput, void *pBuf, int sSize)
 	return write_all(hOutput, pBuf, sSize);
 }
 
-void do_notify_progress(long long total, int flag)
-{
-	/* TODO, Windows qrexec_client_vm runs detached from console */
-#if 0
-	char *du_size_env = getenv("FILECOPY_TOTAL_SIZE");
-	char *progress_type_env = getenv("PROGRESS_TYPE");
-	char *saved_stdout_env = getenv("SAVED_FD_1");
-	if (!progress_type_env)
-		return;
-	if (!strcmp(progress_type_env, "console") && du_size_env) {
-		char msg[256];
-		snprintf(msg, sizeof(msg), "sent %lld/%lld KB\r",
-			 total / 1024, strtoull(du_size_env, NULL, 0));
-		write(2, msg, strlen(msg));
-		if (flag == PROGRESS_FLAG_DONE)
-			write(2, "\n", 1);
-	}
-	if (!strcmp(progress_type_env, "gui") && saved_stdout_env) {
-		char msg[256];
-		snprintf(msg, sizeof(msg), "%lld\n", total);
-		write(strtoul(saved_stdout_env, NULL, 0), msg,
-		      strlen(msg));
-	}
-#endif
-}
-
 void notify_progress(int size, int flag)
 {
-	static long long total = 0;
+	static long long total_written = 0;
 	static long long prev_total = 0;
-	total += size;
-	if (total > prev_total + PROGRESS_NOTIFY_DELTA
+	total_written += size;
+	if (total_written > prev_total + PROGRESS_NOTIFY_DELTA
 	    || (flag != PROGRESS_FLAG_NORMAL)) {
-		do_notify_progress(total, flag);
-		prev_total = total;
+		do_notify_progress(total_written, flag);
+		prev_total = total_written;
 	}
 }
 
