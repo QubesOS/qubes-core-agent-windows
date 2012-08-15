@@ -294,7 +294,7 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 {
 	int i;
 	PTCHAR pszArgumentDirectory, pszArgumentBasename;
-	TCHAR szCwd[MAX_PATH]; /* FIXME: path can be longer */
+	TCHAR szCwd[MAX_PATH_LENGTH];
 
 	STDERR = GetStdHandle(STD_ERROR_HANDLE);
 	if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE) {
@@ -323,7 +323,7 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 			gui_fatal(TEXT("GetAbsolutePath %s"), argv[i]);
 		}
 		// absolute path has at least one character
-		if (PathGetCharType(pszArgumentDirectory[_tcslen(pszArgumentDirectory)-1]) == GCT_SEPARATOR)
+		if (PathGetCharType(pszArgumentDirectory[_tcslen(pszArgumentDirectory)-1]) & GCT_SEPARATOR)
 			pszArgumentDirectory[_tcslen(pszArgumentDirectory)-1] = L'\0';
 		pszArgumentBasename = _tcsdup(pszArgumentDirectory);
 		PathStripPath(pszArgumentBasename);
