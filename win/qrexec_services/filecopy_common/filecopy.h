@@ -15,6 +15,10 @@ struct file_header {
 	UINT32 atime_nsec;
 	UINT32 mtime;
 	UINT32 mtime_nsec;
+	/*
+	char filename[0];
+	char data[0];
+	*/
 };
 
 struct result_header {
