@@ -13,7 +13,9 @@ INCLUDES=$(INCLUDES); \
                     ..\filecopy_common; \
                     ..\..\include;
     
-SOURCES=qfile-agent.c gui-fatal.c gui-progress.c
+SOURCES=qfile-agent.c gui-fatal.c gui-progress.c qfile-agent.rc
+
+SXS_APPLICATION_MANIFEST=qfile_agent.exe.manifest
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \
