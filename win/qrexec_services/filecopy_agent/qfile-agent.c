@@ -20,6 +20,8 @@ HANDLE STDIN = INVALID_HANDLE_VALUE;
 HANDLE STDOUT = INVALID_HANDLE_VALUE;
 HANDLE STDERR = INVALID_HANDLE_VALUE;
 
+INT64 total_size = 0;
+
 #ifdef DBG
 #define internal_fatal gui_fatal
 #else
@@ -199,7 +201,25 @@ int single_file_processor(PTCHAR pszFilename, DWORD dwAttrs)
 	return 0;
 }
 
-int do_fs_walk(PTCHAR pszPath)
+INT64 getFileSizeByPath(PTCHAR pszFilename)
+{
+	HANDLE hFile;
+	LARGE_INTEGER dwFileSize;
+
+	hFile = CreateFile(pszFilename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+	if (hFile == INVALID_HANDLE_VALUE)
+		gui_fatal(TEXT("Cannot open file %s"), pszFilename);
+
+	if (!GetFileSizeEx(hFile, &dwFileSize)) {
+		CloseHandle(hFile);
+		gui_fatal(TEXT("Cannot get file size of %s"), pszFilename);
+	}
+
+	CloseHandle(hFile);
+	return dwFileSize.QuadPart;
+}
+
+INT64 do_fs_walk(PTCHAR pszPath, BOOL bCalcSize)
 {
 	PTCHAR pszCurrentPath;
 	size_t cchCurrentPath, cchSearchPath;
@@ -207,12 +227,18 @@ int do_fs_walk(PTCHAR pszPath)
 	WIN32_FIND_DATA ent;
 	PTCHAR pszSearchPath;
 	HANDLE hSearch;
+	INT64 size = 0;
 
 	if ((dwAttrs = GetFileAttributes(pszPath)) == INVALID_FILE_ATTRIBUTES)
 		gui_fatal(TEXT("Cannot get attributes of %s"), pszPath);
-	single_file_processor(pszPath, dwAttrs);
-	if (!(dwAttrs & FILE_ATTRIBUTE_DIRECTORY))
-		return 0;
+	if (!bCalcSize)
+		single_file_processor(pszPath, dwAttrs);
+	if (!(dwAttrs & FILE_ATTRIBUTE_DIRECTORY)) {
+		if (bCalcSize)
+			return getFileSizeByPath(pszPath);
+		else
+			return 0;
+	}
 	cchSearchPath = _tcslen(pszPath)+3;
 	pszSearchPath = malloc(sizeof(TCHAR)*cchSearchPath);
 	if (!pszSearchPath)
@@ -237,14 +263,15 @@ int do_fs_walk(PTCHAR pszPath)
 		// use forward slash here to send it also to the other end
 		if (FAILED(StringCchPrintf(pszCurrentPath, cchCurrentPath, TEXT("%s/%s"), pszPath, ent.cFileName)))
 			internal_fatal(TEXT("StringCchPrintf at %d"), __LINE__);
-		do_fs_walk(pszCurrentPath);
+		size += do_fs_walk(pszCurrentPath, bCalcSize);
 		free(pszCurrentPath);
 	} while (FindNextFile(hSearch, &ent));
 	FindClose(hSearch);
 	// directory metadata is resent; this makes the code simple,
 	// and the atime/mtime is set correctly at the second time
-	single_file_processor(pszPath, dwAttrs);
-	return 0;
+	if (!bCalcSize)
+		single_file_processor(pszPath, dwAttrs);
+	return size;
 }
 
 void notify_end_and_wait_for_result()
@@ -317,6 +344,14 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 		internal_fatal(TEXT("Failed to get current directory"));
 		exit(1);
 	}
+	// calculate total size for progressbar purpose
+	total_size = 0;
+	for (i = 1; i < argc; i++) {
+		if (cancel_operation)
+			break;
+		// do not change dir, as don't care about form of the path here
+		total_size += do_fs_walk(argv[i], TRUE);
+	}
 	for (i = 1; i < argc; i++) {
 		pszArgumentDirectory = GetAbsolutePath(szCwd, argv[i]);
 		if (!pszArgumentDirectory) {
@@ -331,7 +366,7 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 
 		if (!SetCurrentDirectory(pszArgumentDirectory))
 			gui_fatal(TEXT("chdir to %s"), pszArgumentDirectory);
-		do_fs_walk(pszArgumentBasename);
+		do_fs_walk(pszArgumentBasename, FALSE);
 		free(pszArgumentDirectory);
 		free(pszArgumentBasename);
 	}
