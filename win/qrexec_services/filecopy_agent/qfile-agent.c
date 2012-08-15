@@ -21,6 +21,7 @@ HANDLE STDOUT = INVALID_HANDLE_VALUE;
 HANDLE STDERR = INVALID_HANDLE_VALUE;
 
 INT64 total_size = 0;
+BOOL cancel_operation = FALSE;
 
 #ifdef DBG
 #define internal_fatal gui_fatal
@@ -265,6 +266,8 @@ INT64 do_fs_walk(PTCHAR pszPath, BOOL bCalcSize)
 			internal_fatal(TEXT("StringCchPrintf at %d"), __LINE__);
 		size += do_fs_walk(pszCurrentPath, bCalcSize);
 		free(pszCurrentPath);
+		if (cancel_operation)
+			break;
 	} while (FindNextFile(hSearch, &ent));
 	FindClose(hSearch);
 	// directory metadata is resent; this makes the code simple,
@@ -353,6 +356,8 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 		total_size += do_fs_walk(argv[i], TRUE);
 	}
 	for (i = 1; i < argc; i++) {
+		if (cancel_operation)
+			break;
 		pszArgumentDirectory = GetAbsolutePath(szCwd, argv[i]);
 		if (!pszArgumentDirectory) {
 			gui_fatal(TEXT("GetAbsolutePath %s"), argv[i]);
