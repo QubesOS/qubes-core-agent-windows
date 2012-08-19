@@ -492,7 +492,7 @@ ULONG CreatePipedProcessAsCurrentUserW(
 			NULL, 
 			NULL, 
 			bInheritHandles, // inherit handles if IO is piped
-			0, 
+			CREATE_NO_WINDOW, 
 			NULL, 
 			NULL, 
 			&si, 
@@ -705,7 +705,7 @@ ULONG CreatePipedProcessAsUserW(
 			NULL,
 			NULL,
 			bInheritHandles, // inherit handles if IO is piped
-			NORMAL_PRIORITY_CLASS | CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT,
+			NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
 			pEnvironment,
 			NULL,
 			&si,
