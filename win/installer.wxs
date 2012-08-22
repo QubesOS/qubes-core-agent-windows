@@ -61,10 +61,14 @@
               </Component>
             </Directory>
             <Directory Id='QubesRPCDir' Name='qubes_rpc'>
+              <Component Id='QrexecServicesConfig' Guid='9efff253-25a8-40ed-861a-0d576f0ca439'>
+                <File Id='qubes.Filecopy' Name='qubes.Filecopy' DiskId='1' Source='qrexec_services\qubes.Filecopy' KeyPath="yes"/>
+              </Component>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes_rpc_services'>
               <Component Id='QrexecServices' Guid='2543621b-2d67-4726-9a3b-7a1c471a1e19'>
                 <File Id='qfile_agent.exe' Name='qfile_agent.exe' DiskId='1' Source='qrexec_services\filecopy_agent\bin\$(var.ARCHDIR)\qfile_agent.exe' KeyPath="yes"/>
+                <File Id='qfile_unpacker.exe' Name='qfile_unpacker.exe' DiskId='1' Source='qrexec_services\filecopy_unpacker\bin\$(var.ARCHDIR)\qfile_unpacker.exe' KeyPath="no"/>
               </Component>
             </Directory>
           </Directory>
@@ -78,6 +82,7 @@
       <ComponentRef Id='QrexecClientVM' />
       <ComponentRef Id='AskVMClientWrapper' />
       <ComponentRef Id='QrexecServices' />
+      <ComponentRef Id='QrexecServicesConfig' />
     </Feature>
 
   </Product>
