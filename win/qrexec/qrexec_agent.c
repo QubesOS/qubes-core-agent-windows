@@ -1332,7 +1332,6 @@ ULONG WatchForEvents()
 
 	for (;;) {
 
-		libvchan_prepare_to_select(ctrl);
 		uEventNumber = 0;
 
 		// Order matters.
@@ -1343,7 +1342,11 @@ ULONG WatchForEvents()
 
 		uResult = ERROR_SUCCESS;
 
-		if (!ReadFile(evtchn, &fired_port, sizeof(fired_port), NULL, &ol)) {
+		libvchan_prepare_to_select(ctrl);
+		// read 1 byte instead of sizeof(fired_port) to not flush fired port
+		// from evtchn buffer; evtchn driver will read only whole fired port
+		// numbers (sizeof(fired_port)), so this will end in zero-length read
+		if (!ReadFile(evtchn, &fired_port, 1, NULL, &ol)) {
 			uResult = GetLastError();
 			if (ERROR_IO_PENDING != uResult) {
 				lprintf_err(uResult, "WatchForEvents(): Vchan async read");
