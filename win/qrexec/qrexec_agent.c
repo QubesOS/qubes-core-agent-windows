@@ -763,6 +763,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 	HANDLE	hServiceConfigFile;
 	ULONG	uResult;
 	ULONG	uBytesRead;
+	ULONG	uPathLength;
 	PWCHAR	pwszServiceCommandLine = NULL;
 
 
@@ -865,6 +866,13 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 				free(pwszSourceDomainName);
 			lprintf_err(uResult, "InterceptRPCRequest(): Failed to parse the encoding in RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			return uResult;
+		}
+
+		// strip white chars (especially end-of-line) from string
+		uPathLength = wcslen(pwszRawServiceFilePath);
+		while (iswspace(pwszRawServiceFilePath[uPathLength-1])) {
+			uPathLength--;
+			pwszRawServiceFilePath[uPathLength]=L'\0';
 		}
 
 		pwszServiceArgs = PathGetArgsW(pwszRawServiceFilePath);
