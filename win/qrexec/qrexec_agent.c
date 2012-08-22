@@ -1484,6 +1484,14 @@ ULONG WatchForEvents()
 						break;
 					}
 
+					if (!GetOverlappedResult(evtchn, &ol, &i, FALSE)) {
+						if (GetLastError() != ERROR_OPERATION_ABORTED) {
+							lprintf_err(GetLastError(), "WatchForEvents(): GetOverlappedResult(evtchn)");
+							bVchanReturnedError = TRUE;
+							break;
+						}
+					}
+
 					EnterCriticalSection(&g_VchanCriticalSection);
 
 					if (libvchan_is_eof(ctrl)) {
