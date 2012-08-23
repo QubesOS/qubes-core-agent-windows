@@ -1466,6 +1466,16 @@ ULONG WatchForEvents()
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_VCHAN:
 
+					// the following will never block; we need to do this to
+					// clear libvchan_fd pending state
+					//
+					// using libvchan_wait here instead of reading fired
+					// port at the beginning of the loop (ReadFile call) to be
+					// sure that we clear pending state _only_
+					// when handling vchan data in this loop iteration (not any
+					// other process)
+					libvchan_wait(ctrl);
+
 					bVchanIoInProgress = FALSE;
 
 					if (!bVchanClientConnected) {
