@@ -307,6 +307,41 @@ xc_evtchn_pending(HANDLE xce_handle) {
 }
 
 /*
+ * Return the next event channel to become pending, or -1 on failure, in which
+ * case call GetLastError for more information.
+ * This function flushes remaining pending events from evtchn buffer.
+ */
+evtchn_port_or_error_t
+xc_evtchn_pending_with_flush(HANDLE xce_handle) {
+
+	DWORD bytes_read;
+	OVERLAPPED ol;
+	// PAGE_SIZE/sizeof(unsigned int)
+	unsigned int fired_ports[1024];
+
+
+	memset(&ol, 0, sizeof(ol));
+	ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+
+	if(!ReadFile(xce_handle, fired_ports, sizeof(fired_ports), NULL, &ol)) {
+		if(GetLastError() != ERROR_IO_PENDING) {
+			CloseHandle(ol.hEvent);
+			return -1;
+		}
+	}
+	if(!GetOverlappedResult(xce_handle, &ol, &bytes_read, TRUE)) {
+		CloseHandle(ol.hEvent);
+		return -1;
+	}
+	else {
+		CloseHandle(ol.hEvent);
+		return fired_ports[0];
+	}
+
+}
+
+/*
  * Unmask the given event channel. Returns -1 on failure, in which case call 
  * GetLastError for more information.
  */
