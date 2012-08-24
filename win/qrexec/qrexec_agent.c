@@ -763,6 +763,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 	HANDLE	hServiceConfigFile;
 	ULONG	uResult;
 	ULONG	uBytesRead;
+	ULONG	uPathLength;
 	PWCHAR	pwszServiceCommandLine = NULL;
 
 
@@ -865,6 +866,13 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 				free(pwszSourceDomainName);
 			lprintf_err(uResult, "InterceptRPCRequest(): Failed to parse the encoding in RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			return uResult;
+		}
+
+		// strip white chars (especially end-of-line) from string
+		uPathLength = wcslen(pwszRawServiceFilePath);
+		while (iswspace(pwszRawServiceFilePath[uPathLength-1])) {
+			uPathLength--;
+			pwszRawServiceFilePath[uPathLength]=L'\0';
 		}
 
 		pwszServiceArgs = PathGetArgsW(pwszRawServiceFilePath);
@@ -1324,7 +1332,6 @@ ULONG WatchForEvents()
 
 	for (;;) {
 
-		libvchan_prepare_to_select(ctrl);
 		uEventNumber = 0;
 
 		// Order matters.
@@ -1335,7 +1342,11 @@ ULONG WatchForEvents()
 
 		uResult = ERROR_SUCCESS;
 
-		if (!ReadFile(evtchn, &fired_port, sizeof(fired_port), NULL, &ol)) {
+		libvchan_prepare_to_select(ctrl);
+		// read 1 byte instead of sizeof(fired_port) to not flush fired port
+		// from evtchn buffer; evtchn driver will read only whole fired port
+		// numbers (sizeof(fired_port)), so this will end in zero-length read
+		if (!ReadFile(evtchn, &fired_port, 1, NULL, &ol)) {
 			uResult = GetLastError();
 			if (ERROR_IO_PENDING != uResult) {
 				lprintf_err(uResult, "WatchForEvents(): Vchan async read");
@@ -1455,6 +1466,16 @@ ULONG WatchForEvents()
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_VCHAN:
 
+					// the following will never block; we need to do this to
+					// clear libvchan_fd pending state
+					//
+					// using libvchan_wait here instead of reading fired
+					// port at the beginning of the loop (ReadFile call) to be
+					// sure that we clear pending state _only_
+					// when handling vchan data in this loop iteration (not any
+					// other process)
+					libvchan_wait(ctrl);
+
 					bVchanIoInProgress = FALSE;
 
 					if (!bVchanClientConnected) {
@@ -1471,6 +1492,14 @@ ULONG WatchForEvents()
 
 						bVchanClientConnected = TRUE;
 						break;
+					}
+
+					if (!GetOverlappedResult(evtchn, &ol, &i, FALSE)) {
+						if (GetLastError() != ERROR_OPERATION_ABORTED) {
+							lprintf_err(GetLastError(), "WatchForEvents(): GetOverlappedResult(evtchn)");
+							bVchanReturnedError = TRUE;
+							break;
+						}
 					}
 
 					EnterCriticalSection(&g_VchanCriticalSection);

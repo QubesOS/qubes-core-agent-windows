@@ -85,6 +85,14 @@ evtchn_port_or_error_t
 xc_evtchn_pending(HANDLE xce_handle);
 
 /*
+ * Return the next event channel to become pending, or -1 on failure, in which
+ * case call GetLastError for more information.
+ * This function flushes remaining pending events from evtchn buffer.
+ */
+evtchn_port_or_error_t
+xc_evtchn_pending_with_flush(HANDLE xce_handle);
+
+/*
  * Unmask the given event channel. Returns -1 on failure, in which case call 
  * GetLastError for more information.
  */

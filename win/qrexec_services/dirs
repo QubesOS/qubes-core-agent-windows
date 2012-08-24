@@ -1,1 +1,1 @@
-DIRS= filecopy_common filecopy_agent
+DIRS= filecopy_common filecopy_agent filecopy_unpacker

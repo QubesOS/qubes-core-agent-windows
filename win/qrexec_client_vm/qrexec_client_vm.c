@@ -167,6 +167,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	struct	trigger_connect_params params;
 	ULONG	uResult;
 	PUCHAR	pszParameter;
+	PTCHAR	pszLocalProgram;
 	HRESULT	hResult;
 	IO_HANDLES_ARRAY	IoHandles;
 	HANDLE	hProcess;
@@ -309,8 +310,14 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	lprintf("Starting the local program \"%s\"\n", argv[3]);
 #endif
 
+	// find command line staring at third parameter _including_ quotes
+	pszLocalProgram = _tcsstr(GetCommandLine(), argv[2]);
+	pszLocalProgram += _tcslen(argv[2]);
+	while (pszLocalProgram[0] == TEXT(' '))
+		pszLocalProgram++;
+
 	uResult = CreatePipedProcessAsCurrentUser(
-			argv[3],	// local program
+			pszLocalProgram,	// local program
 			TRUE,
 			IoHandles.hPipeStdin,
 			IoHandles.hPipeStdout,

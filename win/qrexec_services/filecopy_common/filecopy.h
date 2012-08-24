@@ -1,6 +1,6 @@
 #define FILECOPY_SPOOL "/home/user/.filecopyspool"
 #define FILECOPY_VMNAME_SIZE 32
-#define PROGRESS_NOTIFY_DELTA (15*1000*1000)
+#define PROGRESS_NOTIFY_DELTA (1*1000*1000)
 #define MAX_PATH_LENGTH 16384
 
 #define LEGAL_EOF 31415926
@@ -15,6 +15,10 @@ struct file_header {
 	UINT32 atime_nsec;
 	UINT32 mtime;
 	UINT32 mtime_nsec;
+	/*
+	char filename[0];
+	char data[0];
+	*/
 };
 
 struct result_header {
