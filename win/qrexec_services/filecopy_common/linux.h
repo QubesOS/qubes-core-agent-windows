@@ -1,6 +1,9 @@
 #pragma once
 
+#define EIO              5      /* I/O error */
+#define EACCES          13      /* Permission denied */
 #define EEXIST          17      /* File exists */
+#define ENOTDIR         20      /* Not a directory */
 #define EINVAL          22      /* Invalid argument */
 #define ENAMETOOLONG    36      /* File name too long */
 #define EDQUOT          122     /* Quota exceeded */
