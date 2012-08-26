@@ -28,27 +28,10 @@ static __inline void internal_fatal(const PWCHAR fmt, ...) {
 }
 #endif
 
-void do_unpack(HANDLE fd);
+int do_unpack();
 
 WCHAR	g_wcMappedDriveLetter = L'\0';
 
-
-/*
-void wait_for_child(HANDLE statusfd)
-{
-	int status;
-	if (read_all(statusfd, &status, sizeof status)!=sizeof status)
-		gui_fatal(L"File copy error: Internal error reading status from unpacker");
-	errno = status;
-	switch (status) {
-	case LEGAL_EOF: break;
-	case 0: gui_fatal(L"File copy: Connection terminated unexpectedly"); break;
-	case EINVAL: gui_fatal(L"File copy: Corrupted data from packer"); break;
-	case EEXIST: gui_fatal(L"File copy: not overwriting existing file. Clean ~/incoming, and retry copy"); break;
-	default: gui_fatal(L"File copy"); 
-	}
-}
-*/
 
 ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
 {
@@ -229,5 +212,5 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		exit(1);
 	}
 
-	do_unpack(STDERR);
+	return do_unpack();
 }

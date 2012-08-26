@@ -88,12 +88,11 @@ int read_all_with_crc(HANDLE fd, void *buf, int size) {
 	return ret;
 }
 
-HANDLE global_status_fd;
 void do_exit(int code)
 {
-	int codebuf = code;
-	write_all(global_status_fd, &codebuf, sizeof codebuf);
-	exit(0);
+	if (code == LEGAL_EOF)
+		code = 0;
+	exit(code == 0);
 }
 
 /*
@@ -241,11 +240,10 @@ void send_status_and_crc() {
 	errno = saved_errno;
 }
 
-void do_unpack(HANDLE fd)
+int do_unpack()
 {
 	struct file_header untrusted_hdr;
 
-	global_status_fd = fd;
 	/* initialize checksum */
 	crc32_sum = 0;
 	while (read_all_with_crc(STDIN, &untrusted_hdr, sizeof untrusted_hdr)) {
@@ -259,9 +257,6 @@ void do_unpack(HANDLE fd)
 		if (files_limit && total_files > files_limit)
 			do_exit(EDQUOT);
 	}
-	send_status_and_crc();
-	if (errno)
-		do_exit(errno);
-	else
-		do_exit(LEGAL_EOF);
+	send_status_and_crc(errno);
+	return errno;
 }
