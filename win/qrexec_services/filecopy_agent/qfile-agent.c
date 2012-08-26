@@ -6,6 +6,7 @@
 #include <Shlwapi.h>
 #include <Shellapi.h>
 #include <ioall.h>
+#include <linux.h>
 #include <gui-fatal.h>
 #include "gui-progress.h"
 #include "filecopy.h"
@@ -43,6 +44,31 @@ void notify_progress(int size, int flag)
 	    || (flag != PROGRESS_FLAG_NORMAL)) {
 		do_notify_progress(total_written, flag);
 		prev_total = total_written;
+	}
+}
+
+void wait_for_result()
+{
+	struct result_header hdr;
+
+	if (!read_all(STDIN, &hdr, sizeof(hdr))) {
+		exit(1);	// hopefully remote has produced error message
+	}
+	if (hdr.error_code != 0) {
+		switch (hdr.error_code) {
+			case EEXIST:
+				gui_fatal(TEXT("File copy: not overwriting existing file. Clean incoming dir, and retry copy"));
+				break;
+			case EINVAL:
+				gui_fatal(TEXT("File copy: Corrupted data from packer"));
+				break;
+			default:
+				gui_fatal(TEXT("File copy: %s"),
+						strerror(hdr.error_code));
+		}
+	}
+	if (hdr.crc32 != crc32_sum) {
+		gui_fatal(TEXT("File transfer failed: checksum mismatch"));
 	}
 }
 
@@ -94,14 +120,18 @@ void write_headers(struct file_header *hdr, PTCHAR pszFilename)
 		gui_fatal(TEXT("Cannot convert path '%s' to UTF-8"), pszFilename);
 	hdr->namelen = cbFilenameUtf8;
 	if (!write_all_with_crc(STDOUT, hdr, sizeof(*hdr))
-	    || !write_all_with_crc(STDOUT, pszFilenameUtf8, hdr->namelen))
+	    || !write_all_with_crc(STDOUT, pszFilenameUtf8, hdr->namelen)) {
+		wait_for_result();
 		exit(1);
+	}
 	free(pszFilenameUtf8);
 #else
 	hdr->namelen = _tcslen(pszFilename);
 	if (!write_all_with_crc(STDOUT, hdr, sizeof(*hdr))
-	    || !write_all_with_crc(STDOUT, pszFilename, hdr->namelen))
+	    || !write_all_with_crc(STDOUT, pszFilename, hdr->namelen)) {
+		wait_for_result();
 		exit(1);
+	}
 #endif
 }
 
@@ -146,9 +176,10 @@ int single_file_processor(PTCHAR pszFilename, DWORD dwAttrs)
 				CloseHandle(hInput);
 				gui_fatal(TEXT("Copying file %s: %hs"), pszFilename,
 					  copy_file_status_to_str(ret));
-			} else
-				// TODO #239
+			} else {
+				wait_for_result();
 				exit(1);
+			}
 		}
 	}
 	if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY) {
@@ -248,7 +279,6 @@ INT64 do_fs_walk(PTCHAR pszPath, BOOL bCalcSize)
 
 void notify_end_and_wait_for_result()
 {
-	struct result_header hdr;
 	struct file_header end_hdr;
 
 	/* nofity end of transfer */
@@ -257,18 +287,7 @@ void notify_end_and_wait_for_result()
 	end_hdr.filelen = 0;
 	write_all_with_crc(STDOUT, &end_hdr, sizeof(end_hdr));
 
-	/* wait for result */
-	if (!read_all(STDIN, &hdr, sizeof(hdr))) {
-		// TODO #239
-		exit(1);	// hopefully remote has produced error message
-	}
-	if (hdr.error_code != 0) {
-		gui_fatal(TEXT("Error writing files: %s"),
-			  strerror(hdr.error_code));
-	}
-	if (hdr.crc32 != crc32_sum) {
-		gui_fatal(TEXT("File transfer failed: checksum mismatch"));
-	}
+	wait_for_result();
 }
 
 PTCHAR GetAbsolutePath(PTCHAR pszCwd, PTCHAR pszPath)
