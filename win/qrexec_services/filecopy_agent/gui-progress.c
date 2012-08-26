@@ -79,7 +79,10 @@ void do_notify_progress(long long written, int flag)
 			break;
 		case PROGRESS_FLAG_NORMAL:
 			if (hDialog) {
-				SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_POS, (WPARAM)(100LL*written/total_size), 0);
+				if (written)
+					SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_POS, (WPARAM)(100LL*written/total_size), 0);
+				else
+					SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM)PBST_NORMAL, 0);
 			}
 			break;
 		case PROGRESS_FLAG_DONE:
@@ -89,6 +92,10 @@ void do_notify_progress(long long written, int flag)
 				WaitForSingleObject(hProgressWindowThread, INFINITE);
 				CloseHandle(hProgressWindowThread);
 			}
+			break;
+		case PROGRESS_FLAG_ERROR:
+			if (hDialog)
+				SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM)PBST_ERROR, 0);
 			break;
 	}
 }

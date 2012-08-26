@@ -6,10 +6,12 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <Strsafe.h>
+#include "gui-progress.h"
 
 typedef LONG NTSTATUS;
 
 extern HANDLE STDERR;
+extern HWND hDialog;
 
 static void produce_message(int icon, const PTCHAR fmt, va_list args)
 {
@@ -52,13 +54,14 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 		// message for qrexec log in dom0
 		WriteFile(STDERR, buf, _tcslen(buf)*sizeof(TCHAR), &nWritten, NULL);
 	}
-    MessageBox(NULL, buf, TEXT("Qubes file copy error"), MB_OK | icon); 
+	MessageBox(hDialog, buf, TEXT("Qubes file copy error"), MB_OK | icon);
 	LocalFree(pMessage);
 }
 
 void gui_fatal(const PTCHAR fmt, ...)
 {
 	va_list args;
+	do_notify_progress(0, PROGRESS_FLAG_ERROR);
 	va_start(args, fmt);
 	produce_message(MB_ICONERROR, fmt, args);
 	va_end(args);
@@ -68,7 +71,9 @@ void gui_fatal(const PTCHAR fmt, ...)
 void gui_nonfatal(const PTCHAR fmt, ...)
 {
 	va_list args;
+	do_notify_progress(0, PROGRESS_FLAG_ERROR);
 	va_start(args, fmt);
 	produce_message(MB_ICONWARNING, fmt, args);
 	va_end(args);
+	do_notify_progress(0, PROGRESS_FLAG_NORMAL);
 }
