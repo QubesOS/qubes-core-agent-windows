@@ -1413,14 +1413,17 @@ ULONG WatchForEvents()
 				}
 
 				if (STILL_ACTIVE != dwExitCode) {
+					int client_id;
 
-					uResult = send_exit_code(pClientInfo->client_id, dwExitCode);
+					client_id = pClientInfo->client_id;
+					// ensure that all data is sent before exit code
+					RemoveClientNoLocks(pClientInfo);
+					uResult = send_exit_code(client_id, dwExitCode);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
 					}
 
-					RemoveClientNoLocks(pClientInfo);
 				}
 			}
 			LeaveCriticalSection(&g_ClientsCriticalSection);
