@@ -88,10 +88,20 @@ int read_all_with_crc(HANDLE fd, void *buf, int size) {
 	return ret;
 }
 
+void send_status_and_crc(int status) {
+	struct result_header hdr;
+
+	hdr.error_code = status;
+	hdr.crc32 = crc32_sum;
+	write_all(STDOUT, &hdr, sizeof(hdr));
+}
+
 void do_exit(int code)
 {
 	if (code == LEGAL_EOF)
 		code = 0;
+	send_status_and_crc(code);
+	CloseHandle(STDOUT);
 	exit(code == 0);
 }
 
@@ -124,7 +134,7 @@ void process_one_file_reg(struct file_header *untrusted_hdr,
 
 	uResult = UTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName);
 	if (ERROR_SUCCESS != uResult)
-		do_exit(uResult);
+		do_exit(EINVAL);
 
 	hResult = StringCchPrintfW(
 			wszTrustedFilePath, 
@@ -135,23 +145,27 @@ void process_one_file_reg(struct file_header *untrusted_hdr,
 	free(pszUtf16UntrustedName);
 
 	if (FAILED(hResult)) 
-		do_exit(hResult);
+		do_exit(EINVAL);
 
 
-	fdout = CreateFileW(wszTrustedFilePath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL);	/* safe because of chroot */
-	if (INVALID_HANDLE_VALUE == fdout)
-		do_exit(errno);
+	fdout = CreateFileW(wszTrustedFilePath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, 0, NULL);	/* safe because of chroot */
+	if (INVALID_HANDLE_VALUE == fdout) {
+		// maybe some more complete error code translation needed here, but
+		// anyway qfile-agent will handle only those listed below
+		if (GetLastError() == ERROR_FILE_EXISTS)
+			do_exit(EEXIST);
+		else if (GetLastError() == ERROR_ACCESS_DENIED)
+			do_exit(EACCES);
+		else
+			do_exit(EIO);
+	}
 
 	total_bytes += untrusted_hdr->filelen;
 	if (bytes_limit && total_bytes > bytes_limit)
 		do_exit(EDQUOT);
 	ret = copy_file(fdout, STDIN, untrusted_hdr->filelen, &crc32_sum);
 	if (ret != COPY_FILE_OK) {
-		if (ret == COPY_FILE_READ_EOF
-		    || ret == COPY_FILE_READ_ERROR)
-			do_exit(LEGAL_EOF);	// hopefully remote will produce error message
-		else
-			do_exit(errno);
+		do_exit(EIO);
 	}
 
 	CloseHandle(fdout);
@@ -171,7 +185,7 @@ void process_one_file_dir(struct file_header *untrusted_hdr,
 
 	uResult = UTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName);
 	if (ERROR_SUCCESS != uResult)
-		do_exit(uResult);
+		do_exit(EINVAL);
 
 	hResult = StringCchPrintfW(
 			wszTrustedDirectoryPath, 
@@ -182,12 +196,12 @@ void process_one_file_dir(struct file_header *untrusted_hdr,
 	free(pszUtf16UntrustedName);
 
 	if (FAILED(hResult)) 
-		do_exit(hResult);
+		do_exit(EINVAL);
 
 	if (!CreateDirectory(wszTrustedDirectoryPath, NULL)) {	/* safe because of chroot */
 		uResult = GetLastError();
 		if (ERROR_ALREADY_EXISTS != uResult)
-			do_exit(uResult);
+			do_exit(ENOTDIR);
 	}
 
 //	fix_times_and_perms(untrusted_hdr, untrusted_name);
@@ -227,17 +241,6 @@ void process_one_file(struct file_header *untrusted_hdr)
 		process_one_file_dir(untrusted_hdr, untrusted_namebuf);
 	else
 		do_exit(EINVAL);
-}
-
-void send_status_and_crc() {
-	struct result_header hdr;
-	int saved_errno;
-
-	saved_errno = errno;
-	hdr.error_code = errno;
-	hdr.crc32 = crc32_sum;
-	write_all(STDOUT, &hdr, sizeof(hdr));
-	errno = saved_errno;
 }
 
 int do_unpack()
