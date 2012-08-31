@@ -1,0 +1,22 @@
+TARGETNAME=clipboard_copy
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+UMTYPE=windows
+USE_MSVCRT=1
+
+UMENTRY = wwinmain
+C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+
+INCLUDES=$(INCLUDES); \
+                    $(SDK_INC_PATH)\..\ddk; \
+                    ..\include; \
+
+SOURCES=clipboard_copy.c
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\kernel32.lib \
+        $(SDK_LIB_PATH)\user32.lib \
+        $(SDK_LIB_PATH)\userenv.lib
+
+
