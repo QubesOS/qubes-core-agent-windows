@@ -6,6 +6,20 @@
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
+int write_all(HANDLE fd, void *buf, int size)
+{
+    int written = 0;
+    int ret;
+    while (written < size) {
+        if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
+            // some error handler?
+            return 0;
+        }
+        written += ret;
+    }
+    return 1;
+}
+
 PUCHAR ConvertUTF16ToUTF8(PWCHAR pwszUtf16, size_t *pcbUtf8) {
 	PUCHAR pszUtf8;
 	size_t cbUtf8;
@@ -61,7 +75,7 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
 		return FALSE;
 	}
 
-	if (!WriteFile(hOutput, lpstr, cbStr, &uWritten, NULL)) {
+	if (!write_all(hOutput, lpstr, cbStr)) {
 		// some error handler?
 		GlobalUnlock(hglb); 
 		CloseClipboard();

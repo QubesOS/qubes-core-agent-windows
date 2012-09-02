@@ -9,6 +9,25 @@
 
 #define MAX_CLIPBOARD_SIZE 65000
 
+int ReadUntilEOF(HANDLE fd, void *buf, int size)
+{
+    int got_read = 0;
+    int ret;
+    while (got_read < size) {
+        if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
+			if (GetLastError() == ERROR_BROKEN_PIPE)
+				return got_read;
+            return -1;
+        }
+        if (ret == 0) {
+            return got_read;
+        }
+        got_read += ret;
+    }
+//      fprintf(stderr, "read %d bytes\n", size);
+    return got_read;
+}
+
 ULONG ConvertUTF8ToUTF16(PUCHAR pszUtf8, HANDLE *ppwszUtf16)
 {
 	HRESULT hResult;
@@ -64,9 +83,10 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 	HANDLE hglb;
 	UCHAR lpStr[MAX_CLIPBOARD_SIZE+1];
 	size_t cchwStr;
-	ULONG  uRead;
+	int  uRead;
 
-	if (!ReadFile(hInput, lpStr, sizeof(lpStr)-1, &uRead, NULL)) {
+	uRead = ReadUntilEOF(hInput, lpStr, sizeof(lpStr)-1);
+	if (uRead < 0) {
 		fprintf(stderr, "failed to read stdin: %d\n", GetLastError());
 		return FALSE;
 	}
