@@ -28,6 +28,7 @@ TARGETLIBS=\
 	..\libs\*\gntmem.lib \
 	..\libs\*\evtchn.lib \
 	..\libs\*\libxs.lib \
+	..\libs\*\qubes_utils.lib \
 	..\libs\*\libvchan.lib
 
 

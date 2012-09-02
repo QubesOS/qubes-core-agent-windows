@@ -11,6 +11,7 @@
 #include "gui-progress.h"
 #include "filecopy.h"
 #include "crc32.h"
+#include "utf8_conv.h"
 
 HANDLE STDIN = INVALID_HANDLE_VALUE;
 HANDLE STDOUT = INVALID_HANDLE_VALUE;
@@ -72,30 +73,6 @@ void wait_for_result()
 	}
 }
 
-#ifdef UNICODE
-PUCHAR ConvertUTF16ToUTF8(PWCHAR pwszUtf16, size_t *pcbUtf8) {
-	PUCHAR pszUtf8;
-	size_t cbUtf8;
-
-	/* convert filename from UTF-16 to UTF-8 */
-	/* calculate required size */
-	cbUtf8 = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pwszUtf16, -1, NULL, 0, NULL, NULL);
-	if (!cbUtf8) {
-		return NULL;
-	}
-	pszUtf8 = malloc(sizeof(PUCHAR)*cbUtf8);
-	if (!pszUtf8) {
-		return NULL;
-	}
-	if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pwszUtf16, -1, pszUtf8, cbUtf8, NULL, NULL)) {
-		free(pszUtf8);
-		return NULL;
-	}
-	*pcbUtf8 = cbUtf8 - 1; /* without terminating NULL character */
-	return pszUtf8;
-}
-#endif
-
 #define UNIX_EPOCH_OFFSET 11644478640LL
 
 void convertWindowTimeToUnix(PFILETIME srctime, unsigned int *puDstTime, unsigned int *puDstTimeNsec) {
@@ -115,8 +92,7 @@ void write_headers(struct file_header *hdr, PTCHAR pszFilename)
 	PUCHAR pszFilenameUtf8 = NULL;
 	size_t cbFilenameUtf8;
 
-	pszFilenameUtf8 = ConvertUTF16ToUTF8(pszFilename, &cbFilenameUtf8);
-	if (!pszFilenameUtf8)
+	if (FAILED(ConvertUTF16ToUTF8(pszFilename, &pszFilenameUtf8, &cbFilenameUtf8)))
 		gui_fatal(TEXT("Cannot convert path '%s' to UTF-8"), pszFilename);
 	hdr->namelen = cbFilenameUtf8;
 	if (!write_all_with_crc(STDOUT, hdr, sizeof(*hdr))

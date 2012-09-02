@@ -22,6 +22,7 @@ TARGETLIBS=\
         $(SDK_LIB_PATH)\Shlwapi.lib \
         $(SDK_LIB_PATH)\User32.lib \
         ..\libs\*\filecopy_common.lib \
+        ..\..\libs\*\qubes_utils.lib \
         $(SDK_LIB_PATH)\Shell32.lib \
         $(SDK_LIB_PATH)\Comctl32.lib
 

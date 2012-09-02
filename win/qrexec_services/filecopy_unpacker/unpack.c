@@ -10,6 +10,7 @@
 #include "linux.h"
 #include "filecopy.h"
 #include "crc32.h"
+#include "utf8_conv.h"
 
 char untrusted_namebuf[MAX_PATH_LENGTH];
 long long bytes_limit = 0;
@@ -29,45 +30,6 @@ static __inline void internal_fatal(const PWCHAR fmt, ...) {
 	gui_fatal(L"Internal error");
 }
 #endif
-
-ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
-{
-	HRESULT	hResult;
-	ULONG	uResult;
-	size_t	cchUTF8;
-	int	cchUTF16;
-	PWCHAR	pwszUtf16;
-
-
-	hResult = StringCchLengthA(pszUtf8, STRSAFE_MAX_CCH, &cchUTF8);
-	if (FAILED(hResult)) {
-		internal_fatal(L"UTF8ToUTF16(): StringCchLengthA() failed with error %d\n", hResult);
-		return hResult;
-	}
-
-	cchUTF16 = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, NULL, 0);
-	if (!cchUTF16) {
-		uResult = GetLastError();
-		internal_fatal(L"UTF8ToUTF16(): MultiByteToWideChar() failed with error %d\n", uResult);
-		return uResult;
-	}
-
-	pwszUtf16 = malloc(cchUTF16 * sizeof(WCHAR));
-	if (!pwszUtf16)
-		return ERROR_NOT_ENOUGH_MEMORY;
-
-	uResult = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, pwszUtf16, cchUTF16);
-	if (!uResult) {
-		uResult = GetLastError();
-		internal_fatal(L"UTF8ToUTF16(): MultiByteToWideChar() failed with error %d\n", uResult);
-		return uResult;
-	}
-
-	pwszUtf16[cchUTF16 - 1] = L'\0';
-	*ppwszUtf16 = pwszUtf16;
-
-	return ERROR_SUCCESS;
-}
 
 void notify_progress(int p1, int p2)
 {
@@ -132,7 +94,7 @@ void process_one_file_reg(struct file_header *untrusted_hdr,
 	WCHAR	wszTrustedFilePath[MAX_PATH + 1];
 	HRESULT	hResult;
 
-	uResult = UTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName);
+	uResult = ConvertUTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName, NULL);
 	if (ERROR_SUCCESS != uResult)
 		do_exit(EINVAL);
 
@@ -183,7 +145,7 @@ void process_one_file_dir(struct file_header *untrusted_hdr,
 	WCHAR	wszTrustedDirectoryPath[MAX_PATH + 1];
 	HRESULT	hResult;
 
-	uResult = UTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName);
+	uResult = ConvertUTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName, NULL);
 	if (ERROR_SUCCESS != uResult)
 		do_exit(EINVAL);
 

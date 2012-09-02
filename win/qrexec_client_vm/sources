@@ -16,5 +16,6 @@ INCLUDES=$(INCLUDES); \
 SOURCES=qrexec_client_vm.c log.c
 
 TARGETLIBS=\
-        $(SDK_LIB_PATH)\kernel32.lib
+           $(SDK_LIB_PATH)\kernel32.lib \
+           ..\libs\*\qubes_utils.lib
 

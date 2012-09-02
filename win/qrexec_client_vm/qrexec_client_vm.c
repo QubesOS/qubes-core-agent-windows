@@ -5,7 +5,7 @@
 #include <strsafe.h>
 #include "qrexec.h"
 #include "log.h"
-
+#include "utf8_conv.h"
 
 ULONG CreatePipedProcessAsCurrentUser(
 		PTCHAR pszCommand,
@@ -72,56 +72,6 @@ ULONG CreatePipedProcessAsCurrentUser(
 	return ERROR_SUCCESS;
 }
 
-
-#ifdef UNICODE
-ULONG UTF16ToUTF8(PWCHAR pwszUtf16, PUCHAR *ppszUtf8)
-{
-	HRESULT	hResult;
-	ULONG	uResult;
-	int	cbUTF8;
-	size_t	cchUTF16;
-	PUCHAR	pszUtf8;
-	DWORD	dwConversionFlags;
-
-
-	hResult = StringCchLengthW(pwszUtf16, STRSAFE_MAX_CCH, &cchUTF16);
-	if (FAILED(hResult)) {
-		lprintf_err(hResult, "UTF16ToUTF8(): StringCchLengthW()");
-		return hResult;
-	}
-
-	// WC_ERR_INVALID_CHARS is defined for Vista and later only
-#if (WINVER >= 0x0600)
-	dwConversionFlags = WC_ERR_INVALID_CHARS;
-#else
-	dwConversionFlags = 0;
-#endif
-
-	cbUTF8 = WideCharToMultiByte(CP_UTF8, dwConversionFlags, pwszUtf16, cchUTF16 + 1, NULL, 0, NULL, NULL);
-	if (!cbUTF8) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "UTF16ToUTF8(): WideCharToMultiByte()");
-		return uResult;
-	}
-
-	pszUtf8 = malloc(cbUTF8);
-	if (!pszUtf8)
-		return ERROR_NOT_ENOUGH_MEMORY;
-
-	uResult = WideCharToMultiByte(CP_UTF8, dwConversionFlags, pwszUtf16, cchUTF16 + 1, pszUtf8, cbUTF8, NULL, NULL);
-	if (!uResult) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "UTF16ToUTF8(): WideCharToMultiByte()");
-		return uResult;
-	}
-
-	*ppszUtf8 = pszUtf8;
-
-	return ERROR_SUCCESS;
-}
-#endif
-
-
 ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
 {
 	DWORD	cbWritten;
@@ -186,7 +136,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 #ifdef UNICODE
 	pszParameter = NULL;
-	uResult = UTF16ToUTF8(argv[2], &pszParameter);
+	uResult = ConvertUTF16ToUTF8(argv[2], &pszParameter, NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "UTF16ToUTF8(): WideCharToMultiByte()");
 		return uResult;
@@ -205,7 +155,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	free(pszParameter);
 	pszParameter = NULL;
 
-	uResult = UTF16ToUTF8(argv[1], &pszParameter);
+	uResult = ConvertUTF16ToUTF8(argv[1], &pszParameter, NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "UTF16ToUTF8(): WideCharToMultiByte()");
 		return uResult;

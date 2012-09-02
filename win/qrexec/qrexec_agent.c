@@ -1,5 +1,6 @@
 #include "qrexec_agent.h"
 #include <Shlwapi.h>
+#include "utf8_conv.h"
 
 HANDLE	g_hAddExistingClientEvent;
 
@@ -266,47 +267,6 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 	return uResult;
 }
 
-
-ULONG UTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16)
-{
-	HRESULT	hResult;
-	ULONG	uResult;
-	size_t	cchUTF8;
-	int	cchUTF16;
-	PWCHAR	pwszUtf16;
-
-
-	hResult = StringCchLengthA(pszUtf8, STRSAFE_MAX_CCH, &cchUTF8);
-	if (FAILED(hResult)) {
-		lprintf_err(hResult, "UTF8ToUTF16(): StringCchLengthA()");
-		return hResult;
-	}
-
-	cchUTF16 = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, NULL, 0);
-	if (!cchUTF16) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "UTF8ToUTF16(): MultiByteToWideChar()");
-		return uResult;
-	}
-
-	pwszUtf16 = malloc(cchUTF16 * sizeof(WCHAR));
-	if (!pwszUtf16)
-		return ERROR_NOT_ENOUGH_MEMORY;
-
-	uResult = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, pszUtf8, cchUTF8 + 1, pwszUtf16, cchUTF16);
-	if (!uResult) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "UTF8ToUTF16(): MultiByteToWideChar()");
-		return uResult;
-	}
-
-	pwszUtf16[cchUTF16 - 1] = L'\0';
-	*ppwszUtf16 = pwszUtf16;
-
-	return ERROR_SUCCESS;
-}
-
-
 ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 {
 	size_t cbSkipChars = 0;
@@ -364,7 +324,7 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 
 	// Try UTF-8
 
-	uResult = UTF8ToUTF16(pszBuf + cbSkipChars, ppwszUtf16);
+	uResult = ConvertUTF8ToUTF16(pszBuf + cbSkipChars, ppwszUtf16, NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "TextBOMToUTF16(): UTF8ToUTF16()");
 		return uResult;
@@ -392,7 +352,7 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	*pbRunInteractively = TRUE;
 
 	pwszCommand = NULL;
-	uResult = UTF8ToUTF16(pszUtf8Command, &pwszCommand);
+	uResult = ConvertUTF8ToUTF16(pszUtf8Command, &pwszCommand, NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "ParseUtf8Command(): UTF8ToUTF16()");
 		return uResult;
