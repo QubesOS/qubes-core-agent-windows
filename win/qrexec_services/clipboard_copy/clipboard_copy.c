@@ -3,6 +3,7 @@
 #include <Shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
+#include "utf8_conv.h"
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -18,28 +19,6 @@ int write_all(HANDLE fd, void *buf, int size)
         written += ret;
     }
     return 1;
-}
-
-PUCHAR ConvertUTF16ToUTF8(PWCHAR pwszUtf16, size_t *pcbUtf8) {
-	PUCHAR pszUtf8;
-	size_t cbUtf8;
-
-	/* convert filename from UTF-16 to UTF-8 */
-	/* calculate required size */
-	cbUtf8 = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pwszUtf16, -1, NULL, 0, NULL, NULL);
-	if (!cbUtf8) {
-		return NULL;
-	}
-	pszUtf8 = malloc(sizeof(PUCHAR)*cbUtf8);
-	if (!pszUtf8) {
-		return NULL;
-	}
-	if (!WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, pwszUtf16, -1, pszUtf8, cbUtf8, NULL, NULL)) {
-		free(pszUtf8);
-		return NULL;
-	}
-	*pcbUtf8 = cbUtf8 - 1; /* without terminating NULL character */
-	return pszUtf8;
 }
 
 BOOL getClipboard(HWND hWin, HANDLE hOutput)
@@ -68,8 +47,7 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
 		return FALSE;
 	}
 
-	lpstr = ConvertUTF16ToUTF8(lpwstr, &cbStr);
-	if (!lpstr) {
+	if (FAILED(ConvertUTF16ToUTF8(lpwstr, &lpstr, &cbStr))) {
 		GlobalUnlock(hglb);
 		CloseClipboard();
 		return FALSE;
