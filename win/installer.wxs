@@ -66,6 +66,7 @@
                 <File Id='qubes.ClipboardCopy' Name='qubes.ClipboardCopy' DiskId='1' Source='qrexec_services\qubes.ClipboardCopy' KeyPath="no"/>
                 <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='qrexec_services\qubes.ClipboardPaste' KeyPath="no"/>
                 <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='qrexec_services\qubes.VMShell' KeyPath="no"/>
+                <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='qrexec_services\qubes.OpenInVM' KeyPath="no"/>
               </Component>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes_rpc_services'>
@@ -74,6 +75,7 @@
                 <File Id='qfile_unpacker.exe' Name='qfile_unpacker.exe' DiskId='1' Source='qrexec_services\filecopy_unpacker\bin\$(var.ARCHDIR)\qfile_unpacker.exe' KeyPath="no"/>
                 <File Id='clipboard_copy.exe' Name='clipboard_copy.exe' DiskId='1' Source='qrexec_services\clipboard_copy\bin\$(var.ARCHDIR)\clipboard_copy.exe' KeyPath="no"/>
                 <File Id='clipboard_paste.exe' Name='clipboard_paste.exe' DiskId='1' Source='qrexec_services\clipboard_paste\bin\$(var.ARCHDIR)\clipboard_paste.exe' KeyPath="no"/>
+                <File Id='vm_file_editor.exe' Name='vm_file_editor.exe' DiskId='1' Source='qrexec_services\vm_file_editor\bin\$(var.ARCHDIR)\vm_file_editor.exe' KeyPath="no"/>
               </Component>
             </Directory>
           </Directory>

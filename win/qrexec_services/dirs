@@ -1,1 +1,1 @@
-DIRS= filecopy_common filecopy_agent filecopy_unpacker clipboard_copy clipboard_paste
+DIRS= filecopy_common filecopy_agent filecopy_unpacker clipboard_copy clipboard_paste vm_file_editor
