@@ -6,12 +6,18 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <Strsafe.h>
-#include "gui-progress.h"
+#include "gui-fatal.h"
 
 typedef LONG NTSTATUS;
 
-extern HANDLE STDERR;
-extern HWND hDialog;
+HWND hDialog;
+
+show_error_t show_error_cb;
+
+void set_error_gui_callbacks(HWND hD, show_error_t cb) {
+	hDialog = hD;
+	show_error_cb = cb;
+}
 
 static void produce_message(int icon, const PTCHAR fmt, va_list args)
 {
@@ -50,10 +56,8 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 		return;
 	}
 
-	if (STDERR != INVALID_HANDLE_VALUE) {
-		// message for qrexec log in dom0
-		WriteFile(STDERR, buf, _tcslen(buf)*sizeof(TCHAR), &nWritten, NULL);
-	}
+	// message for qrexec log in dom0
+	_ftprintf(stderr, TEXT("%s"), buf);
 	MessageBox(hDialog, buf, TEXT("Qubes file copy error"), MB_OK | icon);
 	LocalFree(pMessage);
 }
@@ -61,7 +65,7 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 void gui_fatal(const PTCHAR fmt, ...)
 {
 	va_list args;
-	do_notify_progress(0, PROGRESS_FLAG_ERROR);
+	show_error_cb(1);
 	va_start(args, fmt);
 	produce_message(MB_ICONERROR, fmt, args);
 	va_end(args);
@@ -71,9 +75,9 @@ void gui_fatal(const PTCHAR fmt, ...)
 void gui_nonfatal(const PTCHAR fmt, ...)
 {
 	va_list args;
-	do_notify_progress(0, PROGRESS_FLAG_ERROR);
+	show_error_cb(1);
 	va_start(args, fmt);
 	produce_message(MB_ICONWARNING, fmt, args);
 	va_end(args);
-	do_notify_progress(0, PROGRESS_FLAG_NORMAL);
+	show_error_cb(0);
 }

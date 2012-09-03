@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <tchar.h>
 #include <commctrl.h>
+#include "gui-fatal.h"
 #include "gui-progress.h"
 
 extern INT64 total_size;
@@ -63,12 +64,21 @@ DWORD doTaskDialogThread(LPVOID lpThreadParameter)
 	return 0;
 }
 
+void switch_progressbar_to_red(int red) {
+	if (red)
+		do_notify_progress(0, PROGRESS_FLAG_ERROR);
+	else
+		do_notify_progress(0, PROGRESS_FLAG_NORMAL);
+}
+
+
 void createProgressWindow()
 {
 	hProgressWindowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)doTaskDialogThread, NULL, 0, NULL);
 	if (!hProgressWindowThread) {
 		// TODO: error handler
 	}
+	set_error_gui_callbacks(hDialog, switch_progressbar_to_red);
 }
 
 void do_notify_progress(long long written, int flag)
