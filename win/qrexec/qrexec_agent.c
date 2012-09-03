@@ -205,15 +205,19 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 
 
 	dwRead = 0;
-	GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE);
-
-	uResult = ERROR_SUCCESS;
-
-	if (dwRead) {
-		uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer, dwRead);
-		if (ERROR_SUCCESS != uResult)
-			lprintf_err(uResult, "ReturnPipeData(): ReturnData()");
+	if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE)) {
+		uResult = GetLastError();
+		lprintf_err(uResult, "ReturnPipeData(): GetOverlappedResult, client %d", client_id);
+		// send read error as EOF
+		dwRead = 0;
 	}
+
+	uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer, dwRead);
+	if (ERROR_SUCCESS != uResult)
+		lprintf_err(uResult, "ReturnPipeData(): ReturnData()");
+
+	if (!dwRead)
+		pPipeData->bPipeClosed = TRUE;
 
 	return uResult;
 }
@@ -1209,7 +1213,7 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 
 	uResult = ERROR_SUCCESS;
 
-	if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady) {
+	if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady && !pPipeData->bPipeClosed) {
 
 		memset(&pPipeData->ReadBuffer, 0, READ_BUFFER_SIZE);
 
@@ -1221,10 +1225,15 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 			&pPipeData->olRead)) {
 
 			// Last error is usually ERROR_IO_PENDING here because of the asynchronous read.
-			// But if the process has closed it would be ERROR_BROKEN_PIPE.
+			// But if the process has closed it would be ERROR_BROKEN_PIPE,
+			// in this case ReturnPipeData will send EOF notification and set bPipeClosed.
 			uResult = GetLastError();
 			if (ERROR_IO_PENDING == uResult)
 				pPipeData->bReadInProgress = TRUE;
+			if (ERROR_BROKEN_PIPE == uResult) {
+				SetEvent(pPipeData->olRead.hEvent);
+				pPipeData->bDataIsReady = TRUE;
+			}
 
 		} else {
 			// The read has completed synchronously. 

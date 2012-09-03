@@ -35,6 +35,7 @@ typedef struct _PIPE_DATA {
 	PIPE_TYPE	bPipeType;
 	BOOLEAN	bReadInProgress;
 	BOOLEAN	bDataIsReady;
+	BOOLEAN bPipeClosed;
 	OVERLAPPED	olRead;
 	CHAR	ReadBuffer[READ_BUFFER_SIZE + 1];
 } PIPE_DATA, *PPIPE_DATA;
