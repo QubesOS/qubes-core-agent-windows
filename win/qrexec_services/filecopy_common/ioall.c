@@ -75,6 +75,9 @@ int copy_fd_all(HANDLE fdout, HANDLE fdin)
 	char buf[4096];
 	for (;;) {
 		if (!ReadFile(fdin, buf, sizeof(buf), &ret, NULL)) {
+			// PIPE returns ERROR_BROKEN_PIPE instead of 0-bytes read on EOF
+			if (GetLastError() == ERROR_BROKEN_PIPE)
+				break;
 			perror_wrapper("read");
 			return 0;
 		}
