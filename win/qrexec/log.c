@@ -3,13 +3,14 @@
 
 #ifdef DBG
 
+HANDLE hLog = INVALID_HANDLE_VALUE;
+
 static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR szFormat, va_list Args)
 {
 	UCHAR	szMessage[2048];
 	UCHAR	szPid[20];
 	size_t	cchSize;
 	ULONG	nWritten;
-	HANDLE	hLog;
 
 	if (!szFormat)
 		return;
@@ -21,7 +22,8 @@ static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR
 
 	printf("%s%s", szMessage, pszErrorText ? pszErrorText : "");
 
-	hLog = CreateFile(LOG_FILE, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (hLog == INVALID_HANDLE_VALUE)
+		hLog = CreateFile(LOG_FILE, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hLog == INVALID_HANDLE_VALUE)
 		return;
 
@@ -39,7 +41,8 @@ static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR
 	if (pszErrorText && SUCCEEDED(StringCchLengthA(pszErrorText, cchMaxErrorTextSize, &cchSize)))
 		WriteFile(hLog, pszErrorText, cchSize, &nWritten, NULL);
 
-	CloseHandle(hLog);
+	// do not open+close log file at the cost of one leaked file handle
+	// CloseHandle(hLog);
 }
 
 
