@@ -38,8 +38,8 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 			PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
 			PIPE_TYPE_BYTE,
 			1,
-			512,
-			512,
+			4096,
+			4096,
 			50,	// the default timeout is 50ms
 			pSecurityAttributes);
 	if (!hReadPipe) {

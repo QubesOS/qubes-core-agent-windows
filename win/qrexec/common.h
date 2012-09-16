@@ -21,7 +21,8 @@
 //#define START_SERVICE_AFTER_INSTALLATION
 
 
-#define READ_BUFFER_SIZE	512
+// wr_ring_size[=1024] - sizeof(hdr)[=12]
+#define READ_BUFFER_SIZE	1012
 
 typedef enum {
 	PTYPE_INVALID = 0,

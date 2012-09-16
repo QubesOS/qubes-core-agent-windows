@@ -445,8 +445,8 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 					PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
 					PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
 					INSTANCES, // number of instances 
-					512, // output buffer size 
-					512, // input buffer size 
+					4096, // output buffer size
+					4096, // input buffer size
 					PIPE_TIMEOUT, // client time-out 
 					&sa);
 
