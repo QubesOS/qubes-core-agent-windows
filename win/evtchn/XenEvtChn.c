@@ -255,7 +255,7 @@ int xc_evtchn_unbind(HANDLE xce_handle, evtchn_port_t port) {
 
 	params.port = port;
 
-	if(!DeviceIoControl(xce_handle, IOCTL_EVTCHN_UNBIND, (LPVOID)&params, sizeof(params), NULL, 0, &bytes_written, NULL)) {
+	if(!DeviceIoControl(xce_handle, IOCTL_EVTCHN_UNBIND, (LPVOID)&params, sizeof(params), NULL, 0, &bytes_written, &ol)) {
 		if(GetLastError() != ERROR_IO_PENDING) {
 			CloseHandle(ol.hEvent);
 			return -1;
