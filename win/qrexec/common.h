@@ -36,6 +36,8 @@ typedef struct _PIPE_DATA {
 	BOOLEAN	bReadInProgress;
 	BOOLEAN	bDataIsReady;
 	BOOLEAN bPipeClosed;
+	BOOLEAN bVchanWritePending;
+	DWORD	dwSentBytes;
 	OVERLAPPED	olRead;
 	CHAR	ReadBuffer[READ_BUFFER_SIZE + 1];
 } PIPE_DATA, *PPIPE_DATA;
@@ -47,6 +49,8 @@ typedef struct _CLIENT_INFO {
 	HANDLE	hProcess;
 	HANDLE	hWriteStdinPipe;
 	BOOLEAN	bStdinPipeClosed;
+	BOOLEAN	bChildExited;
+	DWORD	dwExitCode;
 
 	BOOLEAN	bReadingIsDisabled;
 
@@ -76,7 +80,8 @@ ULONG ReturnData(
 	int client_id,
 	int type,
 	PVOID pData,
-	ULONG uDataSize
+	ULONG uDataSize,
+	PULONG puDataWritten
 );
 
 ULONG send_exit_code(

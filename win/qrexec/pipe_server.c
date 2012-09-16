@@ -325,7 +325,7 @@ ULONG SendParametersToDaemon(ULONG i)
 
 	LeaveCriticalSection(&g_PipesCriticalSection);
 
-	uResult = ReturnData(0, MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING, &params, sizeof(params));
+	uResult = ReturnData(0, MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING, &params, sizeof(params), NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "SendParametersToDaemon(): ReturnData()");
 		return uResult;

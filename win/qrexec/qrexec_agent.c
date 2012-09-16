@@ -105,12 +105,36 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 }
 
 
-ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
+ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG puDataWritten)
 {
 	struct server_header s_hdr;
+	int vchan_space_avail;
+	ULONG uResult = ERROR_SUCCESS;
 
 
 	EnterCriticalSection(&g_VchanCriticalSection);
+
+	if (puDataWritten) {
+		// allow partial write only when puDataWritten given
+		*puDataWritten = 0;
+		vchan_space_avail = buffer_space_vchan_ext();
+		if (vchan_space_avail < sizeof(s_hdr)) {
+			LeaveCriticalSection(&g_VchanCriticalSection);
+			return ERROR_INSUFFICIENT_BUFFER;
+		}
+		// inhibit zero-length write when not requested
+		if (uDataSize && vchan_space_avail == sizeof(s_hdr)) {
+			LeaveCriticalSection(&g_VchanCriticalSection);
+			return ERROR_INSUFFICIENT_BUFFER;
+		}
+
+		if (vchan_space_avail < sizeof(s_hdr)+uDataSize) {
+			uResult = ERROR_INSUFFICIENT_BUFFER;
+			uDataSize = vchan_space_avail - sizeof(s_hdr);
+		}
+
+		*puDataWritten = uDataSize;
+	}
 
 	s_hdr.type = type;
 	s_hdr.client_id = client_id;
@@ -133,7 +157,7 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize)
 	}
 
 	LeaveCriticalSection(&g_VchanCriticalSection);
-	return ERROR_SUCCESS;
+	return uResult;
 }
 
 
@@ -142,7 +166,7 @@ ULONG send_exit_code(int client_id, int status)
 	ULONG	uResult;
 
 
-	uResult = ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status));
+	uResult = ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status), NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "send_exit_code(): ReturnData()");
 		return uResult;
@@ -173,6 +197,7 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	int	message_type;
 	PCLIENT_INFO	pClientInfo;
 	ULONG	uResult;
+	ULONG	uDataSent;
 
 
 	uResult = ERROR_SUCCESS;
@@ -207,17 +232,23 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	dwRead = 0;
 	if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE)) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "ReturnPipeData(): GetOverlappedResult, client %d", client_id);
-		// send read error as EOF
-		dwRead = 0;
+		lprintf_err(uResult, "ReturnPipeData(): GetOverlappedResult, client %d, dwRead %d", client_id, dwRead);
 	}
 
-	uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer, dwRead);
-	if (ERROR_SUCCESS != uResult)
+	uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent);
+	if (ERROR_INSUFFICIENT_BUFFER == uResult) {
+		pPipeData->dwSentBytes += uDataSent;
+		pPipeData->bVchanWritePending = TRUE;
+		return uResult;
+	} else if (ERROR_SUCCESS != uResult)
 		lprintf_err(uResult, "ReturnPipeData(): ReturnData()");
 
-	if (!dwRead)
+	pPipeData->bVchanWritePending = FALSE;
+
+	if (!dwRead) {
 		pPipeData->bPipeClosed = TRUE;
+		uResult = ERROR_HANDLE_EOF;
+	}
 
 	return uResult;
 }
@@ -708,6 +739,35 @@ VOID RemoveAllClients()
 			RemoveClientNoLocks(&g_Clients[uClientNumber]);
 
 	LeaveCriticalSection(&g_ClientsCriticalSection);
+}
+
+// must be called with g_ClientsCriticalSection
+ULONG PossiblyHandleTerminatedClientNoLocks(PCLIENT_INFO pClientInfo)
+{
+	ULONG uResult;
+
+	if (pClientInfo->bChildExited && pClientInfo->Stdout.bPipeClosed && pClientInfo->Stderr.bPipeClosed) {
+		uResult = send_exit_code(pClientInfo->client_id, pClientInfo->dwExitCode);
+		// guaranted that all data was already sent (above bPipeClosed==TRUE)
+		// so no worry about returning some data after exit code
+		RemoveClientNoLocks(pClientInfo);
+		return uResult;
+	}
+	return ERROR_SUCCESS;
+}
+
+ULONG PossiblyHandleTerminatedClient(PCLIENT_INFO pClientInfo)
+{
+	ULONG uResult;
+
+	if (pClientInfo->bChildExited && pClientInfo->Stdout.bPipeClosed && pClientInfo->Stderr.bPipeClosed) {
+		uResult = send_exit_code(pClientInfo->client_id, pClientInfo->dwExitCode);
+		// guaranted that all data was already sent (above bPipeClosed==TRUE)
+		// so no worry about returning some data after exit code
+		RemoveClient(pClientInfo);
+		return uResult;
+	}
+	return ERROR_SUCCESS;
 }
 
 // Recognize magic RPC request command ("QUBESRPC") and replace it with real
@@ -1210,9 +1270,10 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 		!pPipeData)
 		return 0;
 
-	if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady && !pPipeData->bPipeClosed) {
+	if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady && !pPipeData->bPipeClosed && !pPipeData->bVchanWritePending) {
 
 		memset(&pPipeData->ReadBuffer, 0, READ_BUFFER_SIZE);
+		pPipeData->dwSentBytes = 0;
 
 		if (!ReadFile(
 			pPipeData->hReadPipe, 
@@ -1247,6 +1308,7 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 		}
 	}
 
+	// when bVchanWritePending==TRUE, ReturnPipeData already reset bReadInProgress and bDataIsReady
 	if (pPipeData->bReadInProgress || pPipeData->bDataIsReady) {
 
 		g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
@@ -1337,9 +1399,11 @@ ULONG WatchForEvents()
 
 			if (g_Clients[uClientNumber].bClientIsReady) {
 
-				g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
-				g_HandlesInfo[uEventNumber].bType = HTYPE_PROCESS;
-				g_WatchedEvents[uEventNumber++] = g_Clients[uClientNumber].hProcess;
+				if (!g_Clients[uClientNumber].bChildExited) {
+					g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
+					g_HandlesInfo[uEventNumber].bType = HTYPE_PROCESS;
+					g_WatchedEvents[uEventNumber++] = g_Clients[uClientNumber].hProcess;
+				}
 
 				if (!g_Clients[uClientNumber].bReadingIsDisabled) {
 					// Skip those clients which have received MSG_XOFF.
@@ -1383,9 +1447,10 @@ ULONG WatchForEvents()
 					int client_id;
 
 					client_id = pClientInfo->client_id;
-					// ensure that all data is sent before exit code
-					RemoveClientNoLocks(pClientInfo);
-					uResult = send_exit_code(client_id, dwExitCode);
+					pClientInfo->bChildExited = TRUE;
+					pClientInfo->dwExitCode = dwExitCode;
+					// send exit code only when all data was sent to the daemon
+					uResult = PossiblyHandleTerminatedClientNoLocks(pClientInfo);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
@@ -1491,6 +1556,42 @@ ULONG WatchForEvents()
 					}
 
 					LeaveCriticalSection(&g_VchanCriticalSection);
+
+					EnterCriticalSection(&g_ClientsCriticalSection);
+
+					for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++) {
+
+						if (g_Clients[uClientNumber].bClientIsReady && !g_Clients[uClientNumber].bReadingIsDisabled) {
+							if (g_Clients[uClientNumber].Stdout.bVchanWritePending) {
+								uResult = ReturnPipeData(g_Clients[uClientNumber].client_id, &g_Clients[uClientNumber].Stdout);
+								if (ERROR_HANDLE_EOF == uResult) {
+									PossiblyHandleTerminatedClientNoLocks(&g_Clients[uClientNumber]);
+								} else if (ERROR_INSUFFICIENT_BUFFER == uResult) {
+									// no more space in vchan
+									break;
+								} else if (ERROR_SUCCESS != uResult) {
+									bVchanReturnedError = TRUE;
+									lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDOUT)");
+								}
+							}
+							if (g_Clients[uClientNumber].Stderr.bVchanWritePending) {
+								uResult = ReturnPipeData(g_Clients[uClientNumber].client_id, &g_Clients[uClientNumber].Stderr);
+								if (ERROR_HANDLE_EOF == uResult) {
+									PossiblyHandleTerminatedClientNoLocks(&g_Clients[uClientNumber]);
+								} else if (ERROR_INSUFFICIENT_BUFFER == uResult) {
+									// no more space in vchan
+									break;
+								} else if (ERROR_SUCCESS != uResult) {
+									bVchanReturnedError = TRUE;
+									lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDERR)");
+								}
+							}
+						}
+					}
+
+					LeaveCriticalSection(&g_ClientsCriticalSection);
+
+
 					break;
 
 				case HTYPE_STDOUT:
@@ -1501,7 +1602,9 @@ ULONG WatchForEvents()
 					uResult = ReturnPipeData(
 							g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
 							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout);
-					if (ERROR_SUCCESS != uResult) {
+					if (ERROR_HANDLE_EOF == uResult) {
+						PossiblyHandleTerminatedClient(&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber]);
+					} else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDOUT)");
 					}
@@ -1515,7 +1618,9 @@ ULONG WatchForEvents()
 					uResult = ReturnPipeData(
 							g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
 							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
-					if (ERROR_SUCCESS != uResult) {
+					if (ERROR_HANDLE_EOF == uResult) {
+						PossiblyHandleTerminatedClient(&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber]);
+					} else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDERR)");
 					}
@@ -1530,10 +1635,10 @@ ULONG WatchForEvents()
 						dwExitCode = ERROR_SUCCESS;
 					}
 
-					client_id = pClientInfo->client_id;
-					RemoveClient(pClientInfo);
-
-					uResult = send_exit_code(client_id, dwExitCode);
+					pClientInfo->bChildExited = TRUE;
+					pClientInfo->dwExitCode = dwExitCode;
+					// send exit code only when all data was sent to the daemon
+					uResult = PossiblyHandleTerminatedClient(pClientInfo);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
