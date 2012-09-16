@@ -1347,7 +1347,7 @@ ULONG WatchForEvents()
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	lprintf("WatchForEvents(): Awaiting for a vchan client\n");
+	lprintf("WatchForEvents(): Awaiting for a vchan client, write ring size: %d\n", buffer_space_vchan_ext());
 
 	evtchn = libvchan_fd_for_select(ctrl);
 
