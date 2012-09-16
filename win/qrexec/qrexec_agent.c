@@ -1199,7 +1199,7 @@ ULONG handle_server_data()
 
 
 
-
+// returns number of filled events (0 or 1)
 ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType, PIPE_DATA *pPipeData)
 {
 	ULONG	uResult;
@@ -1208,10 +1208,7 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 	if (uEventNumber >= RTL_NUMBER_OF(g_WatchedEvents) || 
 		uClientNumber >= RTL_NUMBER_OF(g_Clients) ||
 		!pPipeData)
-		return ERROR_INVALID_PARAMETER;
-
-
-	uResult = ERROR_SUCCESS;
+		return 0;
 
 	if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady && !pPipeData->bPipeClosed) {
 
@@ -1255,10 +1252,11 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 		g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
 		g_HandlesInfo[uEventNumber].bType = bHandleType;
 		g_WatchedEvents[uEventNumber] = pPipeData->olRead.hEvent;
+		return 1;
 	}
 
 
-	return uResult;
+	return 0;
 }
 
 
@@ -1345,8 +1343,8 @@ ULONG WatchForEvents()
 
 				if (!g_Clients[uClientNumber].bReadingIsDisabled) {
 					// Skip those clients which have received MSG_XOFF.
-					FillAsyncIoData(uEventNumber++, uClientNumber, HTYPE_STDOUT, &g_Clients[uClientNumber].Stdout);
-					FillAsyncIoData(uEventNumber++, uClientNumber, HTYPE_STDERR, &g_Clients[uClientNumber].Stderr);
+					uEventNumber += FillAsyncIoData(uEventNumber, uClientNumber, HTYPE_STDOUT, &g_Clients[uClientNumber].Stdout);
+					uEventNumber += FillAsyncIoData(uEventNumber, uClientNumber, HTYPE_STDERR, &g_Clients[uClientNumber].Stderr);
 				}
 			}
 		}
