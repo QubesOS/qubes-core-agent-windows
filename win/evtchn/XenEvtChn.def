@@ -10,4 +10,4 @@ xc_evtchn_unbind
 xc_evtchn_pending
 xc_evtchn_pending_with_flush
 xc_evtchn_unmask
-
+xc_evtchn_reset

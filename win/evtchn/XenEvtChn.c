@@ -371,3 +371,34 @@ int xc_evtchn_unmask(HANDLE xce_handle, evtchn_port_t port) {
 	}
 
 }
+
+/*
+ * Reset event channel ring. This clears all pending events and (more important) clears error flag.
+ * Returns -1 on failure, in which case call GetLastError for more information.
+ */
+int xc_evtchn_reset(HANDLE xce_handle) {
+
+	DWORD bytes_written;
+	OVERLAPPED ol;
+
+
+	memset(&ol, 0, sizeof(ol));
+	ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+
+	if(!DeviceIoControl(xce_handle, IOCTL_EVTCHN_RESET, NULL, 0, NULL, 0, &bytes_written, &ol)) {
+		if(GetLastError() != ERROR_IO_PENDING) {
+			CloseHandle(ol.hEvent);
+			return -1;
+		}
+	}
+
+	if(!GetOverlappedResult(xce_handle, &ol, &bytes_written, TRUE)) {
+		CloseHandle(ol.hEvent);
+		return -1;
+	}
+	else {
+		CloseHandle(ol.hEvent);
+		return 0;
+	}
+
+}

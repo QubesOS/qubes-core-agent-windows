@@ -98,6 +98,12 @@ xc_evtchn_pending_with_flush(HANDLE xce_handle);
  */
 int xc_evtchn_unmask(HANDLE xce_handle, evtchn_port_t port);
 
+/*
+ * Reset event channel ring. This clears all pending events and (more important) clears error flag.
+ * Returns -1 on failure, in which case call GetLastError for more information.
+ */
+int xc_evtchn_reset(HANDLE xce_handle);
+
 #ifdef __cplusplus
 }
 #endif
