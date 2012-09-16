@@ -64,7 +64,7 @@ void wait_for_result()
 				gui_fatal(TEXT("File copy: Corrupted data from packer"));
 				break;
 			default:
-				gui_fatal(TEXT("File copy: %s"),
+				gui_fatal(TEXT("File copy: %hs"),
 						strerror(hdr.error_code));
 		}
 	}

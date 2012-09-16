@@ -7,6 +7,7 @@ TARGETPATH=..\libs
 USE_MSVCRT=1
 
 DLLDEF=filecopy_common.def
+C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 
 INCLUDES=$(INCLUDES); \
                     $(DDK_INC_PATH)\wdm; \
