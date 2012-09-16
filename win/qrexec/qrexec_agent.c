@@ -1530,7 +1530,23 @@ ULONG WatchForEvents()
 					}
 
 					if (!GetOverlappedResult(evtchn, &ol, &i, FALSE)) {
-						if (GetLastError() != ERROR_OPERATION_ABORTED) {
+						if (GetLastError() == ERROR_IO_DEVICE) {
+							// in case of ring overflow, above libvchan_wait
+							// already reseted the evtchn ring, so ignore this
+							// error as already handled
+							//
+							// Overflow can happen when below loop ("while
+							// (read_ready_vchan_ext())") handle a lot of data
+							// in the same time as qrexec-daemon writes it -
+							// there where be no libvchan_wait call (which
+							// receive the events from the ring), but one will
+							// be signaled after each libvchan_write in
+							// qrexec-daemon. I don't know how to fix it
+							// properly (without introducing any race
+							// condition), so reset the evtchn ring (do not
+							// confuse with vchan ring, which stays untouched)
+							// in case of overflow.
+						} else if (GetLastError() != ERROR_OPERATION_ABORTED) {
 							lprintf_err(GetLastError(), "WatchForEvents(): GetOverlappedResult(evtchn)");
 							bVchanReturnedError = TRUE;
 							break;
