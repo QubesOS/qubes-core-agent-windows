@@ -72,6 +72,7 @@
                 <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='qrexec_services\qubes.ClipboardPaste' KeyPath="no"/>
                 <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='qrexec_services\qubes.VMShell' KeyPath="no"/>
                 <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='qrexec_services\qubes.OpenInVM' KeyPath="no"/>
+                <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='qrexec_services\qubes.WaitForSession' KeyPath="no"/>
               </Component>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes_rpc_services'>
@@ -82,6 +83,7 @@
                 <File Id='clipboard_paste.exe' Name='clipboard_paste.exe' DiskId='1' Source='qrexec_services\clipboard_paste\bin\$(var.ARCHDIR)\clipboard_paste.exe' KeyPath="no"/>
                 <File Id='vm_file_editor.exe' Name='vm_file_editor.exe' DiskId='1' Source='qrexec_services\vm_file_editor\bin\$(var.ARCHDIR)\vm_file_editor.exe' KeyPath="no"/>
                 <File Id='open_in_vm.exe' Name='open_in_vm.exe' DiskId='1' Source='qrexec_services\open_in_vm\bin\$(var.ARCHDIR)\open_in_vm.exe' KeyPath="no"/>
+                <File Id='wait_for_logon.exe' Name='wait_for_logon.exe' DiskId='1' Source='qrexec_services\wait_for_logon\bin\$(var.ARCHDIR)\wait_for_logon.exe' KeyPath="no"/>
               </Component>
             </Directory>
           </Directory>
