@@ -418,6 +418,10 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 
 		*pbRunInteractively = FALSE;
 	}
+
+	if (!wcscmp(pwszUserName, L"SYSTEM") || !wcscmp(pwszUserName, L"root")) {
+		pwszUserName = NULL;
+	}
 	
 	*ppwszCommand = pwszCommand;
 	*ppwszUserName = pwszUserName;
