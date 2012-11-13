@@ -108,7 +108,7 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG puDataWritten)
 {
 	struct server_header s_hdr;
-	int vchan_space_avail;
+	unsigned int vchan_space_avail;
 	ULONG uResult = ERROR_SUCCESS;
 
 
@@ -397,19 +397,18 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	pwSeparator = wcschr(pwszCommand, L':');
 	if (!pwSeparator) {
 		free(pwszCommand);
-		lprintf("ParseUtf8Command(): Command line is supposed to be in [nogui:]user:command form\n");
+		lprintf("ParseUtf8Command(): Command line is supposed to be in user:[nogui:]command form\n");
 		return ERROR_INVALID_PARAMETER;
 	}
 
 	*pwSeparator = L'\0';
 	pwSeparator++;
 
-	if (!wcscmp(pwszUserName, L"nogui")) {
-		pwszUserName = pwSeparator;
+	if (!wcsncmp(pwSeparator, L"nogui:", 6)) {
 		pwSeparator = wcschr(pwSeparator, L':');
 		if (!pwSeparator) {
 			free(pwszCommand);
-			lprintf("ParseUtf8Command(): Command line is supposed to be in [nogui:]user:command form\n");
+			lprintf("ParseUtf8Command(): Command line is supposed to be in user:[nogui:]command form\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 
