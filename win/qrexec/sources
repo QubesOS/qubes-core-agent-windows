@@ -12,7 +12,7 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
                     ..\include; \
-                    ..\..\vchan;
+                    $(QUBES_INCLUDES);
 
 SOURCES=qrexec_agent.c txrx-vchan.c service.c getopt.c log.c errors.mc errors.rc exec.c pipe_server.c
 
@@ -25,10 +25,10 @@ TARGETLIBS=\
         $(SDK_LIB_PATH)\advapi32.lib \
         $(SDK_LIB_PATH)\netapi32.lib \
         $(SDK_LIB_PATH)\Shlwapi.lib \
-	..\libs\*\gntmem.lib \
-	..\libs\*\evtchn.lib \
-	..\libs\*\libxs.lib \
-	..\libs\*\qubes_utils.lib \
-	..\libs\*\libvchan.lib
+        $(QUBES_LIBS)\libvchan.lib \
+        $(QUBES_LIBS)\libxenvchan.lib \
+        ..\libs\*\qubes_utils.lib \
 
+# TODO: Needs pkg-config equivalent for Windows to automatically fill above (at
+#  least libxenvchan.lib)
 

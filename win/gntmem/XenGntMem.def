@@ -1,6 +1,0 @@
-EXPORTS
-gntmem_open
-gntmem_close
-gntmem_set_local_quota
-gntmem_set_global_quota
-gntmem_grant_pages_to_domain
