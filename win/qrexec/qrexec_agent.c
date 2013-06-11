@@ -1374,7 +1374,6 @@ ULONG WatchForEvents()
 
 		uResult = ERROR_SUCCESS;
 
-		libvchan_prepare_to_select(ctrl);
 		// read 1 byte instead of sizeof(fired_port) to not flush fired port
 		// from evtchn buffer; evtchn driver will read only whole fired port
 		// numbers (sizeof(fired_port)), so this will end in zero-length read
@@ -1520,14 +1519,6 @@ ULONG WatchForEvents()
 
 						lprintf("WatchForEvents(): A vchan client has connected\n");
 
-						// Remove the xenstore device/vchan/N entry.
-						uResult = libvchan_server_handle_connected(ctrl);
-						if (uResult) {
-							lprintf_err(ERROR_INVALID_FUNCTION, "WatchForEvents(): libvchan_server_handle_connected()");
-							bVchanReturnedError = TRUE;
-							break;
-						}
-
 						bVchanClientConnected = TRUE;
 						break;
 					}
@@ -1558,7 +1549,7 @@ ULONG WatchForEvents()
 
 					EnterCriticalSection(&g_VchanCriticalSection);
 
-					if (libvchan_is_eof(ctrl)) {
+					if (!libvchan_is_open(ctrl)) {
 						bVchanReturnedError = TRUE;
 						LeaveCriticalSection(&g_VchanCriticalSection);
 						break;
@@ -1680,18 +1671,11 @@ ULONG WatchForEvents()
 			// OVERLAPPED structure.
 			WaitForSingleObject(ol.hEvent, INFINITE);
 
-	if (!bVchanClientConnected)
-		// Remove the xenstore device/vchan/N entry.
-		libvchan_server_handle_connected(ctrl);
-
 	// Cancel all the other pending IO.
 	RemoveAllClients();
 
 	if (bVchanClientConnected)
 		libvchan_close(ctrl);
-
-	// This is actually CloseHandle(evtchn)
-	xc_evtchn_close(ctrl->evfd);
 
 	CloseHandle(ol.hEvent);
 
@@ -1708,6 +1692,9 @@ VOID Usage()
 
 ULONG CheckForXenInterface()
 {
+
+    // TODO?
+#if 0
 	EVTCHN	xc;
 
 
@@ -1716,6 +1703,7 @@ ULONG CheckForXenInterface()
 		return ERROR_NOT_SUPPORTED;
 
 	xc_evtchn_close(xc);
+#endif
 	return ERROR_SUCCESS;
 }
 
