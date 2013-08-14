@@ -21,11 +21,20 @@ struct file_header {
 	*/
 };
 
+#pragma pack(1)
 struct result_header {
 	UINT32 error_code;
 	UINT32 _pad;
 	UINT64 crc32;
 };
+
+/* optional info about last processed file */
+#pragma pack(1)
+struct result_header_ext {
+	UINT32 last_namelen;
+	char last_name[0];
+};
+
 
 enum {
 	COPY_FILE_OK,

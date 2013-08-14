@@ -51,21 +51,45 @@ void notify_progress(int size, int flag)
 void wait_for_result()
 {
 	struct result_header hdr;
+	struct result_header_ext hdr_ext;
+	char last_filename[MAX_PATH + 1];
+	char last_filename_prefix[] = "; Last file: ";
+
 
 	if (!read_all(STDIN, &hdr, sizeof(hdr))) {
 		exit(1);	// hopefully remote has produced error message
 	}
+	if (!read_all(STDIN, &hdr_ext, sizeof(hdr_ext))) {
+		// remote used old result_header struct
+		hdr_ext.last_namelen = 0;
+	}
+	if (hdr_ext.last_namelen > MAX_PATH) {
+		// read only at most MAX_PATH chars
+		hdr_ext.last_namelen = MAX_PATH;
+	}
+	if (!read_all(STDIN, last_filename, hdr_ext.last_namelen)) {
+		fprintf(stderr, "Failed to get last filename\n");
+		hdr_ext.last_namelen = 0;
+	}
+	last_filename[hdr_ext.last_namelen] = '\0';
+	if (!hdr_ext.last_namelen)
+		/* set prefix to empty string */
+		last_filename_prefix[0] = '\0';
+
 	if (hdr.error_code != 0) {
 		switch (hdr.error_code) {
 			case EEXIST:
-				gui_fatal(TEXT("File copy: not overwriting existing file. Clean incoming dir, and retry copy"));
+				gui_fatal(TEXT("File copy: not overwriting existing file. Clean incoming dir, and retry copy%hs%hs"),
+						last_filename_prefix, last_filename);
 				break;
 			case EINVAL:
-				gui_fatal(TEXT("File copy: Corrupted data from packer"));
+				gui_fatal(TEXT("File copy: Corrupted data from packer%hs%hs"),
+						last_filename_prefix, last_filename);
 				break;
 			default:
-				gui_fatal(TEXT("File copy: %hs"),
-						strerror(hdr.error_code));
+				gui_fatal(TEXT("File copy: %hs%hs%hs"),
+						strerror(hdr.error_code),
+						last_filename_prefix, last_filename);
 		}
 	}
 	if (hdr.crc32 != crc32_sum) {
