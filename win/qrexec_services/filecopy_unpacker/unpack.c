@@ -172,18 +172,87 @@ void process_one_file_dir(struct file_header *untrusted_hdr,
 void process_one_file_link(struct file_header *untrusted_hdr,
 			   char *untrusted_name)
 {
-/*
 	char untrusted_content[MAX_PATH_LENGTH];
 	unsigned int filelen;
-	if (untrusted_hdr->filelen > MAX_PATH_LENGTH - 1)
+	PWCHAR	pszUtf16UntrustedName = NULL;
+	WCHAR	wszTrustedFilePath[MAX_PATH + 1];
+	PWCHAR	pwszUntrustedLinkTargetPath = NULL;
+	WCHAR	wszUntrustedLinkTargetAbsolutePath[MAX_PATH + 1];
+	BOOLEAN	bResult;
+	HRESULT	hResult;
+	ULONG	uResult;
+
+	BOOLEAN	bTargetIsFile = FALSE; /* default to directory links */
+
+
+	uResult = ConvertUTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName, NULL);
+	if (ERROR_SUCCESS != uResult)
+		do_exit(EINVAL);
+
+	hResult = StringCchPrintfW(
+			wszTrustedFilePath,
+			RTL_NUMBER_OF(wszTrustedFilePath),
+			L"%c:\\%s",
+			g_wcMappedDriveLetter,
+			pszUtf16UntrustedName);
+	free(pszUtf16UntrustedName);
+
+	if (FAILED(hResult))
+		do_exit(EINVAL);
+
+	if (untrusted_hdr->filelen > MAX_PATH - 1)
 		do_exit(ENAMETOOLONG);
-	filelen = untrusted_hdr->filelen;	// sanitized above
-	if (!read_all_with_crc(0, untrusted_content, filelen))
-		do_exit(LEGAL_EOF);	// hopefully remote has produced error message
+	filelen = (int)untrusted_hdr->filelen;	// sanitized above
+	if (!read_all_with_crc(STDIN, untrusted_content, filelen))
+		do_exit(EIO);
 	untrusted_content[filelen] = 0;
-	if (symlink(untrusted_content, untrusted_name))	// safe because of chroot
-		do_exit(errno);
-*/
+
+	uResult = ConvertUTF8ToUTF16(untrusted_content, &pwszUntrustedLinkTargetPath, NULL);
+	if (ERROR_SUCCESS != uResult)
+		do_exit(EINVAL);
+
+	/* TODO? sanitize link target path in any way? we don't allow to override
+	 * existing files, so this shouldn't be a problem to leave it alone */
+
+	/* try to determine if link target is a file or directory */
+	if (PathIsRelative(pwszUntrustedLinkTargetPath)) {
+		WCHAR wszTempPath[MAX_PATH + 1];
+
+		hResult = StringCchPrintfW(
+				wszTempPath,
+				RTL_NUMBER_OF(wszTempPath),
+				L"%c:\\%s",
+				g_wcMappedDriveLetter,
+				pwszUntrustedLinkTargetPath);
+		*(PathFindFileName(wszTempPath)) = L'\0';
+		if (!PathCombine(wszUntrustedLinkTargetAbsolutePath, wszTempPath, pwszUntrustedLinkTargetPath)) {
+			free(pwszUntrustedLinkTargetPath);
+			do_exit(EINVAL);
+		}
+		if (PathFileExists(wszUntrustedLinkTargetAbsolutePath) && !PathIsDirectory(wszUntrustedLinkTargetAbsolutePath)) {
+			bTargetIsFile = TRUE;
+		}
+	} else {
+		free(pwszUntrustedLinkTargetPath);
+		/* deny absolute links */
+		do_exit(EPERM);
+	}
+
+	bResult = CreateSymbolicLink(wszTrustedFilePath, pwszUntrustedLinkTargetPath,
+			bTargetIsFile ? 0x0 : SYMBOLIC_LINK_FLAG_DIRECTORY);
+
+	free(pwszUntrustedLinkTargetPath);
+
+	if (!bResult) {
+		if (GetLastError() == ERROR_FILE_EXISTS)
+			do_exit(EEXIST);
+		else if (GetLastError() == ERROR_ACCESS_DENIED)
+			do_exit(EACCES);
+		else if (GetLastError() == ERROR_PRIVILEGE_NOT_HELD)
+			do_exit(EPERM);
+		else
+			do_exit(EIO);
+	}
 }
 
 void process_one_file(struct file_header *untrusted_hdr)

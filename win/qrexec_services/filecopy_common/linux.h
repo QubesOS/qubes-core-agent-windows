@@ -1,5 +1,6 @@
 #pragma once
 
+#define EPERM            1      /* Operation not permitted */
 #define EIO              5      /* I/O error */
 #define EACCES          13      /* Permission denied */
 #define EEXIST          17      /* File exists */
