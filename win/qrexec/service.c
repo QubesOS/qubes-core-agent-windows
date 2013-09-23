@@ -1,15 +1,10 @@
 #include "service.h"
 
-
-
-
 HANDLE	g_hStopServiceEvent;
 
 static HANDLE	g_hServiceThread;
 static SERVICE_STATUS	g_ServiceStatus;
 static SERVICE_STATUS_HANDLE	g_hServiceStatus; 
-
-
 
 extern ULONG WINAPI ServiceExecutionThread(PVOID pParam);
 static VOID StopService();
@@ -22,12 +17,10 @@ ULONG UpdateServiceStatus(DWORD dwCurrentState,
 	ULONG	uResult;
 	static DWORD	dwCheckPoint = 1;
 
-
 	g_ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
 	g_ServiceStatus.dwCurrentState = dwCurrentState;
 	g_ServiceStatus.dwServiceSpecificExitCode = dwServiceSpecificExitCode;
 	g_ServiceStatus.dwWaitHint = dwWaitHint;
-
 
 	if (SERVICE_START_PENDING == dwCurrentState) {
 		g_ServiceStatus.dwControlsAccepted = 0;
@@ -46,7 +39,6 @@ ULONG UpdateServiceStatus(DWORD dwCurrentState,
 		g_ServiceStatus.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
 	}
 
-
 	if (!SetServiceStatus(g_hServiceStatus, &g_ServiceStatus)) {
 		uResult = GetLastError();
 		lprintf_err(uResult, "UpdateServiceStatus(): SetServiceStatus()");
@@ -56,7 +48,6 @@ ULONG UpdateServiceStatus(DWORD dwCurrentState,
 
 	return ERROR_SUCCESS;
 }
-
 
 static VOID StopService()
 {
@@ -68,9 +59,6 @@ static VOID StopService()
 	if (SERVICE_STOPPED != g_ServiceStatus.dwCurrentState)
 		UpdateServiceStatus(SERVICE_STOPPED, NO_ERROR, 0, 0);
 }
-
-
-
 
 static VOID WINAPI ServiceCtrlHandler(ULONG uControlCode)
 {
@@ -87,11 +75,9 @@ static VOID WINAPI ServiceCtrlHandler(ULONG uControlCode)
 	UpdateServiceStatus(g_ServiceStatus.dwCurrentState, NO_ERROR, 0, 0);
 }
 
-
 VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
 {
 	ULONG	uResult;
-
 
 	// Manual reset, initial state is not signaled
 	g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -132,7 +118,6 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
 	CloseHandle(g_hStopServiceEvent);
 }
 
-
 ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService, PDWORD pdwCurrentState, PDWORD pdwExitCode)
 {
 	SERVICE_STATUS_PROCESS ServiceStatus;
@@ -141,7 +126,6 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 	DWORD	dwStartTickCount;
 	DWORD	dwOldCheckPoint;
 	DWORD	dwWaitTime;
-
 
 	if (!pdwCurrentState || !pdwExitCode)
 		return ERROR_INVALID_PARAMETER;
@@ -219,7 +203,6 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 	return ERROR_SUCCESS;
 }
 
-
 ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrentState, DWORD *pdwExitCode, BOOLEAN *pbNothingToDo)
 {
 	ULONG	uResult;
@@ -228,13 +211,11 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
 	DWORD	dwBytesNeeded;
 	DWORD	dwPendingState;
 
-
 	if (!pdwCurrentState || !pdwExitCode)
 		return ERROR_INVALID_PARAMETER;
 
 	if (SERVICE_RUNNING != dwWantedState && SERVICE_STOPPED != dwWantedState)
 		return ERROR_INVALID_PARAMETER;
-
 
 	if (!QueryServiceStatusEx( 
 		hService, // handle to service 
@@ -274,6 +255,7 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
 			}
 		}
 		break;
+
 	case SERVICE_STOPPED:
 		dwPendingState = SERVICE_STOP_PENDING;
 
@@ -293,7 +275,6 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
 	return WaitForService(dwPendingState, dwWantedState, hService, pdwCurrentState, pdwExitCode);
 }
 
-
 ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToModule)
 {
 	TCHAR	szEventSourceKey[255];
@@ -303,11 +284,8 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 	size_t	cbSize;
 	DWORD	dwTypesSupported;
 
-
-
 	if (!pszEventSourceName || !pszPathToModule)
 		return ERROR_INVALID_PARAMETER;
-
 
 	hResult = StringCbLength(pszPathToModule, STRSAFE_MAX_CCH * sizeof(TCHAR), &cbSize);
 	if (FAILED(hResult)) {
@@ -328,7 +306,6 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 		lprintf_err(hResult, "CreateApplicationEventSource(): StringCchPrintf()");
 		return hResult;
 	}
-
 
 	uResult = RegCreateKeyEx(
 			HKEY_LOCAL_MACHINE,
@@ -374,11 +351,9 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 		return uResult;
 	}
 
-
 	RegCloseKey(hKey);
 	return ERROR_SUCCESS;
 }
-
 
 ULONG DeleteApplicationEventSource(PTCHAR pszEventSourceName)
 {
@@ -386,11 +361,8 @@ ULONG DeleteApplicationEventSource(PTCHAR pszEventSourceName)
 	HRESULT	hResult;
 	ULONG	uResult;
 
-
-
 	if (!pszEventSourceName)
 		return ERROR_INVALID_PARAMETER;
-
 
 	hResult = StringCchPrintf(
 			szEventSourceKey, 
@@ -409,10 +381,8 @@ ULONG DeleteApplicationEventSource(PTCHAR pszEventSourceName)
 		return uResult;
 	}
 
-
 	return ERROR_SUCCESS;
 }
-
 
 ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 {
@@ -421,7 +391,6 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 	ULONG	uResult;
 	DWORD	dwCurrentState;
 	DWORD	dwExitCode;
-
 
 	if (!pszServiceFileName || !pszServiceName)
 		return ERROR_INVALID_PARAMETER;
@@ -432,7 +401,6 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 		lprintf_err(uResult, "InstallService(): OpenSCManager()");
 		return uResult;
 	}
-
 
 	hService = CreateService(hScm,
 			pszServiceName,
@@ -455,7 +423,6 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 	}
 
 	lprintf("InstallService(): Service installed\n");
-
 
 	uResult = CreateApplicationEventSource(pszServiceName, pszServiceFileName);
 	if (ERROR_SUCCESS != uResult)
@@ -486,7 +453,6 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 	return ERROR_SUCCESS;
 }
 
-
 ULONG UninstallService(PTCHAR pszServiceName)
 {
 	SC_HANDLE	hService;
@@ -496,7 +462,6 @@ ULONG UninstallService(PTCHAR pszServiceName)
 	DWORD	dwCurrentState;
 	DWORD	dwExitCode;
 	BOOLEAN	bNothingToDo;
-
 
 	if (!pszServiceName)
 		return ERROR_INVALID_PARAMETER;
@@ -515,7 +480,6 @@ ULONG UninstallService(PTCHAR pszServiceName)
 		CloseServiceHandle(hScm);
 		return uResult;
 	}
-
 
 	uResult = ChangeServiceState(SERVICE_STOPPED, hService, &dwCurrentState, &dwExitCode, &bNothingToDo);
 	if (ERROR_SUCCESS != uResult)
@@ -545,7 +509,6 @@ ULONG UninstallService(PTCHAR pszServiceName)
 	if (ERROR_SUCCESS != uResult)
 		lprintf_err(uResult, "UninstallService(): DeleteApplicationEventSource()");
 
-
 	CloseServiceHandle(hService);
 	CloseServiceHandle(hScm);
 
@@ -566,7 +529,6 @@ ULONG ReportErrorToEventLog(ULONG uErrorMessageId)
 		lprintf_err(uResult, "ReportErrorToEventLog(): RegisterEventSource()");
 		return uResult;
 	}
-
 
 	lpszStrings[0] = SERVICE_NAME;
 

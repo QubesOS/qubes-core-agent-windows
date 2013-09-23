@@ -1,6 +1,6 @@
 #include "qrexec_agent.h"
-#include <Shlwapi.h>
 #include "utf8_conv.h"
+
 
 HANDLE	g_hAddExistingClientEvent;
 
@@ -26,7 +26,6 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 	HANDLE	hReadPipe;
 	HANDLE	hWritePipe;
 	ULONG	uResult;
-
 
 	if (!phReadPipe || !phWritePipe)
 		return ERROR_INVALID_PARAMETER;
@@ -69,12 +68,10 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 	return ERROR_SUCCESS;
 }
 
-
 ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 {
 	SECURITY_ATTRIBUTES	sa;
 	ULONG	uResult;
-
 
 	memset(pPipeData, 0, sizeof(PIPE_DATA));
 	memset(&sa, 0, sizeof(sa));
@@ -104,13 +101,13 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 	return ERROR_SUCCESS;
 }
 
-
 ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG puDataWritten)
 {
 	struct server_header s_hdr;
 	unsigned int vchan_space_avail;
 	ULONG uResult = ERROR_SUCCESS;
 
+	lprintf("ReturnData(%d), size %d\n", client_id, uDataSize);
 
 	EnterCriticalSection(&g_VchanCriticalSection);
 
@@ -160,11 +157,9 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 	return uResult;
 }
 
-
 ULONG send_exit_code(int client_id, int status)
 {
 	ULONG	uResult;
-
 
 	uResult = ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status), NULL);
 	if (ERROR_SUCCESS != uResult) {
@@ -182,14 +177,12 @@ PCLIENT_INFO FindClientById(int client_id)
 {
 	ULONG	uClientNumber;
 
-
 	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
 		if (client_id == g_Clients[uClientNumber].client_id)
 			return &g_Clients[uClientNumber];
 
 	return NULL;
 }
-
 
 ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 {
@@ -198,7 +191,6 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	PCLIENT_INFO	pClientInfo;
 	ULONG	uResult;
 	ULONG	uDataSent;
-
 
 	uResult = ERROR_SUCCESS;
 
@@ -216,7 +208,6 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	pPipeData->bReadInProgress = FALSE;
 	pPipeData->bDataIsReady = FALSE;
 
-
 	switch (pPipeData->bPipeType) {
 	case PTYPE_STDOUT:
 		message_type = MSG_AGENT_TO_SERVER_STDOUT;
@@ -227,7 +218,6 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	default:
 		return ERROR_INVALID_FUNCTION;
 	}
-
 
 	dwRead = 0;
 	if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE)) {
@@ -253,15 +243,12 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	return uResult;
 }
 
-
 ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 {
 	ULONG	uResult;
 
-
 	if (!pPipeData)
 		return ERROR_INVALID_PARAMETER;
-
 
 	uResult = ERROR_SUCCESS;
 
@@ -309,7 +296,6 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 	ULONG	uResult;
 	HRESULT	hResult;
 
-
 	if (!pszBuf || !cbBufLen || !ppwszUtf16)
 		return ERROR_INVALID_PARAMETER;
 
@@ -336,7 +322,7 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 		if (!pwszUtf16)
 			return ERROR_NOT_ENOUGH_MEMORY;
 
-		hResult = StringCbCopyW(pwszUtf16, cbBufLen - cbSkipChars + sizeof(WCHAR), (STRSAFE_LPCWSTR)(pszBuf + cbSkipChars));
+		hResult = StringCbCopyW(pwszUtf16, cbBufLen - cbSkipChars + sizeof(WCHAR), (wchar_t*)(pszBuf + cbSkipChars));
 		if (FAILED(hResult)) {
 			free(pwszUtf16);
 			lprintf_err(hResult, "TextBOMToUTF16(): StringCbCopyW()");
@@ -358,7 +344,6 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 	}
 
 	// Try UTF-8
-
 	uResult = ConvertUTF8ToUTF16(pszBuf + cbSkipChars, ppwszUtf16, NULL);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "TextBOMToUTF16(): UTF8ToUTF16()");
@@ -368,7 +353,6 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 	return ERROR_SUCCESS;
 }
 
-
 ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, PBOOLEAN pbRunInteractively)
 {
 	ULONG	uResult;
@@ -376,7 +360,6 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	PWCHAR	pwszCommandLine = NULL;
 	PWCHAR	pwSeparator = NULL;
 	PWCHAR	pwszUserName = NULL;
-
 
 	if (!pszUtf8Command || !pbRunInteractively)
 		return ERROR_INVALID_PARAMETER;
@@ -429,7 +412,6 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	return ERROR_SUCCESS;
 }
 
-
 ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *phPipeStdout, HANDLE *phPipeStderr)
 {
 	ULONG	uResult;
@@ -438,23 +420,20 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 	HANDLE	hPipeStdout = INVALID_HANDLE_VALUE;
 	HANDLE	hPipeStderr = INVALID_HANDLE_VALUE;
 
-
 	if (!pClientInfo || !phPipeStdin || !phPipeStdout || !phPipeStderr)
 		return ERROR_INVALID_PARAMETER;
-
 
 	memset(&sa, 0, sizeof(sa));
 	sa.nLength = sizeof(sa);
 	sa.bInheritHandle = TRUE; 
 	sa.lpSecurityDescriptor = NULL; 
 
-
-
 	uResult = InitReadPipe(&pClientInfo->Stdout, &hPipeStdout, PTYPE_STDOUT);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "CreateClientPipes(): InitReadPipe(STDOUT)");
 		return uResult;
 	}
+
 	uResult = InitReadPipe(&pClientInfo->Stderr, &hPipeStderr, PTYPE_STDERR);
 	if (ERROR_SUCCESS != uResult) {
 
@@ -464,7 +443,6 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 		lprintf_err(uResult, "CreateClientPipes(): InitReadPipe(STDERR)");
 		return uResult;
 	}
-
 
 	if (!CreatePipe(&hPipeStdin, &pClientInfo->hWriteStdinPipe, &sa, 0)) {
 		uResult = GetLastError();
@@ -490,12 +468,10 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 	return ERROR_SUCCESS;
 }
 
-
 // This routine may be called by pipe server threads, hence the critical section around g_Clients array is required.
 ULONG ReserveClientNumber(int client_id, PULONG puClientNumber)
 {
 	ULONG	uClientNumber;
-
 
 	EnterCriticalSection(&g_ClientsCriticalSection);
 
@@ -525,7 +501,6 @@ ULONG ReserveClientNumber(int client_id, PULONG puClientNumber)
 	return ERROR_SUCCESS;
 }
 
-
 ULONG ReleaseClientNumber(ULONG uClientNumber)
 {
 	if (uClientNumber >= MAX_CLIENTS)
@@ -540,7 +515,6 @@ ULONG ReleaseClientNumber(ULONG uClientNumber)
 
 	return ERROR_SUCCESS;
 }
-
 
 ULONG AddFilledClientInfo(ULONG uClientNumber, PCLIENT_INFO pClientInfo)
 {
@@ -557,7 +531,6 @@ ULONG AddFilledClientInfo(ULONG uClientNumber, PCLIENT_INFO pClientInfo)
 	return ERROR_SUCCESS;
 }
 
-
 ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOLEAN bRunInteractively)
 {
 	ULONG	uResult;
@@ -567,18 +540,15 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 	HANDLE	hPipeStdin = INVALID_HANDLE_VALUE;
 	ULONG	uClientNumber;
 
-
 	// if pwszUserName is NULL we run the process on behalf of the current user.
 	if (!pwszCommandLine)
 		return ERROR_INVALID_PARAMETER;
-
 
 	uResult = ReserveClientNumber(client_id, &uClientNumber);
 	if (ERROR_SUCCESS != uResult) {
 		lprintf_err(uResult, "AddClient(): ReserveClientNumber()");
 		return uResult;
 	}
-
 
 	if (pwszUserName)
 		lprintf("AddClient(): Running \"%S\" as user \"%S\"\n", pwszCommandLine, pwszUserName);
@@ -592,7 +562,6 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 	memset(&ClientInfo, 0, sizeof(ClientInfo));
 	ClientInfo.client_id = client_id;
-
 
 	uResult = CreateClientPipes(&ClientInfo, &hPipeStdin, &hPipeStdout, &hPipeStderr);
 	if (ERROR_SUCCESS != uResult) {
@@ -670,16 +639,13 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 	return ERROR_SUCCESS;
 }
 
-
 ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
 {
 	ULONG	uClientNumber;
 	ULONG	uResult;
 
-
 	if (!pClientInfo)
 		return ERROR_INVALID_PARAMETER;
-
 
 	uResult = ReserveClientNumber(client_id, &uClientNumber);
 	if (ERROR_SUCCESS != uResult) {
@@ -792,7 +758,6 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 	ULONG	uBytesRead;
 	ULONG	uPathLength;
 	PWCHAR	pwszServiceCommandLine = NULL;
-
 
 	if (!pwszCommandLine || !ppwszServiceCommandLine || !ppwszSourceDomainName)
 		return ERROR_INVALID_PARAMETER;
@@ -944,7 +909,6 @@ ULONG handle_connect_existing(int client_id, int len)
 	PCLIENT_INFO	pClientInfo;
 	DWORD	dwWritten;
 
-
 	if (!len)
 		return ERROR_SUCCESS;
 
@@ -958,7 +922,6 @@ ULONG handle_connect_existing(int client_id, int len)
 		lprintf_err(ERROR_INVALID_FUNCTION, "handle_connect_existing(): read_all_vchan_ext()");
 		return ERROR_INVALID_FUNCTION;
 	}
-
 
 	lprintf("handle_connect_existing(): client %d, ident %s\n", client_id, buf);
 
@@ -983,12 +946,10 @@ ULONG handle_exec(int client_id, int len)
 	PWCHAR	pwszRemoteDomainName = NULL;
 	BOOLEAN	bRunInteractively;
 
-
 	buf = malloc(len + 1);
 	if (!buf)
 		return ERROR_SUCCESS;
 	buf[len] = 0;
-
 
 	if (read_all_vchan_ext(buf, len) <= 0) {
 		free(buf);
@@ -1056,12 +1017,10 @@ ULONG handle_just_exec(int client_id, int len)
 	HANDLE	hProcess;
 	BOOLEAN	bRunInteractively;
 
-
 	buf = malloc(len + 1);
 	if (!buf)
 		return ERROR_SUCCESS;
 	buf[len] = 0;
-
 
 	if (read_all_vchan_ext(buf, len) <= 0) {
 		free(buf);
@@ -1142,7 +1101,6 @@ ULONG handle_input(int client_id, int len)
 	PCLIENT_INFO	pClientInfo;
 	DWORD	dwWritten;
 
-
 	// If pClientInfo is NULL after this it means we couldn't find a specified client.
 	// Read and discard any data in the channel in this case.
 	pClientInfo = FindClientById(client_id);
@@ -1171,7 +1129,6 @@ ULONG handle_input(int client_id, int len)
 			lprintf_err(GetLastError(), "handle_input(): WriteFile()");
 	}
 
-
 	free(buf);
 	return ERROR_SUCCESS;
 }
@@ -1179,7 +1136,6 @@ ULONG handle_input(int client_id, int len)
 void set_blocked_outerr(int client_id, BOOLEAN bBlockOutput)
 {
 	PCLIENT_INFO	pClientInfo;
-
 
 	pClientInfo = FindClientById(client_id);
 	if (!pClientInfo)
@@ -1192,7 +1148,6 @@ ULONG handle_server_data()
 {
 	struct server_header s_hdr;
 	ULONG	uResult;
-
 
 	if (read_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
 		lprintf_err(ERROR_INVALID_FUNCTION, "handle_server_data(): read_all_vchan_ext()");
@@ -1260,13 +1215,10 @@ ULONG handle_server_data()
 	return ERROR_SUCCESS;
 }
 
-
-
 // returns number of filled events (0 or 1)
 ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType, PIPE_DATA *pPipeData)
 {
 	ULONG	uResult;
-
 
 	if (uEventNumber >= RTL_NUMBER_OF(g_WatchedEvents) || 
 		uClientNumber >= RTL_NUMBER_OF(g_Clients) ||
@@ -1320,28 +1272,23 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 		return 1;
 	}
 
-
 	return 0;
 }
 
-
-
-
 ULONG WatchForEvents()
 {
-	EVTCHN	evtchn;
+	HANDLE	evtchn;
 	OVERLAPPED	ol;
 	unsigned int fired_port;
 	ULONG	i, uEventNumber, uClientNumber;
 	DWORD	dwSignaledEvent;
 	PCLIENT_INFO	pClientInfo;
 	DWORD	dwExitCode;
-	BOOLEAN	bVchanIoInProgress;
+	//BOOLEAN	bVchanIoInProgress;
 	ULONG	uResult;
 	BOOLEAN	bVchanReturnedError;
 	BOOLEAN	bVchanClientConnected;
 	int	client_id;
-
 
 	// This will not block.
 	uResult = peer_server_init(REXEC_PORT);
@@ -1353,17 +1300,20 @@ ULONG WatchForEvents()
 	lprintf("WatchForEvents(): Awaiting for a vchan client, write ring size: %d\n", buffer_space_vchan_ext());
 
 	evtchn = libvchan_fd_for_select(ctrl);
-
+	if (INVALID_HANDLE_VALUE == evtchn)
+	{
+		lprintf_err(GetLastError(), "WatchForEvents(): libvchan_fd_for_select failed");
+		return ERROR_INVALID_FUNCTION;
+	}
+	
 	memset(&ol, 0, sizeof(ol));
 	ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
-
 	bVchanClientConnected = FALSE;
-	bVchanIoInProgress = FALSE;
+	//bVchanIoInProgress = FALSE;
 	bVchanReturnedError = FALSE;
 
 	for (;;) {
-
 		uEventNumber = 0;
 
 		// Order matters.
@@ -1373,28 +1323,15 @@ ULONG WatchForEvents()
 		g_HandlesInfo[0].bType = g_HandlesInfo[1].bType = HTYPE_INVALID;
 
 		uResult = ERROR_SUCCESS;
-
-		// read 1 byte instead of sizeof(fired_port) to not flush fired port
-		// from evtchn buffer; evtchn driver will read only whole fired port
-		// numbers (sizeof(fired_port)), so this will end in zero-length read
-		if (!ReadFile(evtchn, &fired_port, 1, NULL, &ol)) {
-			uResult = GetLastError();
-			if (ERROR_IO_PENDING != uResult) {
-				lprintf_err(uResult, "WatchForEvents(): Vchan async read");
-				bVchanReturnedError = TRUE;
-				break;
-			}
-		}
-
-		bVchanIoInProgress = TRUE;
-
+		//libvchan_prepare_to_select(ctrl);
+		//bVchanIoInProgress = TRUE;
+		
 		if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult) {
 			g_HandlesInfo[uEventNumber].uClientNumber = FREE_CLIENT_SPOT_ID;
 			g_HandlesInfo[uEventNumber].bType = HTYPE_VCHAN;
 			g_WatchedEvents[uEventNumber++] = ol.hEvent;
 		}
-
-
+		
 		EnterCriticalSection(&g_ClientsCriticalSection);
 
 		for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++) {
@@ -1416,9 +1353,12 @@ ULONG WatchForEvents()
 		}
 		LeaveCriticalSection(&g_ClientsCriticalSection);
 
-
 		dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
+
+		lprintf("signaled\n");
+
 		if (dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS) {
+			lprintf("WatchForEvents(): dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS");
 
 			uResult = GetLastError();
 			if (ERROR_INVALID_HANDLE != uResult) {
@@ -1457,7 +1397,6 @@ ULONG WatchForEvents()
 						bVchanReturnedError = TRUE;
 						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
 					}
-
 				}
 			}
 			LeaveCriticalSection(&g_ClientsCriticalSection);
@@ -1465,12 +1404,11 @@ ULONG WatchForEvents()
 			continue;
 
 		} else {
-
 			if (0 == dwSignaledEvent)
 				// g_hStopServiceEvent is signaled
 				break;
 
-
+			/*
 			if (HTYPE_VCHAN != g_HandlesInfo[dwSignaledEvent].bType) {
 				// If this is not a vchan event, cancel the event channel read so that libvchan_write() calls
 				// could issue their own libvchan_wait on the same channel, and not interfere with the
@@ -1479,8 +1417,9 @@ ULONG WatchForEvents()
 					// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
 					// OVERLAPPED structure.
 					WaitForSingleObject(ol.hEvent, INFINITE);
-				bVchanIoInProgress = FALSE;
+				//bVchanIoInProgress = FALSE;
 			}
+			*/
 
 			if (1 == dwSignaledEvent)
 				// g_hAddExistingClientEvent is signaled. Since Vchan IO has been canceled,
@@ -1499,7 +1438,7 @@ ULONG WatchForEvents()
 			// When this thread (in this switch) calls RemoveClient() later the g_Clients
 			// list will be locked as usual.
 
-//			lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
+			lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_VCHAN:
 
@@ -1511,9 +1450,9 @@ ULONG WatchForEvents()
 					// sure that we clear pending state _only_
 					// when handling vchan data in this loop iteration (not any
 					// other process)
-					libvchan_wait(ctrl);
+					//libvchan_wait(ctrl);
 
-					bVchanIoInProgress = FALSE;
+					//bVchanIoInProgress = FALSE;
 
 					if (!bVchanClientConnected) {
 
@@ -1601,7 +1540,6 @@ ULONG WatchForEvents()
 
 					LeaveCriticalSection(&g_ClientsCriticalSection);
 
-
 					break;
 
 				case HTYPE_STDOUT:
@@ -1624,7 +1562,6 @@ ULONG WatchForEvents()
 #ifdef DISPLAY_CONSOLE_OUTPUT
 					printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr.ReadBuffer);
 #endif
-
 					uResult = ReturnPipeData(
 							g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
 							&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
@@ -1658,19 +1595,17 @@ ULONG WatchForEvents()
 			}
 		}
 
-
 		if (bVchanReturnedError)
 			break;
-
 	}
 
-
+	/*
 	if (bVchanIoInProgress)
 		if (CancelIo(evtchn))
 			// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
 			// OVERLAPPED structure.
 			WaitForSingleObject(ol.hEvent, INFINITE);
-
+	*/
 	// Cancel all the other pending IO.
 	RemoveAllClients();
 
@@ -1679,10 +1614,8 @@ ULONG WatchForEvents()
 
 	CloseHandle(ol.hEvent);
 
-
 	return bVchanReturnedError ? ERROR_INVALID_FUNCTION : ERROR_SUCCESS;
 }
-
 
 VOID Usage()
 {
@@ -1692,7 +1625,6 @@ VOID Usage()
 
 ULONG CheckForXenInterface()
 {
-
     // TODO?
 #if 0
 	EVTCHN	xc;
@@ -1707,16 +1639,12 @@ ULONG CheckForXenInterface()
 	return ERROR_SUCCESS;
 }
 
-
-
 ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 {
 	ULONG	uResult;
 	HANDLE	hTriggerEventsThread;
 
-
 	lprintf("ServiceExecutionThread(): Service started\n");
-
 
 	// Auto reset, initial state is not signaled
 	g_hAddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -1726,7 +1654,6 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 		return uResult;
 	}
 
-
 	hTriggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WatchForTriggerEvents, NULL, 0, NULL);
 	if (!hTriggerEventsThread) {
 		uResult = GetLastError();
@@ -1734,7 +1661,6 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 		lprintf_err(uResult, "ServiceExecutionThread(): CreateThread()");
 		return uResult;
 	}
-
 
 	for (;;) {
 
@@ -1769,7 +1695,6 @@ ULONG Init(HANDLE *phServiceThread)
 	HANDLE	hThread;
 	ULONG	uClientNumber;
 
-
 	*phServiceThread = INVALID_HANDLE_VALUE;
 
 	uResult = CheckForXenInterface();
@@ -1781,21 +1706,20 @@ ULONG Init(HANDLE *phServiceThread)
 
 	// InitializeCriticalSection always succeeds in Vista and later OSes.
 #if NTDDI_VERSION < NTDDI_VISTA
-	__try {
+//	__try {
 #endif
 		InitializeCriticalSection(&g_ClientsCriticalSection);
 		InitializeCriticalSection(&g_VchanCriticalSection);
 		InitializeCriticalSection(&g_PipesCriticalSection);
 #if NTDDI_VERSION < NTDDI_VISTA
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
-		return ERROR_NOT_ENOUGH_MEMORY;
-	}
+//	} __except(EXCEPTION_EXECUTE_HANDLER) {
+//		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
+//		return ERROR_NOT_ENOUGH_MEMORY;
+//	}
 #endif
 
 	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
 		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
-
 
 	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ServiceExecutionThread, NULL, 0, NULL);
 	if (!hThread) {
@@ -1809,12 +1733,9 @@ ULONG Init(HANDLE *phServiceThread)
 	return ERROR_SUCCESS;
 }
 
-
-
 // This is the entry point for a service module (BUILD_AS_SERVICE defined).
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
-
 	ULONG	uOption;
 	PTCHAR	pszParam = NULL;
 	TCHAR	szUserName[UNLEN + 1];
@@ -1830,8 +1751,6 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		{NULL,NULL}
 	};
 
-
-
 	memset(szUserName, 0, sizeof(szUserName));
 	nSize = RTL_NUMBER_OF(szUserName);
 	if (!GetUserName(szUserName, &nSize)) {
@@ -1840,14 +1759,12 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		return uResult;
 	}
 
-
 	if ((1 == argc) && _tcscmp(szUserName, TEXT("SYSTEM"))) {
 		Usage();
 		return ERROR_INVALID_PARAMETER;
 	}
 
 	if (1 == argc) {
-
 		lprintf("main(): Running as SYSTEM\n");
 
 		uResult = ERROR_SUCCESS;
@@ -1867,13 +1784,11 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		return uResult;
 	}
 
-
 	uResult = ERROR_SUCCESS;
 	bStop = FALSE;
 	bCommand = 0;
 
 	while (!bStop) {
-
 		uOption = GetOption(argc, argv, TEXT("iua:"), &pszParam);
 		switch (uOption) {
 		case 0:
@@ -1902,7 +1817,6 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	}
 
 	if (pszAccountName) {
-
 		lprintf("main(): GrantDesktopAccess(\"%S\")\n", pszAccountName);
 		uResult = GrantDesktopAccess(pszAccountName, NULL);
 		if (ERROR_SUCCESS != uResult)
@@ -1956,7 +1870,6 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	ULONG	uResult;
 	ULONG	uClientNumber;
 
-
 	_tprintf(TEXT("\nqrexec agent console application\n\n"));
 
 	if (ERROR_SUCCESS != CheckForXenInterface()) {
@@ -1983,18 +1896,19 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 	// InitializeCriticalSection always succeeds in Vista and later OSes.
 #if NTDDI_VERSION < NTDDI_VISTA
-	__try {
+//	__try {
 #endif
 		InitializeCriticalSection(&g_ClientsCriticalSection);
 		InitializeCriticalSection(&g_VchanCriticalSection);
 		InitializeCriticalSection(&g_PipesCriticalSection);
 #if NTDDI_VERSION < NTDDI_VISTA
-	} __except(EXCEPTION_EXECUTE_HANDLER) {
-		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
-		return ERROR_NOT_ENOUGH_MEMORY;
-	}
+//	} __except(EXCEPTION_EXECUTE_HANDLER) {
+//		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
+//		return ERROR_NOT_ENOUGH_MEMORY;
+//	}
 #endif
-	SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
+	if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE))
+		lprintf_err(GetLastError(), "main: SetConsoleCtrlHandler");
 
 	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
 		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;

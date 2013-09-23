@@ -1,6 +1,5 @@
 #include "log.h"
 
-
 #ifdef DBG
 
 HANDLE hLog = INVALID_HANDLE_VALUE;
@@ -14,7 +13,6 @@ static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR
 
 	if (!szFormat)
 		return;
-
 
 	memset(szMessage, 0, sizeof(szMessage));
 	if (FAILED(StringCchVPrintfA(szMessage, RTL_NUMBER_OF(szMessage), szFormat, Args)))
@@ -33,10 +31,8 @@ static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR
 		if (SUCCEEDED(StringCchLengthA(szPid, RTL_NUMBER_OF(szPid), &cchSize)))
 			WriteFile(hLog, szPid, cchSize, &nWritten, NULL);
 
-	
 	if (SUCCEEDED(StringCchLengthA(szMessage, RTL_NUMBER_OF(szMessage), &cchSize)))
 		WriteFile(hLog, szMessage, cchSize, &nWritten, NULL);
-
 
 	if (pszErrorText && SUCCEEDED(StringCchLengthA(pszErrorText, cchMaxErrorTextSize, &cchSize)))
 		WriteFile(hLog, pszErrorText, cchSize, &nWritten, NULL);
@@ -45,11 +41,9 @@ static VOID lprintf_main(PUCHAR pszErrorText, size_t cchMaxErrorTextSize, PUCHAR
 	// CloseHandle(hLog);
 }
 
-
 VOID lprintf(PUCHAR szFormat, ...)
 {
 	va_list	Args;
-
 
 	va_start(Args, szFormat);
 	lprintf_main(NULL, 0, szFormat, Args);
@@ -63,7 +57,6 @@ VOID lprintf_err(ULONG uErrorCode, PUCHAR szFormat, ...)
 	PUCHAR	pMessage = NULL;
 	UCHAR	szMessage[2048];
 
-
 	memset(szMessage, 0, sizeof(szMessage));
 
 	cchErrorTextSize = FormatMessageA( 
@@ -74,6 +67,7 @@ VOID lprintf_err(ULONG uErrorCode, PUCHAR szFormat, ...)
 				(LPSTR)&pMessage,
 				0,
 				NULL);
+
 	if (!cchErrorTextSize) {
 
 		if (FAILED(StringCchPrintfA(szMessage, RTL_NUMBER_OF(szMessage), " failed with error %d\n", uErrorCode)))

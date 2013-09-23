@@ -18,9 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
-
-
-
+ 
 int peer_server_init(int port);
 int read_ready_vchan_ext();
 int read_all_vchan_ext(void *buf, int size);
@@ -34,8 +32,7 @@ enum {
 };
 
 int flush_client_data(int fd, int client_id, struct buffer *buffer);
-int write_stdin(int fd, int client_id, char *data, int len,
-		struct buffer *buffer);
+int write_stdin(int fd, int client_id, char *data, int len, struct buffer *buffer);
 void set_nonblock(int fd);
 int fork_and_flush_stdin(int fd, struct buffer *buffer);
 extern libvchan_t *ctrl;

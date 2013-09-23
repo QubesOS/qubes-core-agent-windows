@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <strsafe.h>
 
-
 ULONG ConvertUTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16, size_t *pcchUTF16)
 {
 	HRESULT	hResult;
@@ -10,7 +9,6 @@ ULONG ConvertUTF8ToUTF16(PUCHAR pszUtf8, PWCHAR *ppwszUtf16, size_t *pcchUTF16)
 	size_t	cchUTF8;
 	int	cchUTF16;
 	PWCHAR	pwszUtf16;
-
 
 	hResult = StringCchLengthA(pszUtf8, STRSAFE_MAX_CCH, &cchUTF8);
 	if (FAILED(hResult)) {
@@ -73,4 +71,3 @@ ULONG ConvertUTF16ToUTF8(PWCHAR pwszUtf16, PUCHAR *ppszUtf8, size_t *pcbUtf8)
 	*ppszUtf8 = pszUtf8;
 	return ERROR_SUCCESS;
 }
-

@@ -1,6 +1,5 @@
 #include "exec.h"
 
-
 ULONG GetAccountSid(LPCTSTR pszAccountName, LPCTSTR pszSystemName, PSID *ppSid)
 {
 	SID_NAME_USE	sidUsage;
@@ -9,7 +8,6 @@ ULONG GetAccountSid(LPCTSTR pszAccountName, LPCTSTR pszSystemName, PSID *ppSid)
 	TCHAR	ReferencedDomainName[MAX_PATH];
 	ULONG	uResult;
 	PSID	pSid;
-
 
 	if (!pszAccountName || !ppSid)
 		return ERROR_INVALID_PARAMETER;
@@ -40,7 +38,6 @@ ULONG GetAccountSid(LPCTSTR pszAccountName, LPCTSTR pszSystemName, PSID *ppSid)
 		return uResult;
 	}
 
-
 	if (!LookupAccountName(
 		pszSystemName,
 		pszAccountName,
@@ -61,7 +58,6 @@ ULONG GetAccountSid(LPCTSTR pszAccountName, LPCTSTR pszSystemName, PSID *ppSid)
 	return ERROR_SUCCESS;
 }
 
-
 ULONG GetObjectSecurityDescriptorDacl(HANDLE hObject, PSECURITY_DESCRIPTOR *ppSD, PBOOL pbDaclPresent, PACL *ppDacl)
 {
 	ULONG	uResult;
@@ -73,10 +69,8 @@ ULONG GetObjectSecurityDescriptorDacl(HANDLE hObject, PSECURITY_DESCRIPTOR *ppSD
 	PACL	pDacl = NULL;
 	BOOL	bDaclDefaulted;
 
-
 	if (!ppSD || !pbDaclPresent || !ppDacl)
 		return ERROR_INVALID_PARAMETER;
-
 
 	*ppSD = NULL;
 	*ppDacl = NULL;
@@ -118,7 +112,6 @@ ULONG GetObjectSecurityDescriptorDacl(HANDLE hObject, PSECURITY_DESCRIPTOR *ppSD
 		return uResult;
 	}
 
-
 	if (!GetSecurityDescriptorDacl(pSD, &bDaclPresent, &pDacl, &bDaclDefaulted)) {
 		uResult = GetLastError();
 		LocalFree(pSD);
@@ -126,14 +119,12 @@ ULONG GetObjectSecurityDescriptorDacl(HANDLE hObject, PSECURITY_DESCRIPTOR *ppSD
 		return uResult;
 	}
 
-
 	*ppSD = pSD;
 	*pbDaclPresent = bDaclPresent;
 	*ppDacl = pDacl;
 
 	return ERROR_SUCCESS;
 }
-
 
 ULONG MergeWithExistingDacl(HANDLE hObject, ULONG cCountOfExplicitEntries, PEXPLICIT_ACCESS pListOfExplicitEntries)
 {
@@ -144,10 +135,8 @@ ULONG MergeWithExistingDacl(HANDLE hObject, ULONG cCountOfExplicitEntries, PEXPL
 	PACL	pNewAcl = NULL;
 	SECURITY_INFORMATION	SIRequested = DACL_SECURITY_INFORMATION;
 
-
 	if (!cCountOfExplicitEntries || !pListOfExplicitEntries)
 		return ERROR_INVALID_PARAMETER;
-
 
 	uResult = GetObjectSecurityDescriptorDacl(hObject, &pSD, &bDaclPresent, &pDacl);
 	if (ERROR_SUCCESS != uResult) {
@@ -187,7 +176,6 @@ ULONG MergeWithExistingDacl(HANDLE hObject, ULONG cCountOfExplicitEntries, PEXPL
 		return uResult;
 	}
 
-
 	if (!SetUserObjectSecurity(hObject, &SIRequested, pSD)) {
 		uResult = GetLastError();
 		LocalFree(pNewAcl);
@@ -202,7 +190,6 @@ ULONG MergeWithExistingDacl(HANDLE hObject, ULONG cCountOfExplicitEntries, PEXPL
 	return ERROR_SUCCESS;
 }
 
-
 ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 {
 	HANDLE	hWindowStation;
@@ -211,7 +198,6 @@ ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 	ULONG	uResult;
 	PSID	pSid = NULL;
 	EXPLICIT_ACCESS NewAccessAllowedAces[2];
-
 
 	if (!pszAccountName)
 		return ERROR_INVALID_PARAMETER;
@@ -232,7 +218,6 @@ ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 		lprintf_err(uResult, "GrantDesktopAccess(): OpenWindowStation()");
 		return uResult;
 	}
-
 
 	if (!SetProcessWindowStation(hWindowStation)) {
 		uResult = GetLastError();
@@ -261,7 +246,6 @@ ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 		return uResult;
 	}
 
-
 	uResult = GetAccountSid(pszAccountName, pszSystemName, &pSid);
 	if (ERROR_SUCCESS != uResult) {
 		CloseDesktop(hDesktop);
@@ -269,7 +253,6 @@ ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 		lprintf_err(uResult, "GrantDesktopAccess(): GetAccountSid()");
 		return uResult;
 	}
-
 
 	NewAccessAllowedAces[0].grfAccessPermissions = GENERIC_ACCESS;
 	NewAccessAllowedAces[0].grfAccessMode = GRANT_ACCESS;
@@ -283,7 +266,6 @@ ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 
 	NewAccessAllowedAces[1].grfAccessPermissions = WINSTA_ALL;
 	NewAccessAllowedAces[1].grfInheritance = NO_PROPAGATE_INHERIT_ACE;
-
 
 	uResult = MergeWithExistingDacl(hWindowStation, 2, NewAccessAllowedAces);
 	CloseWindowStation(hWindowStation);
@@ -308,11 +290,9 @@ ULONG GrantDesktopAccess(LPCTSTR pszAccountName, LPCTSTR pszSystemName)
 		return uResult;
 	}
 
-
 	LocalFree(pSid);
 	return ERROR_SUCCESS;
 }
-
 
 // Open a window station and a desktop in another session, grant access to those handles
 ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName, LPCTSTR pszSystemName)
@@ -327,11 +307,8 @@ ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName,
 	STARTUPINFO	si;
 	DWORD	dwCurrentSessionId;
 
-
-
 	if (!pszAccountName)
 		return ERROR_INVALID_PARAMETER;
-
 
 	if (!ProcessIdToSessionId(GetCurrentProcessId(), &dwCurrentSessionId)) {
 		uResult = GetLastError();
@@ -348,7 +325,6 @@ ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName,
 
 		return uResult;
 	}
-
 
 	if (!OpenThreadToken(GetCurrentThread(), TOKEN_ALL_ACCESS, TRUE, &hToken)) {
 //		uResult = GetLastError();
@@ -378,7 +354,6 @@ ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName,
 
 	hToken = hTokenDuplicate;
 
-
 	if (!SetTokenInformation(hToken, TokenSessionId, &dwSessionId, sizeof(dwSessionId))) {
 		uResult = GetLastError();
 
@@ -386,7 +361,6 @@ ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName,
 		lprintf_err(uResult, "GrantRemoteSessionDesktopAccess(): SetTokenInformation()");
 		return uResult;
 	}
-
 
 	memset(szFullPath, 0, sizeof(szFullPath));
 	if (!GetModuleFileName(NULL, szFullPath, RTL_NUMBER_OF(szFullPath) - 1)) {
@@ -449,7 +423,6 @@ ULONG GrantRemoteSessionDesktopAccess(DWORD dwSessionId, LPCTSTR pszAccountName,
 	return ERROR_SUCCESS;
 }
 
-
 ULONG CreatePipedProcessAsCurrentUserW(
 		PWCHAR pwszCommand,
 		BOOLEAN bRunInteractively,
@@ -462,7 +435,6 @@ ULONG CreatePipedProcessAsCurrentUserW(
 	STARTUPINFOW	si;
 	ULONG	uResult;
 	BOOLEAN	bInheritHandles;
-
 
 	if (!pwszCommand || !phProcess)
 		return ERROR_INVALID_PARAMETER;
@@ -511,8 +483,6 @@ ULONG CreatePipedProcessAsCurrentUserW(
 	return ERROR_SUCCESS;
 }
 
-
-
 ULONG CreatePipedProcessAsUserW(
 		PWCHAR pwszUserName,
 		PWCHAR pwszUserPassword,
@@ -537,8 +507,6 @@ ULONG CreatePipedProcessAsUserW(
 	BOOLEAN	bInheritHandles;
 	BOOLEAN	bUserIsLoggedOn;
 
-
-
 	if (!pwszUserName || !pwszCommand || !phProcess)
 		return ERROR_INVALID_PARAMETER;
 
@@ -549,7 +517,6 @@ ULONG CreatePipedProcessAsUserW(
 		lprintf_err(uResult, "CreatePipedProcessAsUserW(): ProcessIdToSessionId()");
 		return uResult;
 	}
-
 
 	dwActiveSessionId = WTSGetActiveConsoleSessionId();
 	if (0xFFFFFFFF == dwActiveSessionId) {
@@ -568,7 +535,6 @@ ULONG CreatePipedProcessAsUserW(
 		lprintf_err(uResult, "CreatePipedProcessAsUserW(): WTSQueryUserToken()");
 		return uResult;
 	}
-
 
 	if (!DuplicateTokenEx(
 		hUserToken,
@@ -662,14 +628,12 @@ ULONG CreatePipedProcessAsUserW(
 			lprintf_err(uResult, "CreatePipedProcessAsUserW(): GrantRemoteSessionDesktopAccess()");
 	}
 
-
 	if (!CreateEnvironmentBlock(&pEnvironment, hUserToken, TRUE)) {
 		uResult = GetLastError();		
 		CloseHandle(hUserToken);
 		lprintf_err(uResult, "CreatePipedProcessAsUserW(): CreateEnvironmentBlock()");
 		return uResult;
 	}
-
 
 	if (!ImpersonateLoggedOnUser(hUserToken)) {
 		uResult = GetLastError();
@@ -730,7 +694,6 @@ ULONG CreatePipedProcessAsUserW(
 	CloseHandle(hUserToken);
 
 	return ERROR_SUCCESS;
-
 }
 
 ULONG CreateNormalProcessAsUserW(
@@ -741,7 +704,6 @@ ULONG CreateNormalProcessAsUserW(
 		HANDLE *phProcess)
 {
 	ULONG	uResult;
-
 
 	uResult = CreatePipedProcessAsUserW(
 			pwszUserName,
@@ -765,7 +727,6 @@ ULONG CreateNormalProcessAsCurrentUserW(
 		HANDLE *phProcess)
 {
 	ULONG	uResult;
-
 
 	uResult = CreatePipedProcessAsCurrentUserW(
 			pwszCommand,

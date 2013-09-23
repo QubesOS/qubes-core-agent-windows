@@ -1,1 +1,0 @@
-DIRS = utils qrexec qrexec_client_vm qrexec_services ask_vm_and_run

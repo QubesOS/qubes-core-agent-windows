@@ -1,0 +1,19 @@
+# todo: qrexec_services
+help:
+	@echo "make all      --- build all"
+	@echo "make clean    --- clean all"
+
+all:
+	$(MAKE) all -C utils
+	$(MAKE) all -C qrexec
+	$(MAKE) all -C qrexec_client_vm
+	$(MAKE) all -C ask_vm_and_run
+#	$(MAKE) all -C qrexec_services
+
+clean:
+	$(MAKE) clean -C utils
+	$(MAKE) clean -C qrexec
+	$(MAKE) clean -C qrexec_client_vm
+	$(MAKE) clean -C ask_vm_and_run
+	rm -f libs/*.a libs/*.o
+#	$(MAKE) clean -C qrexec_services

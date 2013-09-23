@@ -1,10 +1,10 @@
 #pragma once
+#include <tchar.h>
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <tchar.h>
-#include <strsafe.h>
 #include <lmcons.h>
+#include <shlwapi.h>
 #include "common.h"
 #include "qrexec.h"
 #include "libvchan.h"
@@ -14,7 +14,7 @@
 #include "errors.h"
 #include "exec.h"
 #include "pipe_server.h"
-
+#include <strsafe.h> // include after shlwapi or it breaks some shlwapi string functions
 
 typedef enum {
 	HTYPE_INVALID = 0,
@@ -31,11 +31,9 @@ typedef struct _HANDLE_INFO {
 } HANDLE_INFO, *PHANDLE_INFO;
 
 
-
 #define	FREE_CLIENT_SPOT_ID	-1
 
 // Besides the processes, for each of which we have 3 events to watch (process termination, stdout, stderr)
 // we have a vchan link event, a stop service event and an "existing client" connect event.
 // So it's maximum - 3, and the rest available are divided by the number of events used for each process.
 #define	MAX_CLIENTS	((MAXIMUM_WAIT_OBJECTS - 3) / 3)
-

@@ -1,10 +1,9 @@
 #pragma once
+#include <tchar.h>
 #include <windows.h>
 #include "common.h"
 #include "log.h"
-
-
-
+#include <strsafe.h>
 
 VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv);
 ULONG UpdateServiceStatus(DWORD dwCurrentState,

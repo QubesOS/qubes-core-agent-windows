@@ -3,8 +3,8 @@
 #include <lmcons.h>
 #include <aclapi.h>
 #include <userenv.h>
+#include <strsafe.h>
 #include "log.h"
-
 
 #define DESKTOP_ALL (DESKTOP_READOBJECTS | DESKTOP_CREATEWINDOW | \
 DESKTOP_CREATEMENU | DESKTOP_HOOKCONTROL | DESKTOP_JOURNALRECORD | \
@@ -19,14 +19,6 @@ STANDARD_RIGHTS_REQUIRED)
 
 #define GENERIC_ACCESS (GENERIC_READ | GENERIC_WRITE | \
 GENERIC_EXECUTE | GENERIC_ALL)
-
-
-
-// WDK does not have wtsapi32.h
-BOOL WINAPI WTSQueryUserToken(
-  __in   ULONG SessionId,
-  __out  PHANDLE phToken
-);
 
 
 ULONG CreatePipedProcessAsUserW(
@@ -48,7 +40,6 @@ ULONG CreateNormalProcessAsUserW(
 		HANDLE *phProcess
 );
 
-
 ULONG CreatePipedProcessAsCurrentUserW(
 		PWCHAR pwszCommand,
 		BOOLEAN bRunInteractively,
@@ -68,4 +59,3 @@ ULONG GrantDesktopAccess(
 	LPCTSTR pszAccountName,
 	LPCTSTR pszSystemName
 );
-

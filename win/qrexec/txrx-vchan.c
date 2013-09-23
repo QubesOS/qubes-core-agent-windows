@@ -45,10 +45,9 @@ int write_all_vchan_ext(void *buf, int size)
 		written += ret;
 	}
 
-//      fprintf(stderr, "sent %d bytes\n", size);
+    fprintf(stderr, "sent %d bytes over vchan\n", size);
 	return size;
 }
-
 
 int read_all_vchan_ext(void *buf, int size)
 {
@@ -63,7 +62,7 @@ int read_all_vchan_ext(void *buf, int size)
 
 		written += ret;
 	}
-//      fprintf(stderr, "read %d bytes\n", size);
+    fprintf(stderr, "read %d bytes from vchan\n", size);
 	return size;
 }
 
@@ -77,7 +76,6 @@ int buffer_space_vchan_ext()
 	return libvchan_buffer_space(ctrl);
 }
 
-
 int peer_server_init(int port)
 {
     /* FIXME: "0" here is remote domain id */
@@ -87,4 +85,3 @@ int peer_server_init(int port)
 
 	return 0;
 }
-
