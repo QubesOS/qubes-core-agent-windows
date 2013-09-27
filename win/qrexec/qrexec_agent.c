@@ -1278,13 +1278,10 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 ULONG WatchForEvents()
 {
 	HANDLE	evtchn;
-	OVERLAPPED	ol;
-	unsigned int fired_port;
 	ULONG	i, uEventNumber, uClientNumber;
 	DWORD	dwSignaledEvent;
 	PCLIENT_INFO	pClientInfo;
 	DWORD	dwExitCode;
-	//BOOLEAN	bVchanIoInProgress;
 	ULONG	uResult;
 	BOOLEAN	bVchanReturnedError;
 	BOOLEAN	bVchanClientConnected;
@@ -1299,16 +1296,6 @@ ULONG WatchForEvents()
 
 	lprintf("WatchForEvents(): Awaiting for a vchan client, write ring size: %d\n", buffer_space_vchan_ext());
 
-	evtchn = libvchan_fd_for_select(ctrl);
-	if (INVALID_HANDLE_VALUE == evtchn)
-	{
-		lprintf_err(GetLastError(), "WatchForEvents(): libvchan_fd_for_select failed");
-		return ERROR_INVALID_FUNCTION;
-	}
-	
-	memset(&ol, 0, sizeof(ol));
-	ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-
 	bVchanClientConnected = FALSE;
 	//bVchanIoInProgress = FALSE;
 	bVchanReturnedError = FALSE;
@@ -1322,15 +1309,16 @@ ULONG WatchForEvents()
 
 		g_HandlesInfo[0].bType = g_HandlesInfo[1].bType = HTYPE_INVALID;
 
-		uResult = ERROR_SUCCESS;
-		//libvchan_prepare_to_select(ctrl);
-		//bVchanIoInProgress = TRUE;
-		
-		if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult) {
-			g_HandlesInfo[uEventNumber].uClientNumber = FREE_CLIENT_SPOT_ID;
-			g_HandlesInfo[uEventNumber].bType = HTYPE_VCHAN;
-			g_WatchedEvents[uEventNumber++] = ol.hEvent;
+		evtchn = libvchan_fd_for_select(ctrl);
+		if (INVALID_HANDLE_VALUE == evtchn)
+		{
+			lprintf_err(GetLastError(), "WatchForEvents(): libvchan_fd_for_select failed");
+			break;
 		}
+
+		g_HandlesInfo[uEventNumber].uClientNumber = FREE_CLIENT_SPOT_ID;
+		g_HandlesInfo[uEventNumber].bType = HTYPE_VCHAN;
+		g_WatchedEvents[uEventNumber++] = evtchn;
 		
 		EnterCriticalSection(&g_ClientsCriticalSection);
 
@@ -1408,19 +1396,6 @@ ULONG WatchForEvents()
 				// g_hStopServiceEvent is signaled
 				break;
 
-			/*
-			if (HTYPE_VCHAN != g_HandlesInfo[dwSignaledEvent].bType) {
-				// If this is not a vchan event, cancel the event channel read so that libvchan_write() calls
-				// could issue their own libvchan_wait on the same channel, and not interfere with the
-				// ReadFile(evtchn, ...) above.
-				if (CancelIo(evtchn))
-					// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
-					// OVERLAPPED structure.
-					WaitForSingleObject(ol.hEvent, INFINITE);
-				//bVchanIoInProgress = FALSE;
-			}
-			*/
-
 			if (1 == dwSignaledEvent)
 				// g_hAddExistingClientEvent is signaled. Since Vchan IO has been canceled,
 				// safely re-iterate the loop and pick up the new handles to watch.
@@ -1444,15 +1419,7 @@ ULONG WatchForEvents()
 
 					// the following will never block; we need to do this to
 					// clear libvchan_fd pending state
-					//
-					// using libvchan_wait here instead of reading fired
-					// port at the beginning of the loop (ReadFile call) to be
-					// sure that we clear pending state _only_
-					// when handling vchan data in this loop iteration (not any
-					// other process)
-					//libvchan_wait(ctrl);
-
-					//bVchanIoInProgress = FALSE;
+					libvchan_wait(ctrl);
 
 					if (!bVchanClientConnected) {
 
@@ -1460,30 +1427,6 @@ ULONG WatchForEvents()
 
 						bVchanClientConnected = TRUE;
 						break;
-					}
-
-					if (!GetOverlappedResult(evtchn, &ol, &i, FALSE)) {
-						if (GetLastError() == ERROR_IO_DEVICE) {
-							// in case of ring overflow, above libvchan_wait
-							// already reseted the evtchn ring, so ignore this
-							// error as already handled
-							//
-							// Overflow can happen when below loop ("while
-							// (read_ready_vchan_ext())") handle a lot of data
-							// in the same time as qrexec-daemon writes it -
-							// there where be no libvchan_wait call (which
-							// receive the events from the ring), but one will
-							// be signaled after each libvchan_write in
-							// qrexec-daemon. I don't know how to fix it
-							// properly (without introducing any race
-							// condition), so reset the evtchn ring (do not
-							// confuse with vchan ring, which stays untouched)
-							// in case of overflow.
-						} else if (GetLastError() != ERROR_OPERATION_ABORTED) {
-							lprintf_err(GetLastError(), "WatchForEvents(): GetOverlappedResult(evtchn)");
-							bVchanReturnedError = TRUE;
-							break;
-						}
 					}
 
 					EnterCriticalSection(&g_VchanCriticalSection);
@@ -1599,20 +1542,10 @@ ULONG WatchForEvents()
 			break;
 	}
 
-	/*
-	if (bVchanIoInProgress)
-		if (CancelIo(evtchn))
-			// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
-			// OVERLAPPED structure.
-			WaitForSingleObject(ol.hEvent, INFINITE);
-	*/
-	// Cancel all the other pending IO.
 	RemoveAllClients();
 
 	if (bVchanClientConnected)
 		libvchan_close(ctrl);
-
-	CloseHandle(ol.hEvent);
 
 	return bVchanReturnedError ? ERROR_INVALID_FUNCTION : ERROR_SUCCESS;
 }
