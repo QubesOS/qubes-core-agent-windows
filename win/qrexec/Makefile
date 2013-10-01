@@ -3,7 +3,7 @@ SRCFILES = qrexec_agent.c txrx-vchan.c service.c getopt.c log.c exec.c pipe_serv
 RCFILES = errors.rc
 # need to manually compile .mc file with mc from win sdk for now...
 CFLAGS = -Wall -DUNICODE -D_UNICODE -I$(QUBES_INCLUDES) -I../include -DWINVER=0x0600 -DDBG
-LDFLAGS = -municode -L../libs -L$(QUBES_LIBS) -lshlwapi -lwtsapi32 -luserenv -lqubes_utils -lvchan-wni
+LDFLAGS = -municode -L../libs -L$(QUBES_LIBS) -lshlwapi -lwtsapi32 -luserenv -lqubes_utils -lvchan-$(BACKEND_VMM)
 
 CC = gcc
 RC = windres
