@@ -27,10 +27,27 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 	HANDLE	hWritePipe;
 	ULONG	uResult;
 
+#ifdef BACKEND_VMM_wni
+	DWORD user_name_len = UNLEN + 1;
+	TCHAR user_name[user_name_len];
+#endif
+
 	if (!phReadPipe || !phWritePipe)
 		return ERROR_INVALID_PARAMETER;
 
+#ifdef BACKEND_VMM_wni
+    /* on WNI we don't have separate namespace for each VM (all is in the
+     * single system) */
+
+    if (!GetUserName(user_name, &user_name_len)) {
+		uResult = GetLastError();
+        lprintf_err(uResult, "GetUserName");
+        return uResult;
+    }
+	StringCchPrintf(szPipeName, MAX_PATH, TEXT("\\\\.\\pipe\\%s\\qrexec.%08x.%I64x"), user_name, GetCurrentProcessId(), g_uPipeId++);
+#else
 	StringCchPrintf(szPipeName, MAX_PATH, TEXT("\\\\.\\pipe\\qrexec.%08x.%I64x"), GetCurrentProcessId(), g_uPipeId++);
+#endif
 
 	hReadPipe = CreateNamedPipe(
 			szPipeName,
