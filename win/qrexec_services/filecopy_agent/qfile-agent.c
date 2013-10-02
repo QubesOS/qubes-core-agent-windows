@@ -2,9 +2,9 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Strsafe.h>
 #include <Shlwapi.h>
 #include <Shellapi.h>
+#include <Strsafe.h>
 #include <ioall.h>
 #include <linux.h>
 #include <gui-fatal.h>

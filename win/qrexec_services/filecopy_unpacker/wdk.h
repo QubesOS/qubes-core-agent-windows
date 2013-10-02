@@ -2,13 +2,15 @@
 
 typedef LONG NTSTATUS, *PNTSTATUS;
 
+#define __field_bcount_part(size,init)      __notnull __byte_writableTo(size) __byte_readableTo(init)
+
 typedef struct _UNICODE_STRING {
     USHORT Length;
     USHORT MaximumLength;
 #ifdef MIDL_PASS
     [size_is(MaximumLength / 2), length_is((Length) / 2) ] USHORT * Buffer;
 #else // MIDL_PASS
-    __field_bcount_part(MaximumLength, Length) PWCH   Buffer;
+    WCHAR   *Buffer;
 #endif // MIDL_PASS
 } UNICODE_STRING;
 typedef UNICODE_STRING *PUNICODE_STRING;
@@ -98,7 +100,7 @@ typedef enum _PROCESSINFOCLASS {
 } PROCESSINFOCLASS;
 
 
-DEFINE_KNOWN_FOLDER(FOLDERID_Documents,             0xfdd39ad0, 0x238f, 0x46af, 0xad, 0xb4, 0x6c, 0x85, 0x48, 0x03, 0x69, 0xc7);
+//DEFINE_KNOWN_FOLDER(FOLDERID_Documents,             0xfdd39ad0, 0x238f, 0x46af, 0xad, 0xb4, 0x6c, 0x85, 0x48, 0x03, 0x69, 0xc7);
 
 
 NTSTATUS NTAPI ZwSetInformationProcess(
@@ -111,7 +113,7 @@ NTSTATUS NTAPI ZwSetInformationProcess(
 NTSTATUS
 NTAPI
 ZwClose(
-    __in HANDLE Handle
+    HANDLE Handle
     );
 
 NTSTATUS
@@ -133,8 +135,8 @@ RtlInitUnicodeString(
 
 NTSTATUS NTAPI
 ZwCreateSymbolicLinkObject(
-    OUT PHANDLE pLinkHandle,
-    IN ACCESS_MASK DesiredAccess,
-    IN POBJECT_ATTRIBUTES pObjectAttributes,
-    IN PUNICODE_STRING pLinkTarget
+    PHANDLE pLinkHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES pObjectAttributes,
+    PUNICODE_STRING pLinkTarget
 );

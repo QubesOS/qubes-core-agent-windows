@@ -2,10 +2,10 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Strsafe.h>
 #include <Shlwapi.h>
 #include <shlobj.h>
 #include <Shellapi.h>
+#include <Strsafe.h>
 #include <ioall.h>
 #include <gui-fatal.h>
 #include "wdk.h"
@@ -13,6 +13,8 @@
 #include "filecopy.h"
 #include "crc32.h"
 
+// older mingw workaround
+#define KF_FLAG_CREATE 0x00008000
 
 HANDLE STDIN = INVALID_HANDLE_VALUE;
 HANDLE STDOUT = INVALID_HANDLE_VALUE;
@@ -179,7 +181,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		exit(1);
 	}
 
-	hResult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &pwszDocuments);
+	//hResult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &pwszDocuments);
+	hResult = SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, KF_FLAG_CREATE, &pwszDocuments);
 	if (FAILED(hResult)) {
 		internal_fatal(L"Failed to get a path to My Documents, SHGetKnownFolderPath() failed with error 0x%x\n", hResult);
 		exit(1);

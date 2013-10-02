@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <tchar.h>
 #include <commctrl.h>
+#include <taskdialog.h> // definitions absent in mingw
 #include "gui-fatal.h"
 #include "gui-progress.h"
 
@@ -10,6 +11,15 @@ extern BOOL cancel_operation;
 HWND hDialog = NULL;
 HANDLE hProgressWindowThread;
 
+// workaround for lack of TaskDialog related stuff in mingw
+TaskDialogIndirectProc *TaskDialogIndirectDynamic = NULL;
+
+void ResolveFunc()
+{
+	HMODULE comctl32 = LoadLibrary(TEXT("comctl32.dll"));
+	TaskDialogIndirectDynamic = (TaskDialogIndirectProc*) GetProcAddress(comctl32, TEXT("TaskDialogIndirect"));
+// end workaround
+}
 
 HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
 		WPARAM wParam, LPARAM lParam, LONG_PTR dwRefData)
@@ -51,7 +61,7 @@ DWORD doTaskDialogThread(LPVOID lpThreadParameter)
 	config.pfCallback                   = TaskDialogCallbackProc;
 
 	// TODO: call it in separate thread
-	TaskDialogIndirect(&config, &nButtonPressed, NULL, NULL);
+	(*TaskDialogIndirectDynamic) (&config, &nButtonPressed, NULL, NULL);
 	switch (nButtonPressed)
 	{
 		case IDOK:
@@ -83,6 +93,8 @@ void createProgressWindow()
 
 void do_notify_progress(long long written, int flag)
 {
+	if (!TaskDialogIndirect)
+		ResolveFunc();
 	switch (flag) {
 		case PROGRESS_FLAG_INIT:
 			createProgressWindow();

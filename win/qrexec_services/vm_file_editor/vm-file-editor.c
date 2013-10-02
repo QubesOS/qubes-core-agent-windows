@@ -3,14 +3,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <Strsafe.h>
 #include <Shellapi.h>
+#include <Strsafe.h>
 #include <ioall.h>
 #include "dvm2.h"
 #include "utf8_conv.h"
 #include "ioall.h"
 
 #define TMP_SUBDIR TEXT("Qubes-open\\")
+
+// older mingw workaround
+#define SEE_MASK_NOASYNC 0x100 
 
 HANDLE hStdIn = INVALID_HANDLE_VALUE;
 HANDLE hStdOut = INVALID_HANDLE_VALUE;

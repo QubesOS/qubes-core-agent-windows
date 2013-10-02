@@ -1,6 +1,7 @@
 #ifdef APSTUDIO_INVOKED
 #error Do not open or edit this file with App Studio
 #endif
+#include <windows.h>
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION 1,0,0,0
@@ -38,6 +39,5 @@ END
 // Must reference a manifest for visual styles and elevation
 // Oh, and it must happen here, or MinGW will ignore it!
 #if defined(__MINGW32__) || defined(__CYGWIN__)
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "zadic.manifest"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "qfile_agent.exe.manifest"
 #endif
-
