@@ -1,0 +1,104 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi' xmlns:difx='http://schemas.microsoft.com/wix/DifxAppExtension' xmlns:iis='http://schemas.microsoft.com/wix/IIsExtension'>
+  <?if $(env._BUILDARCH) = x86 ?>
+    <?define ARCHDIR = i386 ?>
+    <?define PFILESDIR = ProgramFilesFolder ?>
+  <?elseif $(env._BUILDARCH) = AMD64 ?>
+    <?define ARCHDIR = amd64 ?>
+    <?define PFILESDIR = ProgramFiles64Folder ?>
+  <?endif ?>
+
+  <Product Name='Qubes Agent for Windows' Id='*'
+    UpgradeCode='0853bd66-91d5-449c-8450-64af366e42a5'
+    Language='1033' Codepage='1252' Version='$(env.VERSION)' Manufacturer='Invisible Things Lab'>
+
+    <Package Id='*' Keywords='Installer' Description="Qubes Agent for Windows"
+      Comments='no comment' Manufacturer='Invisible Things Lab' InstallScope='perMachine'
+      InstallerVersion='200' Languages='1033' Compressed='yes' SummaryCodepage='1252'
+      InstallPrivileges="elevated" />
+
+    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
+
+    <UI>
+      <UIRef Id="WixUI_Mondo" />
+      <UIRef Id="WixUI_ErrorProgressText" />
+    </UI>
+
+    <Media Id='1' Cabinet='qubescore.cab' EmbedCab='yes' />
+
+    <MajorUpgrade AllowDowngrades="yes"/>
+
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='$(var.PFILESDIR)'>
+        <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
+          <Directory Id='QubesProgramFilesDir' Name='Qubes'>
+            <Directory Id='BinDir' Name='bin'>
+              <Component Id='QrexecAgent' Guid='0e26617f-e5d9-4943-a08e-cf29013e9d72'>
+                <File Id='qrexec_agent.exe' Name='qrexec_agent.exe' DiskId='1' Source='qrexec\bin\$(var.ARCHDIR)\qrexec_agent.exe' KeyPath="yes"/>
+                <ServiceInstall
+                Id="ServiceInstaller"
+                Type="ownProcess"
+                Vital="yes"
+                Name="QrexecAgent"
+                DisplayName="Qubes RPC Agent"
+                Description="Qubes remote execute agent"
+                Start="auto"
+                Account="LocalSystem"
+                ErrorControl="ignore"
+                Interactive="no"
+                />
+                <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="QrexecAgent" Wait="yes" />
+              </Component>
+              <Component Id='QrexecClientVM' Guid='1e74cee2-523b-4870-8e24-49d4945c4a5c'>
+                <File Id='qrexec_client_vm.exe' Name='qrexec_client_vm.exe' DiskId='1' Source='qrexec_client_vm\bin\$(var.ARCHDIR)\qrexec_client_vm.exe' KeyPath="no">
+                  <Shortcut Id='qopen_dvm_sendto_shortcut' Name='Edit in DispVM' Directory='SendToFolder' Arguments='$dispvm qubes.OpenInVM "[QubesRPCServicesDir]\open_in_vm.exe"' Advertise="no"/>
+                </File>
+                <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
+                <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-client-vm" Type="integer" Value="1" KeyPath="yes"/>
+              </Component>
+              <Component Id='AskVMClientWrapper' Guid='b5700d68-2ceb-4764-9e4b-11ae33b2d05b'>
+                <File Id='ask_vm_and_run.exe' Name='ask_vm_and_run.exe' DiskId='1' Source='ask_vm_and_run\bin\$(var.ARCHDIR)\ask_vm_and_run.exe' KeyPath="no">
+                  <Shortcut Id='qfile_sendto_shortcut' Name='Other VM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\qfile_agent.exe"' Advertise="no"/>
+                  <Shortcut Id='qopen_sendto_shortcut' Name='Edit in VM' Directory='SendToFolder' Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open_in_vm.exe"' Advertise="no"/>
+                </File>
+                <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
+                <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-filecopy-wrapper-installed" Type="integer" Value="1" KeyPath="yes"/>
+              </Component>
+            </Directory>
+            <Directory Id='QubesRPCDir' Name='qubes_rpc'>
+              <Component Id='QrexecServicesConfig' Guid='9efff253-25a8-40ed-861a-0d576f0ca439'>
+                <File Id='qubes.Filecopy' Name='qubes.Filecopy' DiskId='1' Source='qrexec_services\qubes.Filecopy' KeyPath="yes"/>
+                <File Id='qubes.ClipboardCopy' Name='qubes.ClipboardCopy' DiskId='1' Source='qrexec_services\qubes.ClipboardCopy' KeyPath="no"/>
+                <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='qrexec_services\qubes.ClipboardPaste' KeyPath="no"/>
+                <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='qrexec_services\qubes.VMShell' KeyPath="no"/>
+                <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='qrexec_services\qubes.OpenInVM' KeyPath="no"/>
+                <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='qrexec_services\qubes.WaitForSession' KeyPath="no"/>
+              </Component>
+            </Directory>
+            <Directory Id='QubesRPCServicesDir' Name='qubes_rpc_services'>
+              <Component Id='QrexecServices' Guid='2543621b-2d67-4726-9a3b-7a1c471a1e19'>
+                <File Id='qfile_agent.exe' Name='qfile_agent.exe' DiskId='1' Source='qrexec_services\filecopy_agent\bin\$(var.ARCHDIR)\qfile_agent.exe' KeyPath="yes"/>
+                <File Id='qfile_unpacker.exe' Name='qfile_unpacker.exe' DiskId='1' Source='qrexec_services\filecopy_unpacker\bin\$(var.ARCHDIR)\qfile_unpacker.exe' KeyPath="no"/>
+                <File Id='clipboard_copy.exe' Name='clipboard_copy.exe' DiskId='1' Source='qrexec_services\clipboard_copy\bin\$(var.ARCHDIR)\clipboard_copy.exe' KeyPath="no"/>
+                <File Id='clipboard_paste.exe' Name='clipboard_paste.exe' DiskId='1' Source='qrexec_services\clipboard_paste\bin\$(var.ARCHDIR)\clipboard_paste.exe' KeyPath="no"/>
+                <File Id='vm_file_editor.exe' Name='vm_file_editor.exe' DiskId='1' Source='qrexec_services\vm_file_editor\bin\$(var.ARCHDIR)\vm_file_editor.exe' KeyPath="no"/>
+                <File Id='open_in_vm.exe' Name='open_in_vm.exe' DiskId='1' Source='qrexec_services\open_in_vm\bin\$(var.ARCHDIR)\open_in_vm.exe' KeyPath="no"/>
+                <File Id='wait_for_logon.exe' Name='wait_for_logon.exe' DiskId='1' Source='qrexec_services\wait_for_logon\bin\$(var.ARCHDIR)\wait_for_logon.exe' KeyPath="no"/>
+              </Component>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id='SendToFolder'/>
+    </Directory>
+
+    <Feature Id='QrexecAgent' Title='QrexecAgent' Level='1' AllowAdvertise='no' InstallDefault='local' Absent='disallow'>
+      <ComponentRef Id='QrexecAgent' />
+      <ComponentRef Id='QrexecClientVM' />
+      <ComponentRef Id='AskVMClientWrapper' />
+      <ComponentRef Id='QrexecServices' />
+      <ComponentRef Id='QrexecServicesConfig' />
+    </Feature>
+
+  </Product>
+</Wix>

@@ -1,3 +1,5 @@
+VERSION := $(shell cat ../version_win)
+
 help:
 	@echo "make all      --- build all"
 	@echo "make clean    --- clean all"
@@ -16,3 +18,7 @@ clean:
 	$(MAKE) clean -C ask_vm_and_run
 	$(MAKE) clean -C qrexec_services
 	rm -f libs/*.a libs/*.o
+
+msi:
+	candle -arch x64 -dversion=$(VERSION) installer.wxs
+	light -o core-agent-windows.msm installer.wixobj
