@@ -7,16 +7,16 @@ help:
 all:
 	$(MAKE) all -C utils
 	$(MAKE) all -C qrexec
-	$(MAKE) all -C qrexec_client_vm
-	$(MAKE) all -C ask_vm_and_run
-	$(MAKE) all -C qrexec_services
+	$(MAKE) all -C qrexec-client-vm
+	$(MAKE) all -C ask-vm-and-run
+	$(MAKE) all -C qrexec-services
 
 clean:
 	$(MAKE) clean -C utils
 	$(MAKE) clean -C qrexec
-	$(MAKE) clean -C qrexec_client_vm
-	$(MAKE) clean -C ask_vm_and_run
-	$(MAKE) clean -C qrexec_services
+	$(MAKE) clean -C qrexec-client-vm
+	$(MAKE) clean -C ask-vm-and-run
+	$(MAKE) clean -C qrexec-services
 	rm -f libs/*.a libs/*.o
 
 msi:

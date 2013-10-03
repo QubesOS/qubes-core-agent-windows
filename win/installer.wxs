@@ -19,7 +19,7 @@
           <Directory Id='QubesProgramFilesDir' Name='Qubes'>
             <Directory Id='BinDir' Name='bin'>
               <Component Id='QrexecAgent' Guid='0e26617f-e5d9-4943-a08e-cf29013e9d72'>
-                  <File Id='qrexec_agent.exe' Name='qrexec-agent.exe' DiskId='1' Source='qrexec\qrexec_agent.exe' KeyPath="yes"/>
+                  <File Id='qrexec_agent.exe' Name='qrexec-agent.exe' DiskId='1' Source='qrexec\qrexec-agent.exe' KeyPath="yes"/>
                   <!-- FIXME: any better idea? -->
                   <?if $(env.BACKEND_VMM) != wni ?>
                   <ServiceInstall
@@ -38,14 +38,14 @@
                   <?endif?>
               </Component>
               <Component Id='QrexecClientVM' Guid='1e74cee2-523b-4870-8e24-49d4945c4a5c'>
-                <File Id='qrexec_client_vm.exe' Name='qrexec-client-vm.exe' DiskId='1' Source='qrexec_client_vm\qrexec_client_vm.exe' KeyPath="no">
+                <File Id='qrexec_client_vm.exe' Name='qrexec-client-vm.exe' DiskId='1' Source='qrexec-client-vm\qrexec-client-vm.exe' KeyPath="no">
                   <Shortcut Id='qopen_dvm_sendto_shortcut' Name='Edit in DispVM' Directory='SendToFolder' Arguments='$dispvm qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
                 </File>
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
                 <RegistryValue Root="HKLM" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-client-vm" Type="integer" Value="1" KeyPath="yes"/>
               </Component>
               <Component Id='AskVMClientWrapper' Guid='b5700d68-2ceb-4764-9e4b-11ae33b2d05b'>
-                <File Id='ask_vm_and_run.exe' Name='ask-vm-and-run.exe' DiskId='1' Source='ask_vm_and_run\ask_vm_and_run.exe' KeyPath="no">
+                <File Id='ask_vm_and_run.exe' Name='ask-vm-and-run.exe' DiskId='1' Source='ask-vm-and-run\ask-vm-and-run.exe' KeyPath="no">
                   <Shortcut Id='qfile_sendto_shortcut' Name='Other VM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\qfile-agent.exe"' Advertise="no"/>
                   <Shortcut Id='qopen_sendto_shortcut' Name='Edit in VM' Directory='SendToFolder' Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
                 </File>
@@ -55,23 +55,23 @@
             </Directory>
             <Directory Id='QubesRPCDir' Name='qubes-rpc'>
               <Component Id='QrexecServicesConfig' Guid='9efff253-25a8-40ed-861a-0d576f0ca439'>
-                <File Id='qubes.Filecopy' Name='qubes.Filecopy' DiskId='1' Source='qrexec_services\qubes.Filecopy' KeyPath="yes"/>
-                <File Id='qubes.ClipboardCopy' Name='qubes.ClipboardCopy' DiskId='1' Source='qrexec_services\qubes.ClipboardCopy' KeyPath="no"/>
-                <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='qrexec_services\qubes.ClipboardPaste' KeyPath="no"/>
-                <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='qrexec_services\qubes.VMShell' KeyPath="no"/>
-                <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='qrexec_services\qubes.OpenInVM' KeyPath="no"/>
-                <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='qrexec_services\qubes.WaitForSession' KeyPath="no"/>
+                <File Id='qubes.Filecopy' Name='qubes.Filecopy' DiskId='1' Source='qrexec-services\qubes.Filecopy' KeyPath="yes"/>
+                <File Id='qubes.ClipboardCopy' Name='qubes.ClipboardCopy' DiskId='1' Source='qrexec-services\qubes.ClipboardCopy' KeyPath="no"/>
+                <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='qrexec-services\qubes.ClipboardPaste' KeyPath="no"/>
+                <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='qrexec-services\qubes.VMShell' KeyPath="no"/>
+                <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='qrexec-services\qubes.OpenInVM' KeyPath="no"/>
+                <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='qrexec-services\qubes.WaitForSession' KeyPath="no"/>
               </Component>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
               <Component Id='QrexecServices' Guid='2543621b-2d67-4726-9a3b-7a1c471a1e19'>
-                <File Id='qfile_agent.exe' Name='qfile-agent.exe' DiskId='1' Source='qrexec_services\filecopy_agent\qfile_agent.exe' KeyPath="yes"/>
-                <File Id='qfile_unpacker.exe' Name='qfile-unpacker.exe' DiskId='1' Source='qrexec_services\filecopy_unpacker\qfile_unpacker.exe' KeyPath="no"/>
-                <File Id='clipboard_copy.exe' Name='clipboard-copy.exe' DiskId='1' Source='qrexec_services\clipboard_copy\clipboard_copy.exe' KeyPath="no"/>
-                <File Id='clipboard_paste.exe' Name='clipboard-paste.exe' DiskId='1' Source='qrexec_services\clipboard_paste\clipboard_paste.exe' KeyPath="no"/>
-                <File Id='vm_file_editor.exe' Name='vm_file_editor.exe' DiskId='1' Source='qrexec_services\vm_file_editor\vm_file_editor.exe' KeyPath="no"/>
-                <File Id='open_in_vm.exe' Name='open-in-vm.exe' DiskId='1' Source='qrexec_services\open_in_vm\open_in_vm.exe' KeyPath="no"/>
-                <File Id='wait_for_logon.exe' Name='wait-for-logon.exe' DiskId='1' Source='qrexec_services\wait_for_logon\wait_for_logon.exe' KeyPath="no"/>
+                <File Id='qfile_agent.exe' Name='qfile-agent.exe' DiskId='1' Source='qrexec-services\filecopy-agent\qfile-agent.exe' KeyPath="yes"/>
+                <File Id='qfile_unpacker.exe' Name='qfile-unpacker.exe' DiskId='1' Source='qrexec-services\filecopy-unpacker\qfile-unpacker.exe' KeyPath="no"/>
+                <File Id='clipboard_copy.exe' Name='clipboard-copy.exe' DiskId='1' Source='qrexec-services\clipboard-copy\clipboard-copy.exe' KeyPath="no"/>
+                <File Id='clipboard_paste.exe' Name='clipboard-paste.exe' DiskId='1' Source='qrexec-services\clipboard-paste\clipboard-paste.exe' KeyPath="no"/>
+                <File Id='vm_file_editor.exe' Name='vm-file-editor.exe' DiskId='1' Source='qrexec-services\vm-file-editor\vm-file-editor.exe' KeyPath="no"/>
+                <File Id='open_in_vm.exe' Name='open-in-vm.exe' DiskId='1' Source='qrexec-services\open-in-vm\open-in-vm.exe' KeyPath="no"/>
+                <File Id='wait_for_logon.exe' Name='wait-for-logon.exe' DiskId='1' Source='qrexec-services\wait-for-logon\wait-for-logon.exe' KeyPath="no"/>
               </Component>
             </Directory>
           </Directory>
