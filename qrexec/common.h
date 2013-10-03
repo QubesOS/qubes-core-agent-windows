@@ -14,8 +14,6 @@
 #define LOG_FILE		TEXT("c:\\qrexec-agent.log")
 #endif
 
-#define	TRIGGER_PIPE_NAME	TEXT("\\\\.\\pipe\\qrexec-trigger")
-
 //#define DISPLAY_CONSOLE_OUTPUT
 
 //#define START_SERVICE_AFTER_INSTALLATION

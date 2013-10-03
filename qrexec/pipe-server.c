@@ -1,4 +1,7 @@
 #include "pipe-server.h"
+#ifdef BACKEND_VMM_wni
+#include <lmcons.h>  // for UNLEN
+#endif
 
 extern HANDLE	g_hStopServiceEvent; 
  
@@ -371,9 +374,27 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 	SECURITY_ATTRIBUTES	sa;
 	PSECURITY_DESCRIPTOR	pPipeSecurityDescriptor;
 	PACL	pACL;
+#ifdef BACKEND_VMM_wni
+#define MAX_PIPENAME_LEN (RTL_NUMBER_OF(TRIGGER_PIPE_NAME) + UNLEN)
+	TCHAR	lpszPipename[MAX_PIPENAME_LEN];
+	DWORD	user_name_len = UNLEN + 1;
+	TCHAR	user_name[user_name_len];
+#endif
 
 	lprintf("WatchForTriggerEvents(): Init\n");
 	memset(&g_Pipes, 0, sizeof(g_Pipes));
+
+#ifdef BACKEND_VMM_wni
+    /* on WNI we don't have separate namespace for each VM (all is in the
+     * single system) */
+    if (!GetUserName(user_name, &user_name_len)) {
+        perror("GetUserName");
+        return GetLastError();
+    }
+    if (FAILED(StringCchPrintf(lpszPipename, MAX_PIPENAME_LEN,
+            TRIGGER_PIPE_NAME, user_name)))
+        return ERROR_NOT_ENOUGH_MEMORY;
+#endif
 
 	uResult = CreatePipeSecurityDescriptor(&pPipeSecurityDescriptor, &pACL);
 	if (ERROR_SUCCESS != uResult) {

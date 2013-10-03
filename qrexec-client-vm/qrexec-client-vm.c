@@ -6,6 +6,9 @@
 #include "qrexec.h"
 #include "log.h"
 #include "utf8-conv.h"
+#ifdef BACKEND_VMM_wni
+#include <lmcons.h>  // for UNLEN
+#endif
 
 ULONG CreatePipedProcessAsCurrentUser(
 		PTCHAR pszCommand,
@@ -113,7 +116,14 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	HANDLE	hPipe;
 	BOOL	fSuccess = FALSE;
 	DWORD	cbRead, cbWritten, dwMode;
-	LPTSTR	lpszPipename = TEXT("\\\\.\\pipe\\qrexec-trigger");
+#ifdef BACKEND_VMM_wni
+#define MAX_PIPENAME_LEN (RTL_NUMBER_OF(TRIGGER_PIPE_NAME) + UNLEN)
+	TCHAR	lpszPipename[MAX_PIPENAME_LEN];
+	DWORD	user_name_len = UNLEN + 1;
+	TCHAR	user_name[user_name_len];
+#else
+	LPTSTR	lpszPipename = TRIGGER_PIPE_NAME;
+#endif
 	struct	trigger_connect_params params;
 	ULONG	uResult;
 	PUCHAR	pszParameter;
@@ -176,6 +186,18 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	pszParameter = NULL;
 
 	lprintf("Connecting to the pipe server\n");
+
+#ifdef BACKEND_VMM_wni
+    /* on WNI we don't have separate namespace for each VM (all is in the
+     * single system) */
+    if (!GetUserName(user_name, &user_name_len)) {
+        perror("GetUserName");
+        return GetLastError();
+    }
+    if (FAILED(StringCchPrintf(lpszPipename, MAX_PIPENAME_LEN,
+            TRIGGER_PIPE_NAME, user_name)))
+        return ERROR_NOT_ENOUGH_MEMORY;
+#endif
 
 	// Try to open a named pipe; wait for it, if necessary.
 

@@ -22,6 +22,12 @@
 #pragma once
 #define REXEC_PORT 512
 
+#ifdef BACKEND_VMM_wni
+#define	TRIGGER_PIPE_NAME	TEXT("\\\\.\\pipe\\%s\\qrexec-trigger")
+#else
+#define	TRIGGER_PIPE_NAME	TEXT("\\\\.\\pipe\\qrexec-trigger")
+#endif
+
 
 enum {
 	MSG_CLIENT_TO_SERVER_EXEC_CMDLINE = 0x100,
