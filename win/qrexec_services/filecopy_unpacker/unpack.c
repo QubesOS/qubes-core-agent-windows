@@ -2,8 +2,8 @@
 #include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Strsafe.h>
 #include <Shlwapi.h>
+#include <Strsafe.h>
 #include <Shellapi.h>
 #include <ioall.h>
 #include <gui-fatal.h>
