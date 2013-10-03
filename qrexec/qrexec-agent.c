@@ -812,12 +812,12 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 			lprintf_err(uResult, "InterceptRPCRequest(): GetModuleFileName()");
 			return uResult;
 		}
-		// cut off file name (qrexec_agent.exe)
+		// cut off file name (qrexec-agent.exe)
 		pwSeparator = wcsrchr(wszServiceFilePath, L'\\');
 		if (!pwSeparator) {
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf("InterceptRPCRequest(): Cannot find dir containing qrexec_agent.exe\n");
+			lprintf("InterceptRPCRequest(): Cannot find dir containing qrexec-agent.exe\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 		*pwSeparator = L'\0';
@@ -826,19 +826,19 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (!pwSeparator) {
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec_agent.exe\n");
+			lprintf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec-agent.exe\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 		// Leave trailing backslash
 		pwSeparator++;
 		*pwSeparator = L'\0';
-		if (wcslen(wszServiceFilePath) + wcslen(L"qubes_rpc\\") + wcslen(pwszServiceName) > MAX_PATH) {
+		if (wcslen(wszServiceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(pwszServiceName) > MAX_PATH) {
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
 			lprintf("InterceptRPCRequest(): RPC service config file path too long\n");
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
-		PathAppendW(wszServiceFilePath, L"qubes_rpc");
+		PathAppendW(wszServiceFilePath, L"qubes-rpc");
 		PathAppendW(wszServiceFilePath, pwszServiceName);
 
 		hServiceConfigFile = CreateFileW(wszServiceFilePath,               // file to open
@@ -888,10 +888,10 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		PathRemoveArgsW(pwszRawServiceFilePath);
 		PathUnquoteSpacesW(pwszRawServiceFilePath);
 		if (PathIsRelativeW(pwszRawServiceFilePath)) {
-			// relative path are based in qubes_rpc_services
+			// relative path are based in qubes-rpc-services
 			// reuse separator found when preparing previous file path
 			*pwSeparator = L'\0';
-			PathAppendW(wszServiceFilePath, L"qubes_rpc_services");
+			PathAppendW(wszServiceFilePath, L"qubes-rpc-services");
 			PathAppendW(wszServiceFilePath, pwszRawServiceFilePath);
 		} else {
 			StringCchCopyW(wszServiceFilePath, MAX_PATH + 1, pwszRawServiceFilePath);
@@ -1569,7 +1569,7 @@ ULONG WatchForEvents()
 
 VOID Usage()
 {
-	_tprintf(TEXT("\nqrexec agent service\n\nUsage: qrexec_agent <-i|-u>\n"));
+	_tprintf(TEXT("\nqrexec agent service\n\nUsage: qrexec-agent <-i|-u>\n"));
 }
 
 

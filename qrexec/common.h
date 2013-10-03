@@ -7,14 +7,14 @@
 
 //#define BUILD_AS_SERVICE
 
-#define SERVICE_NAME	TEXT("qrexec_agent")
+#define SERVICE_NAME	TEXT("qrexec-agent")
 #define DEFAULT_USER_PASSWORD_UNICODE	L"userpass"
 
 #ifdef DBG
-#define LOG_FILE		TEXT("c:\\qrexec_agent.log")
+#define LOG_FILE		TEXT("c:\\qrexec-agent.log")
 #endif
 
-#define	TRIGGER_PIPE_NAME	TEXT("\\\\.\\pipe\\qrexec_trigger")
+#define	TRIGGER_PIPE_NAME	TEXT("\\\\.\\pipe\\qrexec-trigger")
 
 //#define DISPLAY_CONSOLE_OUTPUT
 

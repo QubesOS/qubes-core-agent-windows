@@ -352,7 +352,7 @@ ULONG ProceedWithExecution(int assigned_client_id, PUCHAR pszIdent)
 
 	g_Pipes[uPipeNumber].assigned_client_id = assigned_client_id;
 
-	// Signalize that we're allowed to send io handles to qrexec_client_vm.
+	// Signalize that we're allowed to send io handles to qrexec-client-vm.
 	SetEvent(g_hEvents[uPipeNumber]);
 
 	LeaveCriticalSection(&g_PipesCriticalSection);

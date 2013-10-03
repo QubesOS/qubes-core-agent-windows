@@ -56,27 +56,27 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 	// build RPC service config file path
 	memset(szQrexecClientPath, 0, sizeof(szQrexecClientPath));
 	if (!GetModuleFileName(NULL, szQrexecClientPath, RTL_NUMBER_OF(szQrexecClientPath))) {
-		reportError(TEXT("Failed to get qrexec_client_vm.exe path"));
+		reportError(TEXT("Failed to get qrexec-client-vm.exe path"));
 		return 1;
 	}
-	// cut off file name (qrexec_agent.exe)
+	// cut off file name (qrexec-agent.exe)
 	pSeparator = _tcsrchr(szQrexecClientPath, TEXT('\\'));
 	if (!pSeparator) {
-		reportError(TEXT("Cannot find dir containing qrexec_client_vm.exe"));
+		reportError(TEXT("Cannot find dir containing qrexec-client-vm.exe"));
 		return 1;
 	}
 	// Leave trailing backslash
 	pSeparator++;
 	*pSeparator = TEXT('\0');
-	PathAppend(szQrexecClientPath, TEXT("qrexec_client_vm.exe"));
+	PathAppend(szQrexecClientPath, TEXT("qrexec-client-vm.exe"));
 
-	cchQrexecClientCmdLine = _tcslen(TEXT("qrexec_client_vm.exe")) + _tcslen((PTCHAR)hResult) + _tcslen(lpCommandLine) + 3;
+	cchQrexecClientCmdLine = _tcslen(TEXT("qrexec-client-vm.exe")) + _tcslen((PTCHAR)hResult) + _tcslen(lpCommandLine) + 3;
 	pszQrexecClientCmdLine = malloc(cchQrexecClientCmdLine*sizeof(TCHAR));
 	if (!pszQrexecClientCmdLine) {
 		reportError(TEXT("out of memory"));
 		return 1;
 	}
-	if (FAILED(StringCchPrintf(pszQrexecClientCmdLine, cchQrexecClientCmdLine, TEXT("qrexec_client_vm.exe %s %s"), (PTCHAR)hResult, lpCommandLine))) {
+	if (FAILED(StringCchPrintf(pszQrexecClientCmdLine, cchQrexecClientCmdLine, TEXT("qrexec-client-vm.exe %s %s"), (PTCHAR)hResult, lpCommandLine))) {
 		reportError(TEXT("Failed to construct command line"));
 		return 1;
 	}
@@ -85,7 +85,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 	si.cb = sizeof(si);
 
 	if (!CreateProcess(szQrexecClientPath, pszQrexecClientCmdLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-		reportError(TEXT("Failed to execute qrexec_client_vm.exe"));
+		reportError(TEXT("Failed to execute qrexec-client-vm.exe"));
 		return 1;
 	}
 

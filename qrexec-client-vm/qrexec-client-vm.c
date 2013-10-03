@@ -113,7 +113,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	HANDLE	hPipe;
 	BOOL	fSuccess = FALSE;
 	DWORD	cbRead, cbWritten, dwMode;
-	LPTSTR	lpszPipename = TEXT("\\\\.\\pipe\\qrexec_trigger");
+	LPTSTR	lpszPipename = TEXT("\\\\.\\pipe\\qrexec-trigger");
 	struct	trigger_connect_params params;
 	ULONG	uResult;
 	PUCHAR	pszParameter;
@@ -197,7 +197,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		// Exit if an error other than ERROR_PIPE_BUSY occurs.
 		uResult = GetLastError();
 		if (ERROR_PIPE_BUSY != uResult) {
-			lprintf_err(uResult, "qrexec_agent pipe not found, CreateFile()");
+			lprintf_err(uResult, "qrexec-agent pipe not found, CreateFile()");
 			return uResult;
 		}
 
@@ -205,7 +205,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 		if (!WaitNamedPipe(lpszPipename, 10000)) {
 			uResult = GetLastError();
-			lprintf_err(uResult, "qrexec_agent pipe is busy, WaitNamedPipe()");
+			lprintf_err(uResult, "qrexec-agent pipe is busy, WaitNamedPipe()");
 			return uResult;
 		}
 	}
