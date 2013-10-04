@@ -430,7 +430,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 		} 
 
 		g_Pipes[i].hPipeInst = CreateNamedPipe( 
-					TRIGGER_PIPE_NAME,
+					lpszPipename,
 					PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
 					PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
 					INSTANCES, // number of instances 
