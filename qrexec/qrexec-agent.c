@@ -237,7 +237,7 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 	dwRead = 0;
 	if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE)) {
 		perror("ReturnPipeData(): GetOverlappedResult");
-		logf("ReturnPipeData(): GetOverlappedResult, client %d, dwRead %d", client_id, dwRead);
+		logf("ReturnPipeData(): GetOverlappedResult, client %d, dwRead %d\n", client_id, dwRead);
 	}
 
 	uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent);
@@ -565,12 +565,12 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 	}
 
 	if (pwszUserName)
-		debugf("AddClient(): Running \"%S\" as user \"%S\"\n", pwszCommandLine, pwszUserName);
+		debugf("AddClient(): Running \"%s\" as user \"%s\"\n", pwszCommandLine, pwszUserName);
 	else {
 #ifdef BUILD_AS_SERVICE
-		debugf("AddClient(): Running \"%S\" as SYSTEM\n", pwszCommandLine);
+		debugf("AddClient(): Running \"%s\" as SYSTEM\n", pwszCommandLine);
 #else
-		debugf("AddClient(): Running \"%S\" as current user\n", pwszCommandLine);
+		debugf("AddClient(): Running \"%s\" as current user\n", pwszCommandLine);
 #endif
 	}
 
@@ -849,7 +849,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		{
 			uResult = GetLastError();
 			perror("CreateFileW");
-			logf("InterceptRPCRequest(): Failed to open RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
+			logf("InterceptRPCRequest(): Failed to open RPC %s configuration file (%s)\n", pwszServiceName, wszServiceFilePath);
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
 			return uResult;
@@ -859,7 +859,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (!ReadFile(hServiceConfigFile, szBuffer, sizeof(WCHAR) * MAX_PATH, &uBytesRead, NULL)) {
 			uResult = GetLastError();
 			perror("ReadFile");
-			logf("InterceptRPCRequest(): Failed to read RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
+			logf("InterceptRPCRequest(): Failed to read RPC %s configuration file (%s)\n", pwszServiceName, wszServiceFilePath);
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
 			CloseHandle(hServiceConfigFile);
@@ -870,7 +870,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		uResult = TextBOMToUTF16(szBuffer, uBytesRead, &pwszRawServiceFilePath);
 		if (uResult != ERROR_SUCCESS) {
 			perror("TextBOMToUTF16");
-			logf("InterceptRPCRequest(): Failed to parse the encoding in RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
+			logf("InterceptRPCRequest(): Failed to parse the encoding in RPC %s configuration file (%s)\n", pwszServiceName, wszServiceFilePath);
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
 			return uResult;
@@ -908,7 +908,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 				free(pwszSourceDomainName);
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
-		debugf("InterceptRPCRequest(): RPC %S: %S\n", pwszServiceName, wszServiceFilePath);
+		debugf("InterceptRPCRequest(): RPC %s: %s\n", pwszServiceName, wszServiceFilePath);
 		StringCchCopyW(pwszServiceCommandLine, wcslen(wszServiceFilePath) + 1, wszServiceFilePath);
 
 		*ppwszServiceCommandLine = pwszServiceCommandLine;
@@ -937,7 +937,7 @@ ULONG handle_connect_existing(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	debugf("handle_connect_existing(): client %d, ident %s\n", client_id, buf);
+	debugf("handle_connect_existing(): client %d, ident %S\n", client_id, buf);
 
 	uResult = ProceedWithExecution(client_id, buf);
 	free(buf);
@@ -1001,11 +1001,11 @@ ULONG handle_exec(int client_id, int len)
 	// Create a process and redirect its console IO to vchan.
 	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, bRunInteractively);
 	if (ERROR_SUCCESS == uResult)
-		debugf("handle_exec(): Executed %S\n", pwszCommandLine);
+		debugf("handle_exec(): Executed %s\n", pwszCommandLine);
 	else {
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 		perror("send_exit_code");
-		logf("handle_exec(): AddClient(\"%S\")", pwszCommandLine);
+		logf("handle_exec(): AddClient(\"%s\")\n", pwszCommandLine);
 	}
 
 	if (pwszRemoteDomainName) {
@@ -1087,14 +1087,14 @@ ULONG handle_just_exec(int client_id, int len)
 
 	if (ERROR_SUCCESS == uResult) {
 		CloseHandle(hProcess);
-		debugf("handle_just_exec(): Executed (nowait) %S\n", pwszCommandLine);
+		debugf("handle_just_exec(): Executed (nowait) %s\n", pwszCommandLine);
 	} else {
 #ifdef BUILD_AS_SERVICE
 		perror("CreateNormalProcessAsUserW");
-		logf("handle_just_exec(): CreateNormalProcessAsUserW(\"%S\") failed", pwszCommandLine);
+		logf("handle_just_exec(): CreateNormalProcessAsUserW(\"%s\") failed\n", pwszCommandLine);
 #else
 		perror("CreateNormalProcessAsCurrentUserW");
-		logf("handle_just_exec(): CreateNormalProcessAsCurrentUserW(\"%S\") failed", pwszCommandLine);
+		logf("handle_just_exec(): CreateNormalProcessAsCurrentUserW(\"%s\") failed\n", pwszCommandLine);
 #endif
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 	}
@@ -1635,6 +1635,35 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	return ERROR_SUCCESS;
 }
 
+void InitLog()
+{
+	TCHAR buffer[MAX_PATH];
+	SYSTEMTIME st;
+	DWORD len;
+
+	GetLocalTime(&st);
+	memset(buffer, 0, sizeof(buffer));
+	if (FAILED(StringCchPrintf(buffer, RTL_NUMBER_OF(buffer), 
+		TEXT("%s\\qrexec-agent-%04d%02d%02d-%02d%02d%02d-%08x.log"), LOG_DIR,
+		st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, GetCurrentProcessId())))
+	{
+		perror("StringCchPrintf"); // this will just write to stderr before logfile is initialized
+		exit(1);
+	}
+
+	log_init(buffer);
+
+	logf("\nLog started: %s\n", buffer);
+	memset(buffer, 0, sizeof(buffer));
+	len = RTL_NUMBER_OF(buffer);
+	if (!GetUserName(buffer, &len))
+	{
+		perror("GetUserName");
+		exit(1);
+	}
+	logf("Running as user: %s\n", buffer);
+}
+
 #ifdef BUILD_AS_SERVICE
 
 ULONG Init(HANDLE *phServiceThread)
@@ -1694,7 +1723,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	TCHAR	bCommand;
 	PTCHAR	pszAccountName = NULL;
 
-	log_init(LOG_FILE_PATH);
+	InitLog();
 
 	SERVICE_TABLE_ENTRY	ServiceTable[] = {
 		{SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)ServiceMain},
@@ -1767,12 +1796,12 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	}
 
 	if (pszAccountName) {
-		debugf("main(): GrantDesktopAccess(\"%S\")\n", pszAccountName);
+		debugf("main(): GrantDesktopAccess(\"%s\")\n", pszAccountName);
 		uResult = GrantDesktopAccess(pszAccountName, NULL);
 		if (ERROR_SUCCESS != uResult)
 		{
 			perror("GrantDesktopAccess");
-			logf("main(): GrantDesktopAccess(\"%S\") failed", pszAccountName);
+			logf("main(): GrantDesktopAccess(\"%s\") failed\n", pszAccountName);
 		}
 
 		return uResult;
@@ -1824,7 +1853,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	ULONG	uClientNumber;
 
 	_tprintf(TEXT("\nqrexec agent console application\n\n"));
-	log_init(LOG_FILE_PATH);
+	InitLog();
 
 	if (ERROR_SUCCESS != CheckForXenInterface()) {
 		debugf("main(): Could not find Xen interface\n");

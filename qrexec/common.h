@@ -10,12 +10,12 @@
 #define SERVICE_NAME	TEXT("qrexec-agent")
 #define DEFAULT_USER_PASSWORD_UNICODE	L"userpass"
 
-#define LOG_FILE_PATH		TEXT("d:\\qubes\\qrexec-agent.log")
+// todo: this should be taken from some system-wide configuration (or passed as argument)
+#define LOG_DIR TEXT("c:\\qubes\\logs")
 
 //#define DISPLAY_CONSOLE_OUTPUT
 
 //#define START_SERVICE_AFTER_INSTALLATION
-
 
 // wr_ring_size[=1024] - sizeof(hdr)[=12]
 #define READ_BUFFER_SIZE	1012
