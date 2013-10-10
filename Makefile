@@ -1,5 +1,20 @@
 VERSION := $(shell cat version)
 
+# common settings for all projects
+CFLAGS := -DUNICODE -D_UNICODE
+CFLAGS += -DWINVER=0x0600 -D_WIN32_WINNT=0x0600
+CFLAGS += -I$(QUBES_INCLUDES)
+CFLAGS += -DBACKEND_VMM_$(BACKEND_VMM)
+CFLAGS += -Wall
+
+LDFLAGS := -municode -L$(QUBES_LIBS)
+
+CC := gcc
+RC := windres
+AR := ar
+
+export
+
 help:
 	@echo "make all      --- build all"
 	@echo "make clean    --- clean all"

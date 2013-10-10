@@ -1,3 +1,5 @@
+export
+
 help:
 	@echo "make all      --- build all"
 	@echo "make clean    --- clean all"
