@@ -1,2 +1,2 @@
-FOR /F %%V IN (..\version_win) DO SET VERSION=%%V
+FOR /F %%V IN (version) DO SET VERSION=%%V
 
