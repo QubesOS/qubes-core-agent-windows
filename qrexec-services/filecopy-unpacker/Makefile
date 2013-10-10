@@ -3,9 +3,9 @@ SRCFILES = qfile-unpacker.c gui-fatal.c unpack.c
 RCFILES =
 
 CFLAGS = -DUNICODE -D_UNICODE -DWINVER=0x0600 -D_WIN32_WINNT=0x0600
-CFLAGS += -Wall -mwindows -I../../include -I../filecopy-common -I$(QUBES_INCLUDES)
+CFLAGS += -Wall -mwindows -I../filecopy-common -I$(QUBES_INCLUDES)
 LDFLAGS = -Wl,--subsystem,windows -municode 
-LDFLAGS += -L../../libs -L../libs -L$(QUBES_LIBS) -lshlwapi -lntdll -lole32 -lshfolder -lqubes-utils -lfilecopy-common
+LDFLAGS += -L../libs -L$(QUBES_LIBS) -lshlwapi -lntdll -lole32 -lshfolder -lwindows-utils -lfilecopy-common
 
 CC = gcc
 RC = windres

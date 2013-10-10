@@ -5,14 +5,12 @@ help:
 	@echo "make clean    --- clean all"
 
 all:
-	$(MAKE) all -C utils
 	$(MAKE) all -C qrexec
 	$(MAKE) all -C qrexec-client-vm
 	$(MAKE) all -C ask-vm-and-run
 	$(MAKE) all -C qrexec-services
 
 clean:
-	$(MAKE) clean -C utils
 	$(MAKE) clean -C qrexec
 	$(MAKE) clean -C qrexec-client-vm
 	$(MAKE) clean -C ask-vm-and-run

@@ -1,8 +1,8 @@
 TARGET = qrexec-client-vm
 SRCFILES = qrexec-client-vm.c log.c
 
-CFLAGS = -DUNICODE -D_UNICODE -Wall -I../include
-LDFLAGS = -municode -L../libs -lqubes-utils
+CFLAGS = -DUNICODE -D_UNICODE -Wall -I../include -I$(QUBES_INCLUDES) 
+LDFLAGS = -municode -L$(QUBES_LIBS) -lwindows-utils
 
 CC = gcc
 

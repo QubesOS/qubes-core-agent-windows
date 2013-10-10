@@ -2,7 +2,7 @@ TARGET = libfilecopy-common
 SRCFILES = copy-file.c crc32.c gui-fatal.c ioall.c
 OUT_DIR = ../libs
 
-CFLAGS = -DUNICODE -D_UNICODE -DWINVER=0x0600 -D_WIN32_WINNT=0x600 -Wall -I$(QUBES_INCLUDES) -I../../include -I.
+CFLAGS = -DUNICODE -D_UNICODE -DWINVER=0x0600 -D_WIN32_WINNT=0x600 -Wall -I$(QUBES_INCLUDES) -I.
 
 CC = gcc
 AR = ar

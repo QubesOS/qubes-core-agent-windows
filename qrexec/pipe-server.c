@@ -223,7 +223,7 @@ ULONG ClosePipeHandles()
 	return ERROR_SUCCESS;
 }
 
-ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, PCREATE_PROCESS_RESPONSE pCpr)
+ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, CREATE_PROCESS_RESPONSE *pCpr)
 {
 	ULONG	uResult;
 

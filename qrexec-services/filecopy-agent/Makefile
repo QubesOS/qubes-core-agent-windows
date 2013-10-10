@@ -3,8 +3,8 @@ SRCFILES = qfile-agent.c gui-progress.c
 RCFILES = qfile-agent.rc
 
 CFLAGS = -DWINVER=0x0600 -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE -Wall -mwindows
-CFLAGS += -I../../include -I../filecopy-common -I$(QUBES_INCLUDES)
-LDFLAGS = -Wl,--subsystem,windows -municode -L../../libs -L../libs -L$(QUBES_LIBS) -lshlwapi -lcomctl32 -lqubes-utils -lfilecopy-common
+CFLAGS += -I../filecopy-common -I$(QUBES_INCLUDES)
+LDFLAGS = -Wl,--subsystem,windows -municode -L../libs -L$(QUBES_LIBS) -lshlwapi -lcomctl32 -lwindows-utils -lfilecopy-common
 
 CC = gcc
 RC = windres

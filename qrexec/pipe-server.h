@@ -3,9 +3,8 @@
 #include <aclapi.h>
 #include "qrexec.h"
 #include "common.h"
-#include "qrexec.h"
 #include "log.h"
-
+#include "agent.h"
 
 typedef enum {
 	STATE_WAITING_FOR_CLIENT = 0,

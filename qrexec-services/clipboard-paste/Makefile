@@ -1,8 +1,8 @@
 TARGET = clipboard-paste
 SRCFILES = clipboard-paste.c
 
-CFLAGS = -DUNICODE -D_UNICODE -Wall -mwindows -I../../include -I$(QUBES_INCLUDES)
-LDFLAGS = -Wl,--subsystem,windows -municode -L../../libs -L../libs -L$(QUBES_LIBS) -lshlwapi -lqubes-utils
+CFLAGS = -DUNICODE -D_UNICODE -Wall -mwindows -I$(QUBES_INCLUDES)
+LDFLAGS = -Wl,--subsystem,windows -municode -L../libs -L$(QUBES_LIBS) -lshlwapi -lwindows-utils
 
 CC = gcc
 

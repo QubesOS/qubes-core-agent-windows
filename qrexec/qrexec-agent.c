@@ -1,5 +1,5 @@
 #include "qrexec-agent.h"
-#include "utf8-conv.h"
+#include <utf8-conv.h>
 
 
 HANDLE	g_hAddExistingClientEvent;
@@ -589,7 +589,7 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 #ifdef BUILD_AS_SERVICE
 	if (pwszUserName)
-		uResult = CreatePipedProcessAsUserW(
+		uResult = CreatePipedProcessAsUser(
 				pwszUserName,
 				DEFAULT_USER_PASSWORD_UNICODE,
 				pwszCommandLine,
@@ -599,7 +599,7 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 				hPipeStderr,
 				&ClientInfo.hProcess);
 	else
-		uResult = CreatePipedProcessAsCurrentUserW(
+		uResult = CreatePipedProcessAsCurrentUser(
 				pwszCommandLine,
 				bRunInteractively,
 				hPipeStdin,
@@ -607,9 +607,8 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 				hPipeStderr,
 				&ClientInfo.hProcess);
 #else
-	uResult = CreatePipedProcessAsCurrentUserW(
+	uResult = CreatePipedProcessAsCurrentUser(
 			pwszCommandLine,
-			bRunInteractively,
 			hPipeStdin,
 			hPipeStdout,
 			hPipeStderr,
@@ -629,11 +628,11 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 #ifdef BUILD_AS_SERVICE
 		if (pwszUserName)
-			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsUserW()");
+			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsUser()");
 		else
-			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUserW()");
+			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUser()");
 #else
-		lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUserW()");
+		lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUser()");
 #endif
 		return uResult;
 	}
@@ -1075,16 +1074,15 @@ ULONG handle_just_exec(int client_id, int len)
 
 #ifdef BUILD_AS_SERVICE
 	// Create a process which IO is not redirected anywhere.
-	uResult = CreateNormalProcessAsUserW(
+	uResult = CreateNormalProcessAsUser(
 			pwszUserName,
 			DEFAULT_USER_PASSWORD_UNICODE,
 			pwszCommandLine,
 			bRunInteractively,
 			&hProcess);
 #else
-	uResult = CreateNormalProcessAsCurrentUserW(
+	uResult = CreateNormalProcessAsCurrentUser(
 			pwszCommandLine,
-			bRunInteractively,
 			&hProcess);
 #endif
 
@@ -1305,7 +1303,7 @@ ULONG WatchForEvents()
 	int	client_id;
 
 	// This will not block.
-	uResult = peer_server_init(REXEC_PORT);
+	uResult = peer_server_init(VCHAN_PORT);
 	if (uResult) {
 		lprintf_err(ERROR_INVALID_FUNCTION, "WatchForEvents(): peer_server_init()");
 		return ERROR_INVALID_FUNCTION;

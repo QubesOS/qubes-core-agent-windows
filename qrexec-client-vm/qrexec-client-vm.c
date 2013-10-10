@@ -3,9 +3,10 @@
 #include <stdlib.h>
 #include <tchar.h>
 #include <strsafe.h>
-#include "qrexec.h"
+#include <qrexec.h>
 #include "log.h"
-#include "utf8-conv.h"
+#include "agent.h"
+#include <utf8-conv.h>
 #ifdef BACKEND_VMM_wni
 #include <lmcons.h>  // for UNLEN
 #endif
@@ -75,7 +76,7 @@ ULONG CreatePipedProcessAsCurrentUser(
 	return ERROR_SUCCESS;
 }
 
-ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
+ULONG SendCreateProcessResponse(HANDLE hPipe, CREATE_PROCESS_RESPONSE *pCpr)
 {
 	DWORD	cbWritten;
 	DWORD	cbRead;

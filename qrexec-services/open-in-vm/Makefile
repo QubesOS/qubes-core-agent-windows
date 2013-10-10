@@ -2,8 +2,8 @@ TARGET = open-in-vm
 SRCFILES = qopen-in-vm.c
 RCFILES =
 	
-CFLAGS = -DUNICODE -D_UNICODE -Wall -mwindows -I../../include -I../filecopy-common -I$(QUBES_INCLUDES)
-LDFLAGS = -Wl,--subsystem,windows -municode -L../../libs -L../libs -L$(QUBES_LIBS) -lshlwapi -lqubes-utils -lfilecopy-common
+CFLAGS = -DUNICODE -D_UNICODE -Wall -mwindows -I../filecopy-common -I$(QUBES_INCLUDES)
+LDFLAGS = -Wl,--subsystem,windows -municode -L../libs -L$(QUBES_LIBS) -lshlwapi -lwindows-utils -lfilecopy-common
 
 CC = gcc
 RC = windres

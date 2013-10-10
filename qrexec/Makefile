@@ -1,10 +1,10 @@
 TARGET = qrexec-agent
-SRCFILES = qrexec-agent.c txrx-vchan.c service.c getopt.c log.c exec.c pipe-server.c
+SRCFILES = qrexec-agent.c txrx-vchan.c service.c log.c pipe-server.c
 RCFILES = errors.rc
 # need to manually compile .mc file with mc from win sdk for now...
-CFLAGS = -Wall -DUNICODE -D_UNICODE -I$(QUBES_INCLUDES) -I../include -DWINVER=0x0600 -DDBG
+CFLAGS = -Wall -DUNICODE -D_UNICODE -I../include -I$(QUBES_INCLUDES) -DWINVER=0x0600
 CFLAGS += -DBACKEND_VMM_$(BACKEND_VMM)
-LDFLAGS = -municode -L../libs -L$(QUBES_LIBS) -lshlwapi -lwtsapi32 -luserenv -lqubes-utils -lvchan-$(BACKEND_VMM)
+LDFLAGS = -municode -L$(QUBES_LIBS) -lwindows-utils -lvchan-$(BACKEND_VMM) -lshlwapi -lwtsapi32 -luserenv
 
 CC = gcc
 RC = windres
