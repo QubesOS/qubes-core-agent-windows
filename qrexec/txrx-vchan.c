@@ -20,9 +20,10 @@
  */
 
 #include <windows.h>
-#include "libvchan.h"
-#include <stdio.h>
 #include <stdlib.h>
+
+#include "libvchan.h"
+#include "log.h"
 
 libvchan_t *ctrl;
 
@@ -36,16 +37,14 @@ int write_all_vchan_ext(void *buf, int size)
 		return -1;
 
 	while (written < size) {
-		ret =
-		    libvchan_write(ctrl, (char *) buf + written,
-				   size - written);
+		ret = libvchan_write(ctrl, (char *) buf + written, size - written);
 		if (ret <= 0)
 			return ret;
 
 		written += ret;
 	}
 
-    fprintf(stderr, "sent %d bytes over vchan\n", size);
+    debugf("sent %d bytes over vchan\n", size);
 	return size;
 }
 
@@ -54,15 +53,13 @@ int read_all_vchan_ext(void *buf, int size)
 	int written = 0;
 	int ret;
 	while (written < size) {
-		ret =
-		    libvchan_read(ctrl, (char *) buf + written,
-				  size - written);
+		ret = libvchan_read(ctrl, (char *) buf + written, size - written);
 		if (ret <= 0)
 			return ret;
 
 		written += ret;
 	}
-    fprintf(stderr, "read %d bytes from vchan\n", size);
+    debugf("read %d bytes from vchan\n", size);
 	return size;
 }
 

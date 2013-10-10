@@ -1,6 +1,9 @@
 #pragma once
+#include <tchar.h>
 #include <windows.h>
 #include <aclapi.h>
+#include <strsafe.h>
+
 #include "qrexec.h"
 #include "common.h"
 #include "log.h"

@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <lmcons.h>
 #include <shlwapi.h>
+#include <strsafe.h> // include after shlwapi or it breaks some shlwapi string functions
+
 #include "common.h"
 #include "qrexec.h"
 #include "libvchan.h"
@@ -14,7 +16,6 @@
 #include "errors.h"
 #include "exec.h"
 #include "pipe-server.h"
-#include <strsafe.h> // include after shlwapi or it breaks some shlwapi string functions
 
 typedef enum {
 	HTYPE_INVALID = 0,

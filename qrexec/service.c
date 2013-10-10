@@ -41,7 +41,7 @@ ULONG UpdateServiceStatus(DWORD dwCurrentState,
 
 	if (!SetServiceStatus(g_hServiceStatus, &g_ServiceStatus)) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "UpdateServiceStatus(): SetServiceStatus()");
+		perror("UpdateServiceStatus(): SetServiceStatus()");
 		StopService();
 		return uResult;
 	}
@@ -51,7 +51,7 @@ ULONG UpdateServiceStatus(DWORD dwCurrentState,
 
 static VOID StopService()
 {
-	lprintf("StopService(): Signaling the stop event\n");
+	debugf("StopService(): Signaling the stop event\n");
 
 	SetEvent(g_hStopServiceEvent);
 	WaitForSingleObject(g_hServiceThread, INFINITE);
@@ -82,30 +82,29 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
 	// Manual reset, initial state is not signaled
 	g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!g_hStopServiceEvent) {
-		lprintf_err(GetLastError(), "ServiceMain(): CreateEvent()");
+		perror("ServiceMain(): CreateEvent()");
 		return;
 	}
 
 	g_hServiceStatus = RegisterServiceCtrlHandler(SERVICE_NAME, (LPHANDLER_FUNCTION)ServiceCtrlHandler);
 	if (!g_hServiceStatus) {
-		uResult = GetLastError();
+		perror("ServiceMain(): RegisterServiceCtrlHandler()");
 		CloseHandle(g_hStopServiceEvent);
-		lprintf_err(uResult, "ServiceMain(): RegisterServiceCtrlHandler()");
 		return;
 	}
 
 	uResult = UpdateServiceStatus(SERVICE_START_PENDING, NO_ERROR, 0, 500);
 	if (ERROR_SUCCESS != uResult) {
+		perror("ServiceMain(): UpdateServiceStatus()");
 		CloseHandle(g_hStopServiceEvent);
-		lprintf_err(uResult, "ServiceMain(): UpdateServiceStatus()");
 		return;
 	}
 
 	uResult = Init(&g_hServiceThread);
 	if (ERROR_SUCCESS != uResult) {
+		perror("ServiceMain(): Init()");
 		CloseHandle(g_hStopServiceEvent);
 		UpdateServiceStatus(SERVICE_STOPPED, uResult, 0, 0);
-		lprintf_err(uResult, "ServiceMain(): Init()");
 		return;
 	}
 
@@ -140,7 +139,7 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 		&dwBytesNeeded)) {
 
 		uResult = GetLastError();
-		lprintf_err(uResult, "WaitForService(): QueryServiceStatusEx()");
+		perror("WaitForService(): QueryServiceStatusEx()");
 		return uResult;
 	}
 
@@ -179,7 +178,7 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 			sizeof(SERVICE_STATUS_PROCESS),
 			&dwBytesNeeded)) {
 
-			lprintf_err(GetLastError(), "WaitForService(): QueryServiceStatusEx()");
+			perror("WaitForService(): QueryServiceStatusEx()");
 			break;
 		}
  
@@ -225,7 +224,7 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
 		&dwBytesNeeded)) {
 
 		uResult = GetLastError();
-		lprintf_err(uResult, "ChangeServiceState(): QueryServiceStatusEx()");
+		perror("ChangeServiceState(): QueryServiceStatusEx()");
 		return uResult;
 	}
 
@@ -245,12 +244,12 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
 		dwPendingState = SERVICE_START_PENDING;
 
 		if (dwPendingState == ServiceStatus.dwCurrentState)
-			lprintf("ChangeServiceState(): Service is being started already...\n");
+			debugf("ChangeServiceState(): Service is being started already...\n");
 		else {
-			lprintf("ChangeServiceState(): Starting the service...\n");
+			debugf("ChangeServiceState(): Starting the service...\n");
 			if (!StartService(hService, 0, NULL)) {
 				uResult = GetLastError();
-				lprintf_err(uResult, "ChangeServiceState(): StartService()");
+				perror("ChangeServiceState(): StartService()");
 				return uResult;
 			}
 		}
@@ -260,12 +259,12 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
 		dwPendingState = SERVICE_STOP_PENDING;
 
 		if (dwPendingState == ServiceStatus.dwCurrentState)
-			lprintf("ChangeServiceState(): Service is being stopped already...\n");
+			debugf("ChangeServiceState(): Service is being stopped already...\n");
 		else {
-			lprintf("ChangeServiceState(): Stopping the service...\n");
+			debugf("ChangeServiceState(): Stopping the service...\n");
 			if (!ControlService(hService, SERVICE_CONTROL_STOP, &Status)) {
 				uResult = GetLastError();
-				lprintf_err(uResult, "ChangeServiceState(): ControlService()");
+				perror("ChangeServiceState(): ControlService()");
 				return uResult;
 			}
 		}
@@ -289,7 +288,7 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 
 	hResult = StringCbLength(pszPathToModule, STRSAFE_MAX_CCH * sizeof(TCHAR), &cbSize);
 	if (FAILED(hResult)) {
-		lprintf_err(hResult, "CreateApplicationEventSource(): StringCbLength()");
+		perror("CreateApplicationEventSource(): StringCbLength()");
 		return hResult;
 	}
 
@@ -303,7 +302,7 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 			pszEventSourceName);
 
 	if (FAILED(hResult)) {
-		lprintf_err(hResult, "CreateApplicationEventSource(): StringCchPrintf()");
+		perror("CreateApplicationEventSource(): StringCchPrintf()");
 		return hResult;
 	}
 
@@ -319,7 +318,7 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 			NULL);
 
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "CreateApplicationEventSource(): RegCreateKeyEx()");
+		perror("CreateApplicationEventSource(): RegCreateKeyEx()");
 		return uResult;
 	}
 
@@ -331,8 +330,8 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 			(LPBYTE)pszPathToModule,
 			cbSize);
 	if (ERROR_SUCCESS != uResult) {
+		perror("CreateApplicationEventSource(): RegSetValueEx(\"EventMessageFile\")");
 		RegDeleteKey(hKey, NULL);
-		lprintf_err(uResult, "CreateApplicationEventSource(): RegSetValueEx(\"EventMessageFile\")");
 		return uResult;
 	}
 
@@ -346,8 +345,8 @@ ULONG CreateApplicationEventSource(PTCHAR pszEventSourceName, PTCHAR pszPathToMo
 			(LPBYTE)&dwTypesSupported,
 			sizeof(dwTypesSupported));
 	if (ERROR_SUCCESS != uResult) {
+		perror("CreateApplicationEventSource(): RegSetValueEx(\"TypesSupported\")");
 		RegDeleteKey(hKey, NULL);
-		lprintf_err(uResult, "CreateApplicationEventSource(): RegSetValueEx(\"TypesSupported\")");
 		return uResult;
 	}
 
@@ -371,13 +370,13 @@ ULONG DeleteApplicationEventSource(PTCHAR pszEventSourceName)
 			pszEventSourceName);
 
 	if (FAILED(hResult)) {
-		lprintf_err(hResult, "DeleteApplicationEventSource(): StringCchPrintf()");
+		perror("DeleteApplicationEventSource(): StringCchPrintf()");
 		return hResult;
 	}
 
 	uResult = RegDeleteKey(HKEY_LOCAL_MACHINE, szEventSourceKey);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "DeleteApplicationEventSource(): RegDeleteKey()");
+		perror("DeleteApplicationEventSource(): RegDeleteKey()");
 		return uResult;
 	}
 
@@ -398,7 +397,7 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 	hScm = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
 	if (!hScm) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "InstallService(): OpenSCManager()");
+		perror("InstallService(): OpenSCManager()");
 		return uResult;
 	}
 
@@ -417,22 +416,22 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 			NULL);
 	if (!hService) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "InstallService(): CreateService()");
+		perror("InstallService(): CreateService()");
 		CloseServiceHandle(hScm);
 		return uResult;
 	}
 
-	lprintf("InstallService(): Service installed\n");
+	debugf("InstallService(): Service installed\n");
 
 	uResult = CreateApplicationEventSource(pszServiceName, pszServiceFileName);
 	if (ERROR_SUCCESS != uResult)
-		lprintf_err(uResult, "InstallService(): CreateApplicationEventSource()");
+		perror("InstallService(): CreateApplicationEventSource()");
 
 
 #ifdef START_SERVICE_AFTER_INSTALLATION
 	uResult = ChangeServiceState(SERVICE_RUNNING, hService, &dwCurrentState, &dwExitCode, NULL);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "InstallService(): ChangeServiceState()");
+		perror("InstallService(): ChangeServiceState()");
 		CloseServiceHandle(hService);
 		CloseServiceHandle(hScm);
 		return uResult;
@@ -440,11 +439,11 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 
 	if (SERVICE_RUNNING != dwCurrentState) {
 		if (SERVICE_STOPPED == dwCurrentState)
-			lprintf_err(dwExitCode, "InstallService(): Service start failed");
+			perror("InstallService(): Service start failed");
 		else
-			lprintf("InstallService(): Service is not running, current state is %d\n", dwCurrentState);
+			debugf("InstallService(): Service is not running, current state is %d\n", dwCurrentState);
 	} else
-		lprintf("InstallService(): Service is running\n");
+		debugf("InstallService(): Service is running\n");
 #endif
 
 	CloseServiceHandle(hService);
@@ -469,36 +468,36 @@ ULONG UninstallService(PTCHAR pszServiceName)
 	hScm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 	if (!hScm) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "UninstallService(): OpenSCManager()");
+		perror("UninstallService(): OpenSCManager()");
 		return uResult;
 	}
 
 	hService = OpenService(hScm, pszServiceName, SERVICE_STOP | SERVICE_QUERY_STATUS | DELETE);
 	if (!hService) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "UninstallService(): OpenService()");
+		perror("UninstallService(): OpenService()");
 		CloseServiceHandle(hScm);
 		return uResult;
 	}
 
 	uResult = ChangeServiceState(SERVICE_STOPPED, hService, &dwCurrentState, &dwExitCode, &bNothingToDo);
 	if (ERROR_SUCCESS != uResult)
-		lprintf_err(uResult, "UninstallService(): ChangeServiceState()");
+		perror("UninstallService(): ChangeServiceState()");
 	else {
 		if (!bNothingToDo) {
 			if (SERVICE_STOPPED == dwCurrentState) {
 				if (ERROR_SUCCESS != dwExitCode)
-					lprintf_err(dwExitCode, "UninstallService(): Service");
+					perror("UninstallService(): Service");
 				else
-					lprintf("UninstallService(): Service stopped\n");
+					debugf("UninstallService(): Service stopped\n");
 			} else
-				lprintf("UninstallService(): Failed to stop the service, current state is %d\n", dwCurrentState);
+				debugf("UninstallService(): Failed to stop the service, current state is %d\n", dwCurrentState);
 		}
 	}
 
 	if (!DeleteService(hService)) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "UninstallService(): DeleteService()");
+		perror("UninstallService(): DeleteService()");
 
 		CloseServiceHandle(hService);
 		CloseServiceHandle(hScm);
@@ -507,12 +506,12 @@ ULONG UninstallService(PTCHAR pszServiceName)
 
 	uResult = DeleteApplicationEventSource(pszServiceName);
 	if (ERROR_SUCCESS != uResult)
-		lprintf_err(uResult, "UninstallService(): DeleteApplicationEventSource()");
+		perror("UninstallService(): DeleteApplicationEventSource()");
 
 	CloseServiceHandle(hService);
 	CloseServiceHandle(hScm);
 
-	lprintf("UninstallService(): Service uninstalled\n");
+	debugf("UninstallService(): Service uninstalled\n");
 	return ERROR_SUCCESS;
 }
 
@@ -526,7 +525,7 @@ ULONG ReportErrorToEventLog(ULONG uErrorMessageId)
 	hEventSource = RegisterEventSource(NULL, SERVICE_NAME);
 	if (NULL == hEventSource) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "ReportErrorToEventLog(): RegisterEventSource()");
+		perror("ReportErrorToEventLog(): RegisterEventSource()");
 		return uResult;
 	}
 
@@ -543,8 +542,8 @@ ULONG ReportErrorToEventLog(ULONG uErrorMessageId)
 			NULL)) { // no binary data
 
 		uResult = GetLastError();
+		perror("ReportErrorToEventLog(): ReportEvent()");
 		DeregisterEventSource(hEventSource);
-		lprintf_err(uResult, "ReportErrorToEventLog(): ReportEvent()");
 		return uResult;
 	}
 

@@ -10,9 +10,7 @@
 #define SERVICE_NAME	TEXT("qrexec-agent")
 #define DEFAULT_USER_PASSWORD_UNICODE	L"userpass"
 
-#ifdef DBG
 #define LOG_FILE		TEXT("c:\\qrexec-agent.log")
-#endif
 
 //#define DISPLAY_CONSOLE_OUTPUT
 

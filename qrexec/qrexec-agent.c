@@ -41,7 +41,7 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 
     if (!GetUserName(user_name, &user_name_len)) {
 		uResult = GetLastError();
-        lprintf_err(uResult, "GetUserName");
+        perror("GetUserName");
         return uResult;
     }
 	StringCchPrintf(szPipeName, MAX_PATH, TEXT("\\\\.\\pipe\\%s\\qrexec.%08x.%I64x"), user_name, GetCurrentProcessId(), g_uPipeId++);
@@ -60,7 +60,7 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 			pSecurityAttributes);
 	if (!hReadPipe) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "CreateAsyncPipe(): CreateNamedPipe()");
+		perror("CreateAsyncPipe(): CreateNamedPipe()");
 		return uResult;
 	}
 
@@ -74,8 +74,8 @@ ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUT
 			NULL);
 	if (INVALID_HANDLE_VALUE == hWritePipe) {
 		uResult = GetLastError();
+		perror("CreateAsyncPipe(): CreateFile()");
 		CloseHandle(hReadPipe);
-		lprintf_err(uResult, "CreateAsyncPipe(): CreateFile()");
 		return uResult;
 	}
 
@@ -105,8 +105,8 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
 
 	uResult = CreateAsyncPipe(&pPipeData->hReadPipe, phWritePipe, &sa);
 	if (ERROR_SUCCESS != uResult) {
+		perror("InitReadPipe(): CreateAsyncPipe()");
 		CloseHandle(pPipeData->olRead.hEvent);
-		lprintf_err(uResult, "InitReadPipe(): CreateAsyncPipe()");
 		return uResult;
 	}
 
@@ -124,7 +124,7 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 	unsigned int vchan_space_avail;
 	ULONG uResult = ERROR_SUCCESS;
 
-	lprintf("ReturnData(%d), size %d\n", client_id, uDataSize);
+	debugf("ReturnData(%d), size %d\n", client_id, uDataSize);
 
 	EnterCriticalSection(&g_VchanCriticalSection);
 
@@ -154,7 +154,7 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 	s_hdr.client_id = client_id;
 	s_hdr.len = uDataSize;
 	if (write_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
-		lprintf_err(ERROR_INVALID_FUNCTION, "ReturnData(): write_all_vchan_ext(s_hdr)");
+		perror("ReturnData(): write_all_vchan_ext(s_hdr)");
 		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_INVALID_FUNCTION;
 	}
@@ -165,7 +165,7 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 	}
 
 	if (write_all_vchan_ext(pData, uDataSize) <= 0) {
-		lprintf_err(ERROR_INVALID_FUNCTION, "ReturnData(): write_all_vchan_ext(data, %d)", uDataSize);
+		perror("ReturnData(): write_all_vchan_ext()");
 		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_INVALID_FUNCTION;
 	}
@@ -180,12 +180,10 @@ ULONG send_exit_code(int client_id, int status)
 
 	uResult = ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status), NULL);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "send_exit_code(): ReturnData()");
+		perror("send_exit_code(): ReturnData()");
 		return uResult;
 	} else
-		lprintf("send_exit_code(): Send exit code %d for client_id %d\n",
-			status,
-			client_id);
+		debugf("send_exit_code(): Send exit code %d for client_id %d\n", status, client_id);
 
 	return ERROR_SUCCESS;
 }
@@ -238,8 +236,8 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 
 	dwRead = 0;
 	if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE)) {
-		uResult = GetLastError();
-		lprintf_err(uResult, "ReturnPipeData(): GetOverlappedResult, client %d, dwRead %d", client_id, dwRead);
+		perror("ReturnPipeData(): GetOverlappedResult");
+		logf("ReturnPipeData(): GetOverlappedResult, client %d, dwRead %d", client_id, dwRead);
 	}
 
 	uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent);
@@ -248,7 +246,7 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 		pPipeData->bVchanWritePending = TRUE;
 		return uResult;
 	} else if (ERROR_SUCCESS != uResult)
-		lprintf_err(uResult, "ReturnPipeData(): ReturnData()");
+		perror("ReturnPipeData(): ReturnData()");
 
 	pPipeData->bVchanWritePending = FALSE;
 
@@ -280,7 +278,7 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 		if (pPipeData->bReadInProgress) {
 
 			// If bReadInProgress is not FALSE then hReadPipe must be a valid handle for which an
-			// asynchornous read has been issued.
+			// asynchronous read has been issued.
 			if (CancelIo(pPipeData->hReadPipe)) {
 
 				// Must wait for the canceled IO to complete, otherwise a race condition may occur on the
@@ -292,7 +290,7 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 
 			} else {
 				uResult = GetLastError();
-				lprintf_err(uResult, "CloseReadPipeHandles(): CancelIo()");
+				perror("CloseReadPipeHandles(): CancelIo()");
 			}
 		}
 
@@ -341,8 +339,8 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 
 		hResult = StringCbCopyW(pwszUtf16, cbBufLen - cbSkipChars + sizeof(WCHAR), (wchar_t*)(pszBuf + cbSkipChars));
 		if (FAILED(hResult)) {
+			perror("TextBOMToUTF16(): StringCbCopyW()");
 			free(pwszUtf16);
-			lprintf_err(hResult, "TextBOMToUTF16(): StringCbCopyW()");
 			return hResult;
 		}
 
@@ -363,7 +361,7 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 	// Try UTF-8
 	uResult = ConvertUTF8ToUTF16(pszBuf + cbSkipChars, ppwszUtf16, NULL);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "TextBOMToUTF16(): UTF8ToUTF16()");
+		perror("TextBOMToUTF16(): UTF8ToUTF16()");
 		return uResult;
 	}
 
@@ -389,7 +387,7 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	pwszCommand = NULL;
 	uResult = ConvertUTF8ToUTF16(pszUtf8Command, &pwszCommand, NULL);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "ParseUtf8Command(): UTF8ToUTF16()");
+		perror("ParseUtf8Command(): UTF8ToUTF16()");
 		return uResult;
 	}
 
@@ -397,7 +395,7 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 	pwSeparator = wcschr(pwszCommand, L':');
 	if (!pwSeparator) {
 		free(pwszCommand);
-		lprintf("ParseUtf8Command(): Command line is supposed to be in user:[nogui:]command form\n");
+		logf("ParseUtf8Command(): Command line is supposed to be in user:[nogui:]command form\n");
 		return ERROR_INVALID_PARAMETER;
 	}
 
@@ -408,7 +406,7 @@ ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppws
 		pwSeparator = wcschr(pwSeparator, L':');
 		if (!pwSeparator) {
 			free(pwszCommand);
-			lprintf("ParseUtf8Command(): Command line is supposed to be in user:[nogui:]command form\n");
+			logf("ParseUtf8Command(): Command line is supposed to be in user:[nogui:]command form\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 
@@ -447,29 +445,29 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 
 	uResult = InitReadPipe(&pClientInfo->Stdout, &hPipeStdout, PTYPE_STDOUT);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "CreateClientPipes(): InitReadPipe(STDOUT)");
+		perror("CreateClientPipes(): InitReadPipe(STDOUT)");
 		return uResult;
 	}
 
 	uResult = InitReadPipe(&pClientInfo->Stderr, &hPipeStderr, PTYPE_STDERR);
 	if (ERROR_SUCCESS != uResult) {
+		perror("CreateClientPipes(): InitReadPipe(STDERR)");
 
 		CloseHandle(pClientInfo->Stdout.hReadPipe);
 		CloseHandle(hPipeStdout);
 
-		lprintf_err(uResult, "CreateClientPipes(): InitReadPipe(STDERR)");
 		return uResult;
 	}
 
 	if (!CreatePipe(&hPipeStdin, &pClientInfo->hWriteStdinPipe, &sa, 0)) {
 		uResult = GetLastError();
+		perror("CreateClientPipes(): CreatePipe(STDIN)");
 
 		CloseHandle(pClientInfo->Stdout.hReadPipe);
 		CloseHandle(pClientInfo->Stderr.hReadPipe);
 		CloseHandle(hPipeStdout);
 		CloseHandle(hPipeStderr);
 
-		lprintf_err(uResult, "CreateClientPipes(): CreatePipe(STDIN)");
 		return uResult;
 	}
 
@@ -499,13 +497,13 @@ ULONG ReserveClientNumber(int client_id, PULONG puClientNumber)
 	if (MAX_CLIENTS == uClientNumber) {
 		// There is no space for watching for another process
 		LeaveCriticalSection(&g_ClientsCriticalSection);
-		lprintf("ReserveClientNumber(): The maximum number of running processes (%d) has been reached\n", MAX_CLIENTS);
+		logf("ReserveClientNumber(): The maximum number of running processes (%d) has been reached\n", MAX_CLIENTS);
 		return ERROR_TOO_MANY_CMDS;
 	}
 
 	if (FindClientById(client_id)) {
 		LeaveCriticalSection(&g_ClientsCriticalSection);
-		lprintf("ReserveClientNumber(): A client with the same id (#%d) already exists\n", client_id);
+		logf("ReserveClientNumber(): A client with the same id (#%d) already exists\n", client_id);
 		return ERROR_ALREADY_EXISTS;
 	}
 
@@ -563,17 +561,17 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 	uResult = ReserveClientNumber(client_id, &uClientNumber);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "AddClient(): ReserveClientNumber()");
+		perror("AddClient(): ReserveClientNumber()");
 		return uResult;
 	}
 
 	if (pwszUserName)
-		lprintf("AddClient(): Running \"%S\" as user \"%S\"\n", pwszCommandLine, pwszUserName);
+		debugf("AddClient(): Running \"%S\" as user \"%S\"\n", pwszCommandLine, pwszUserName);
 	else {
 #ifdef BUILD_AS_SERVICE
-		lprintf("AddClient(): Running \"%S\" as SYSTEM\n", pwszCommandLine);
+		debugf("AddClient(): Running \"%S\" as SYSTEM\n", pwszCommandLine);
 #else
-		lprintf("AddClient(): Running \"%S\" as current user\n", pwszCommandLine);
+		debugf("AddClient(): Running \"%S\" as current user\n", pwszCommandLine);
 #endif
 	}
 
@@ -582,8 +580,8 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 	uResult = CreateClientPipes(&ClientInfo, &hPipeStdin, &hPipeStdout, &hPipeStderr);
 	if (ERROR_SUCCESS != uResult) {
+		perror("AddClient(): CreateClientPipes()");
 		ReleaseClientNumber(uClientNumber);
-		lprintf_err(uResult, "AddClient(): CreateClientPipes()");
 		return uResult;
 	}
 
@@ -628,17 +626,18 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 #ifdef BUILD_AS_SERVICE
 		if (pwszUserName)
-			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsUser()");
+			perror("AddClient(): CreatePipedProcessAsUser()");
 		else
-			lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUser()");
+			perror("AddClient(): CreatePipedProcessAsCurrentUser()");
 #else
-		lprintf_err(uResult, "AddClient(): CreatePipedProcessAsCurrentUser()");
+		perror("AddClient(): CreatePipedProcessAsCurrentUser()");
 #endif
 		return uResult;
 	}
 
 	uResult = AddFilledClientInfo(uClientNumber, &ClientInfo);
 	if (ERROR_SUCCESS != uResult) {
+		perror("AddClient(): AddFilledClientInfo()");
 		ReleaseClientNumber(uClientNumber);
 
 		CloseHandle(ClientInfo.hWriteStdinPipe);
@@ -646,11 +645,10 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 		CloseHandle(ClientInfo.Stderr.hReadPipe);
 		CloseHandle(ClientInfo.hProcess);
 
-		lprintf_err(uResult, "AddClient(): AddFilledClientInfo()");
 		return uResult;
 	}
 
-	lprintf("AddClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
+	debugf("AddClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
 	return ERROR_SUCCESS;
 }
@@ -665,7 +663,7 @@ ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
 
 	uResult = ReserveClientNumber(client_id, &uClientNumber);
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "AddExistingClient(): ReserveClientNumber()");
+		perror("AddExistingClient(): ReserveClientNumber()");
 		return uResult;
 	}
 
@@ -673,12 +671,12 @@ ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
 
 	uResult = AddFilledClientInfo(uClientNumber, pClientInfo);
 	if (ERROR_SUCCESS != uResult) {
+		perror("AddExistingClient(): AddFilledClientInfo()");
 		ReleaseClientNumber(uClientNumber);
-		lprintf_err(uResult, "AddExistingClient(): AddFilledClientInfo()");
 		return uResult;
 	}
 
-	lprintf("AddExistingClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
+	debugf("AddExistingClient(): New client %d (local id #%d)\n", client_id, uClientNumber);
 
 	SetEvent(g_hAddExistingClientEvent);
 
@@ -698,7 +696,7 @@ VOID RemoveClientNoLocks(PCLIENT_INFO pClientInfo)
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
 	CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
 
-	lprintf("RemoveClientNoLocks(): Client %d removed\n", pClientInfo->client_id);
+	debugf("RemoveClientNoLocks(): Client %d removed\n", pClientInfo->client_id);
 
 	pClientInfo->client_id = FREE_CLIENT_SPOT_ID;
 	pClientInfo->bClientIsReady = FALSE;
@@ -792,11 +790,11 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 			pwSeparator++;
 			pwszSourceDomainName = _wcsdup(pwSeparator);
 			if (!pwszSourceDomainName) {
-				lprintf_err(ERROR_NOT_ENOUGH_MEMORY, "InterceptRPCRequest(): _wcsdup()");
+				perror("InterceptRPCRequest(): _wcsdup()");
 				return ERROR_NOT_ENOUGH_MEMORY;
 			}
 		} else {
-			lprintf("InterceptRPCRequest(): No source domain given\n");
+			logf("InterceptRPCRequest(): No source domain given\n");
 			// Most qrexec services do not use source domain at all, so do not
 			// abort if missing. This can be the case when RPC triggered
 			// manualy using qvm-run (qvm-run -p vmname "QUBESRPC service_name").
@@ -806,9 +804,9 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		memset(wszServiceFilePath, 0, sizeof(wszServiceFilePath));
 		if (!GetModuleFileNameW(NULL, wszServiceFilePath, MAX_PATH)) {
 			uResult = GetLastError();
+			perror("InterceptRPCRequest(): GetModuleFileName()");
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf_err(uResult, "InterceptRPCRequest(): GetModuleFileName()");
 			return uResult;
 		}
 		// cut off file name (qrexec-agent.exe)
@@ -816,7 +814,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (!pwSeparator) {
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf("InterceptRPCRequest(): Cannot find dir containing qrexec-agent.exe\n");
+			logf("InterceptRPCRequest(): Cannot find dir containing qrexec-agent.exe\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 		*pwSeparator = L'\0';
@@ -825,7 +823,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (!pwSeparator) {
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec-agent.exe\n");
+			logf("InterceptRPCRequest(): Cannot find dir containing bin\\qrexec-agent.exe\n");
 			return ERROR_INVALID_PARAMETER;
 		}
 		// Leave trailing backslash
@@ -834,7 +832,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (wcslen(wszServiceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(pwszServiceName) > MAX_PATH) {
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf("InterceptRPCRequest(): RPC service config file path too long\n");
+			logf("InterceptRPCRequest(): RPC service config file path too long\n");
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
 		PathAppendW(wszServiceFilePath, L"qubes-rpc");
@@ -851,18 +849,20 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		if (hServiceConfigFile == INVALID_HANDLE_VALUE)
 		{
 			uResult = GetLastError();
+			perror("CreateFileW");
+			logf("InterceptRPCRequest(): Failed to open RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf_err(uResult, "InterceptRPCRequest(): Failed to open RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			return uResult;
 		}
 		uBytesRead = 0;
 		memset(szBuffer, 0, sizeof(szBuffer));
 		if (!ReadFile(hServiceConfigFile, szBuffer, sizeof(WCHAR) * MAX_PATH, &uBytesRead, NULL)) {
 			uResult = GetLastError();
+			perror("ReadFile");
+			logf("InterceptRPCRequest(): Failed to read RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf_err(uResult, "InterceptRPCRequest(): Failed to read RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			CloseHandle(hServiceConfigFile);
 			return uResult;
 		}
@@ -870,9 +870,10 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 
 		uResult = TextBOMToUTF16(szBuffer, uBytesRead, &pwszRawServiceFilePath);
 		if (uResult != ERROR_SUCCESS) {
+			perror("TextBOMToUTF16");
+			logf("InterceptRPCRequest(): Failed to parse the encoding in RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf_err(uResult, "InterceptRPCRequest(): Failed to parse the encoding in RPC %S configuration file (%S)", pwszServiceName, wszServiceFilePath);
 			return uResult;
 		}
 
@@ -903,12 +904,12 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 		free(pwszRawServiceFilePath);
 		pwszServiceCommandLine = malloc((wcslen(wszServiceFilePath) + 1) * sizeof(WCHAR));
 		if (pwszServiceCommandLine == NULL) {
+			perror("InterceptRPCRequest(): malloc()");
 			if (pwszSourceDomainName)
 				free(pwszSourceDomainName);
-			lprintf_err(ERROR_NOT_ENOUGH_MEMORY, "InterceptRPCRequest(): malloc()");
 			return ERROR_NOT_ENOUGH_MEMORY;
 		}
-		lprintf("InterceptRPCRequest(): RPC %S: %S\n", pwszServiceName, wszServiceFilePath);
+		debugf("InterceptRPCRequest(): RPC %S: %S\n", pwszServiceName, wszServiceFilePath);
 		StringCchCopyW(pwszServiceCommandLine, wcslen(wszServiceFilePath) + 1, wszServiceFilePath);
 
 		*ppwszServiceCommandLine = pwszServiceCommandLine;
@@ -934,18 +935,18 @@ ULONG handle_connect_existing(int client_id, int len)
 	buf[len] = 0;
 
 	if (read_all_vchan_ext(buf, len) <= 0) {
+		perror("handle_connect_existing(): read_all_vchan_ext()");
 		free(buf);
-		lprintf_err(ERROR_INVALID_FUNCTION, "handle_connect_existing(): read_all_vchan_ext()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	lprintf("handle_connect_existing(): client %d, ident %s\n", client_id, buf);
+	debugf("handle_connect_existing(): client %d, ident %s\n", client_id, buf);
 
 	uResult = ProceedWithExecution(client_id, buf);
 	free(buf);
 
 	if (ERROR_SUCCESS != uResult)
-		lprintf_err(uResult, "handle_connect_existing(): ProceedWithExecution()");
+		perror("handle_connect_existing(): ProceedWithExecution()");
 
 	return ERROR_SUCCESS;
 }
@@ -968,8 +969,8 @@ ULONG handle_exec(int client_id, int len)
 	buf[len] = 0;
 
 	if (read_all_vchan_ext(buf, len) <= 0) {
+		perror("handle_exec(): read_all_vchan_ext()");
 		free(buf);
-		lprintf_err(ERROR_INVALID_FUNCTION, "handle_exec(): read_all_vchan_ext()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
@@ -977,9 +978,9 @@ ULONG handle_exec(int client_id, int len)
 
 	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine, &bRunInteractively);
 	if (ERROR_SUCCESS != uResult) {
+		perror("handle_just_exec(): ParseUtf8Command()");
 		free(buf);
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_just_exec(): ParseUtf8Command()");
 		return ERROR_SUCCESS;
 	}
 
@@ -988,9 +989,9 @@ ULONG handle_exec(int client_id, int len)
 
 	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
 	if (ERROR_SUCCESS != uResult) {
+		perror("handle_exec(): InterceptRPCRequest()");
 		free(pwszCommand);
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_exec(): InterceptRPCRequest()");
 		return ERROR_SUCCESS;
 	}
 
@@ -1003,10 +1004,11 @@ ULONG handle_exec(int client_id, int len)
 	// Create a process and redirect its console IO to vchan.
 	uResult = AddClient(client_id, pwszUserName, pwszCommandLine, bRunInteractively);
 	if (ERROR_SUCCESS == uResult)
-		lprintf("handle_exec(): Executed %S\n", pwszCommandLine);
+		debugf("handle_exec(): Executed %S\n", pwszCommandLine);
 	else {
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_exec(): AddClient(\"%S\")", pwszCommandLine);
+		perror("send_exit_code");
+		logf("handle_exec(): AddClient(\"%S\")", pwszCommandLine);
 	}
 
 	if (pwszRemoteDomainName) {
@@ -1039,8 +1041,8 @@ ULONG handle_just_exec(int client_id, int len)
 	buf[len] = 0;
 
 	if (read_all_vchan_ext(buf, len) <= 0) {
+		perror("handle_just_exec(): read_all_vchan_ext()");
 		free(buf);
-		lprintf_err(ERROR_INVALID_FUNCTION, "handle_just_exec(): read_all_vchan_ext()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
@@ -1048,9 +1050,9 @@ ULONG handle_just_exec(int client_id, int len)
 
 	uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine, &bRunInteractively);
 	if (ERROR_SUCCESS != uResult) {
+		perror("handle_just_exec(): ParseUtf8Command()");
 		free(buf);
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_just_exec(): ParseUtf8Command()");
 		return ERROR_SUCCESS;
 	}
 
@@ -1059,9 +1061,9 @@ ULONG handle_just_exec(int client_id, int len)
 
 	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
 	if (ERROR_SUCCESS != uResult) {
+		perror("handle_just_exec(): InterceptRPCRequest()");
 		free(pwszCommand);
 		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-		lprintf_err(uResult, "handle_just_exec(): InterceptRPCRequest()");
 		return ERROR_SUCCESS;
 	}
 
@@ -1088,14 +1090,16 @@ ULONG handle_just_exec(int client_id, int len)
 
 	if (ERROR_SUCCESS == uResult) {
 		CloseHandle(hProcess);
-		lprintf("handle_just_exec(): Executed (nowait) %S\n", pwszCommandLine);
+		debugf("handle_just_exec(): Executed (nowait) %S\n", pwszCommandLine);
 	} else {
-		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 #ifdef BUILD_AS_SERVICE
-		lprintf_err(uResult, "handle_just_exec(): CreateNormalProcessAsUserW(\"%S\")", pwszCommandLine);
+		perror("CreateNormalProcessAsUserW");
+		logf("handle_just_exec(): CreateNormalProcessAsUserW(\"%S\") failed", pwszCommandLine);
 #else
-		lprintf_err(uResult, "handle_just_exec(): CreateNormalProcessAsCurrentUserW(\"%S\")", pwszCommandLine);
+		perror("CreateNormalProcessAsCurrentUserW");
+		logf("handle_just_exec(): CreateNormalProcessAsCurrentUserW(\"%S\") failed", pwszCommandLine);
 #endif
+		send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 	}
 
 	if (pwszRemoteDomainName) {
@@ -1134,14 +1138,14 @@ ULONG handle_input(int client_id, int len)
 	buf[len] = 0;
 
 	if (read_all_vchan_ext(buf, len) <= 0) {
+		perror("handle_input(): read_all_vchan_ext()");
 		free(buf);
-		lprintf_err(ERROR_INVALID_FUNCTION, "handle_input(): read_all_vchan_ext()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
 	if (pClientInfo && !pClientInfo->bStdinPipeClosed) {
 		if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
-			lprintf_err(GetLastError(), "handle_input(): WriteFile()");
+			perror("handle_input(): WriteFile()");
 	}
 
 	free(buf);
@@ -1165,65 +1169,64 @@ ULONG handle_server_data()
 	ULONG	uResult;
 
 	if (read_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
-		lprintf_err(ERROR_INVALID_FUNCTION, "handle_server_data(): read_all_vchan_ext()");
+		perror("handle_server_data(): read_all_vchan_ext()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
-//	lprintf("got %x %x %x\n", s_hdr.type, s_hdr.client_id, s_hdr.len);
+//	debugf("got %x %x %x\n", s_hdr.type, s_hdr.client_id, s_hdr.len);
 
 	switch (s_hdr.type) {
 	case MSG_XON:
-		lprintf("MSG_XON\n");
+		debugf("MSG_XON\n");
 		set_blocked_outerr(s_hdr.client_id, FALSE);
 		break;
 	case MSG_XOFF:
-		lprintf("MSG_XOFF\n");
+		debugf("MSG_XOFF\n");
 		set_blocked_outerr(s_hdr.client_id, TRUE);
 		break;
 	case MSG_SERVER_TO_AGENT_CONNECT_EXISTING:
-		lprintf("MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
+		debugf("MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
 		handle_connect_existing(s_hdr.client_id, s_hdr.len);
 		break;
 	case MSG_SERVER_TO_AGENT_EXEC_CMDLINE:
-		lprintf("MSG_SERVER_TO_AGENT_EXEC_CMDLINE\n");
+		debugf("MSG_SERVER_TO_AGENT_EXEC_CMDLINE\n");
 
 		// This will return error only if vchan fails.
 		uResult = handle_exec(s_hdr.client_id, s_hdr.len);
 		if (ERROR_SUCCESS != uResult) {
-			lprintf_err(uResult, "handle_server_data(): handle_exec()");
+			perror("handle_server_data(): handle_exec()");
 			return uResult;
 		}		
 		break;
 
 	case MSG_SERVER_TO_AGENT_JUST_EXEC:
-		lprintf("MSG_SERVER_TO_AGENT_JUST_EXEC\n");
+		debugf("MSG_SERVER_TO_AGENT_JUST_EXEC\n");
 
 		// This will return error only if vchan fails.
 		uResult = handle_just_exec(s_hdr.client_id, s_hdr.len);
 		if (ERROR_SUCCESS != uResult) {
-			lprintf_err(uResult, "handle_server_data(): handle_just_exec()");
+			perror("handle_server_data(): handle_just_exec()");
 			return uResult;
 		}
 		break;
 
 	case MSG_SERVER_TO_AGENT_INPUT:
-		lprintf("MSG_SERVER_TO_AGENT_INPUT\n");
+		debugf("MSG_SERVER_TO_AGENT_INPUT\n");
 
 		// This will return error only if vchan fails.
 		uResult = handle_input(s_hdr.client_id, s_hdr.len);
 		if (ERROR_SUCCESS != uResult) {
-			lprintf_err(uResult, "handle_server_data(): handle_input()");
+			perror("handle_server_data(): handle_input()");
 			return uResult;
 		}
 		break;
 
 	case MSG_SERVER_TO_AGENT_CLIENT_END:
-		lprintf("MSG_SERVER_TO_AGENT_CLIENT_END\n");
+		debugf("MSG_SERVER_TO_AGENT_CLIENT_END\n");
 		RemoveClient(FindClientById(s_hdr.client_id));
 		break;
 	default:
-		lprintf("handle_server_data(): Msg type from daemon is %d ?\n",
-			s_hdr.type);
+		logf("handle_server_data(): Msg type from daemon is %d ?\n", s_hdr.type);
 		return ERROR_INVALID_FUNCTION;
 	}
 
@@ -1305,14 +1308,13 @@ ULONG WatchForEvents()
 	// This will not block.
 	uResult = peer_server_init(VCHAN_PORT);
 	if (uResult) {
-		lprintf_err(ERROR_INVALID_FUNCTION, "WatchForEvents(): peer_server_init()");
+		perror("WatchForEvents(): peer_server_init()");
 		return ERROR_INVALID_FUNCTION;
 	}
 
-	lprintf("WatchForEvents(): Awaiting for a vchan client, write ring size: %d\n", buffer_space_vchan_ext());
+	debugf("WatchForEvents(): Awaiting for a vchan client, write ring size: %d\n", buffer_space_vchan_ext());
 
 	bVchanClientConnected = FALSE;
-	//bVchanIoInProgress = FALSE;
 	bVchanReturnedError = FALSE;
 
 	for (;;) {
@@ -1327,7 +1329,7 @@ ULONG WatchForEvents()
 		evtchn = libvchan_fd_for_select(ctrl);
 		if (INVALID_HANDLE_VALUE == evtchn)
 		{
-			lprintf_err(GetLastError(), "WatchForEvents(): libvchan_fd_for_select failed");
+			perror("WatchForEvents(): libvchan_fd_for_select");
 			break;
 		}
 
@@ -1358,14 +1360,14 @@ ULONG WatchForEvents()
 
 		dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
 
-		lprintf("signaled\n");
+		//debugf("signaled\n");
 
 		if (dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS) {
-			lprintf("WatchForEvents(): dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS");
+			debugf("WatchForEvents(): dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS");
 
 			uResult = GetLastError();
 			if (ERROR_INVALID_HANDLE != uResult) {
-				lprintf_err(uResult, "WatchForEvents(): WaitForMultipleObjects()");
+				perror("WatchForEvents(): WaitForMultipleObjects()");
 				break;
 			}
 
@@ -1384,7 +1386,7 @@ ULONG WatchForEvents()
 					continue;
 
 				if (!GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode)) {
-					lprintf_err(GetLastError(), "WatchForEvents(): GetExitCodeProcess()");
+					perror("WatchForEvents(): GetExitCodeProcess()");
 					dwExitCode = ERROR_SUCCESS;
 				}
 
@@ -1398,7 +1400,7 @@ ULONG WatchForEvents()
 					uResult = PossiblyHandleTerminatedClientNoLocks(pClientInfo);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
+						perror("WatchForEvents(): send_exit_code()");
 					}
 				}
 			}
@@ -1428,7 +1430,7 @@ ULONG WatchForEvents()
 			// When this thread (in this switch) calls RemoveClient() later the g_Clients
 			// list will be locked as usual.
 
-			lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
+			debugf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_VCHAN:
 
@@ -1438,7 +1440,7 @@ ULONG WatchForEvents()
 
 					if (!bVchanClientConnected) {
 
-						lprintf("WatchForEvents(): A vchan client has connected\n");
+						debugf("WatchForEvents(): A vchan client has connected\n");
 
 						bVchanClientConnected = TRUE;
 						break;
@@ -1456,7 +1458,7 @@ ULONG WatchForEvents()
 						uResult = handle_server_data();
 						if (ERROR_SUCCESS != uResult) {
 							bVchanReturnedError = TRUE;
-							lprintf_err(uResult, "WatchForEvents(): handle_server_data()");
+							perror("WatchForEvents(): handle_server_data()");
 							LeaveCriticalSection(&g_VchanCriticalSection);
 							break;
 						}
@@ -1478,7 +1480,7 @@ ULONG WatchForEvents()
 									break;
 								} else if (ERROR_SUCCESS != uResult) {
 									bVchanReturnedError = TRUE;
-									lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDOUT)");
+									perror("WatchForEvents(): ReturnPipeData(STDOUT)");
 								}
 							}
 							if (g_Clients[uClientNumber].Stderr.bVchanWritePending) {
@@ -1490,7 +1492,7 @@ ULONG WatchForEvents()
 									break;
 								} else if (ERROR_SUCCESS != uResult) {
 									bVchanReturnedError = TRUE;
-									lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDERR)");
+									perror("WatchForEvents(): ReturnPipeData(STDERR)");
 								}
 							}
 						}
@@ -1512,7 +1514,7 @@ ULONG WatchForEvents()
 						PossiblyHandleTerminatedClient(&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber]);
 					} else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDOUT)");
+						perror("WatchForEvents(): ReturnPipeData(STDOUT)");
 					}
 					break;
 
@@ -1527,7 +1529,7 @@ ULONG WatchForEvents()
 						PossiblyHandleTerminatedClient(&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber]);
 					} else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "WatchForEvents(): ReturnPipeData(STDERR)");
+						perror("WatchForEvents(): ReturnPipeData(STDERR)");
 					}
 					break;
 
@@ -1536,7 +1538,7 @@ ULONG WatchForEvents()
 					pClientInfo = &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber];
 
 					if (!GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode)) {
-						lprintf_err(GetLastError(), "WatchForEvents(): GetExitCodeProcess()");
+						perror("WatchForEvents(): GetExitCodeProcess()");
 						dwExitCode = ERROR_SUCCESS;
 					}
 
@@ -1546,7 +1548,7 @@ ULONG WatchForEvents()
 					uResult = PossiblyHandleTerminatedClient(pClientInfo);
 					if (ERROR_SUCCESS != uResult) {
 						bVchanReturnedError = TRUE;
-						lprintf_err(uResult, "WatchForEvents(): send_exit_code()");
+						perror("WatchForEvents(): send_exit_code()");
 					}
 
 					break;
@@ -1592,21 +1594,21 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	ULONG	uResult;
 	HANDLE	hTriggerEventsThread;
 
-	lprintf("ServiceExecutionThread(): Service started\n");
+	debugf("ServiceExecutionThread(): Service started\n");
 
 	// Auto reset, initial state is not signaled
 	g_hAddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	if (!g_hAddExistingClientEvent) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "ServiceExecutionThread(): CreateEvent()");
+		perror("ServiceExecutionThread(): CreateEvent()");
 		return uResult;
 	}
 
 	hTriggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WatchForTriggerEvents, NULL, 0, NULL);
 	if (!hTriggerEventsThread) {
 		uResult = GetLastError();
+		perror("ServiceExecutionThread(): CreateThread()");
 		CloseHandle(g_hAddExistingClientEvent);
-		lprintf_err(uResult, "ServiceExecutionThread(): CreateThread()");
 		return uResult;
 	}
 
@@ -1614,7 +1616,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 
 		uResult = WatchForEvents();
 		if (ERROR_SUCCESS != uResult)
-			lprintf_err(uResult, "ServiceExecutionThread(): WatchForEvents()");
+			perror("ServiceExecutionThread(): WatchForEvents()");
 
 		if (!WaitForSingleObject(g_hStopServiceEvent, 0))
 			break;
@@ -1622,7 +1624,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 		Sleep(1000);
 	}
 
-	lprintf("ServiceExecutionThread(): Waiting for the trigger thread to exit\n");
+	debugf("ServiceExecutionThread(): Waiting for the trigger thread to exit\n");
 	WaitForSingleObject(hTriggerEventsThread, INFINITE);
 	CloseHandle(hTriggerEventsThread);
 	CloseHandle(g_hAddExistingClientEvent);
@@ -1630,7 +1632,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 	DeleteCriticalSection(&g_ClientsCriticalSection);
 	DeleteCriticalSection(&g_VchanCriticalSection);
 
-	lprintf("ServiceExecutionThread(): Shutting down\n");
+	debugf("ServiceExecutionThread(): Shutting down\n");
 
 	return ERROR_SUCCESS;
 }
@@ -1647,7 +1649,7 @@ ULONG Init(HANDLE *phServiceThread)
 
 	uResult = CheckForXenInterface();
 	if (ERROR_SUCCESS != uResult) {
-		lprintf_err(uResult, "Init(): CheckForXenInterface()");
+		perror("Init(): CheckForXenInterface()");
 		ReportErrorToEventLog(XEN_INTERFACE_NOT_FOUND);
 		return ERROR_NOT_SUPPORTED;
 	}
@@ -1661,7 +1663,7 @@ ULONG Init(HANDLE *phServiceThread)
 		InitializeCriticalSection(&g_PipesCriticalSection);
 #if NTDDI_VERSION < NTDDI_VISTA
 //	} __except(EXCEPTION_EXECUTE_HANDLER) {
-//		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
+//		debugf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
 //		return ERROR_NOT_ENOUGH_MEMORY;
 //	}
 #endif
@@ -1672,7 +1674,7 @@ ULONG Init(HANDLE *phServiceThread)
 	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ServiceExecutionThread, NULL, 0, NULL);
 	if (!hThread) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "StartServiceThread(): CreateThread()");
+		perror("StartServiceThread(): CreateThread()");
 		return uResult;
 	}
 
@@ -1694,6 +1696,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	TCHAR	bCommand;
 	PTCHAR	pszAccountName = NULL;
 
+	log_init(LOG_FILE_PATH);
+
 	SERVICE_TABLE_ENTRY	ServiceTable[] = {
 		{SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION)ServiceMain},
 		{NULL,NULL}
@@ -1703,7 +1707,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	nSize = RTL_NUMBER_OF(szUserName);
 	if (!GetUserName(szUserName, &nSize)) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "main(): GetUserName()");
+		perror("main(): GetUserName()");
 		return uResult;
 	}
 
@@ -1713,22 +1717,22 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	}
 
 	if (1 == argc) {
-		lprintf("main(): Running as SYSTEM\n");
+		debugf("main(): Running as SYSTEM\n");
 
 		uResult = ERROR_SUCCESS;
 		if (!StartServiceCtrlDispatcher(ServiceTable)) {
 			uResult = GetLastError();
-			lprintf_err(uResult, "main(): StartServiceCtrlDispatcher()");
+			perror("main(): StartServiceCtrlDispatcher()");
 		}
 
-		lprintf("main(): Exiting\n");
+		debugf("main(): Exiting\n");
 		return uResult;
 	}
 
 	memset(szFullPath, 0, sizeof(szFullPath));
 	if (!GetModuleFileName(NULL, szFullPath, RTL_NUMBER_OF(szFullPath) - 1)) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "main(): GetModuleFileName()");
+		perror("main(): GetModuleFileName()");
 		return uResult;
 	}
 
@@ -1765,10 +1769,13 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	}
 
 	if (pszAccountName) {
-		lprintf("main(): GrantDesktopAccess(\"%S\")\n", pszAccountName);
+		debugf("main(): GrantDesktopAccess(\"%S\")\n", pszAccountName);
 		uResult = GrantDesktopAccess(pszAccountName, NULL);
 		if (ERROR_SUCCESS != uResult)
-			lprintf_err(uResult, "main(): GrantDesktopAccess(\"%S\")", pszAccountName);
+		{
+			perror("GrantDesktopAccess");
+			logf("main(): GrantDesktopAccess(\"%S\") failed", pszAccountName);
+		}
 
 		return uResult;
 	}
@@ -1798,7 +1805,7 @@ ULONG Init(HANDLE *phServiceThread)
 
 BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 {
-	lprintf("CtrlHandler(): Got shutdown signal\n");
+	debugf("CtrlHandler(): Got shutdown signal\n");
 
 	SetEvent(g_hStopServiceEvent);
 
@@ -1807,7 +1814,7 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 	CloseHandle(g_hStopServiceEvent);
 	CloseHandle(g_hCleanupFinishedEvent);
 
-	lprintf("CtrlHandler(): Shutdown complete\n");
+	debugf("CtrlHandler(): Shutdown complete\n");
 	ExitProcess(0);
 	return TRUE;
 }
@@ -1819,9 +1826,10 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	ULONG	uClientNumber;
 
 	_tprintf(TEXT("\nqrexec agent console application\n\n"));
+	log_init(LOG_FILE_PATH);
 
 	if (ERROR_SUCCESS != CheckForXenInterface()) {
-		lprintf("main(): Could not find Xen interface\n");
+		debugf("main(): Could not find Xen interface\n");
 		return ERROR_NOT_SUPPORTED;
 	}
 
@@ -1829,7 +1837,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!g_hStopServiceEvent) {
 		uResult = GetLastError();
-		lprintf_err(uResult, "main(): CreateEvent()");
+		perror("main(): CreateEvent()");
 		return uResult;
 	}
 
@@ -1837,8 +1845,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	g_hCleanupFinishedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	if (!g_hCleanupFinishedEvent) {
 		uResult = GetLastError();
+		perror("main(): CreateEvent()");
 		CloseHandle(g_hStopServiceEvent);
-		lprintf_err(uResult, "main(): CreateEvent()");
 		return uResult;
 	}
 
@@ -1851,12 +1859,12 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		InitializeCriticalSection(&g_PipesCriticalSection);
 #if NTDDI_VERSION < NTDDI_VISTA
 //	} __except(EXCEPTION_EXECUTE_HANDLER) {
-//		lprintf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
+//		debugf("main(): InitializeCriticalSection() raised an exception %d\n", GetExceptionCode());
 //		return ERROR_NOT_ENOUGH_MEMORY;
 //	}
 #endif
 	if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE))
-		lprintf_err(GetLastError(), "main: SetConsoleCtrlHandler");
+		perror("main: SetConsoleCtrlHandler");
 
 	for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
 		g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
