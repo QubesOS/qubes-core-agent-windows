@@ -10,7 +10,7 @@
 int write_all(HANDLE fd, void *buf, int size)
 {
     int written = 0;
-    int ret;
+    DWORD ret;
     while (written < size) {
         if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
             // some error handler?
@@ -25,10 +25,9 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
 {
 	HANDLE hglb;
 	PWCHAR lpwstr;
-	PUCHAR lpstr;
+	char *lpstr;
 	size_t cbStr;
-	ULONG  uWritten;
-
+	
 	if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
 		return FALSE;
 

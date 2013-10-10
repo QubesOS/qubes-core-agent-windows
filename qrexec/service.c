@@ -150,7 +150,7 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 	}
  
 	// Save the tick count and initial checkpoint.
-#pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
+//#pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
 	dwStartTickCount = GetTickCount();
 	dwOldCheckPoint = ServiceStatus.dwCheckPoint;
 
@@ -184,11 +184,11 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
  
 		if (ServiceStatus.dwCheckPoint > dwOldCheckPoint) {
 			// Continue to wait and check.
-#pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
+//#pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
 			dwStartTickCount = GetTickCount();
 			dwOldCheckPoint = ServiceStatus.dwCheckPoint;
 		} else {
-#pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
+//#pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
 			if (GetTickCount() - dwStartTickCount > ServiceStatus.dwWaitHint) {
 				// No progress made within the wait hint.
 				break;
@@ -388,8 +388,10 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
 	SC_HANDLE	hService;
 	SC_HANDLE	hScm;
 	ULONG	uResult;
+#ifdef START_SERVICE_AFTER_INSTALLATION
 	DWORD	dwCurrentState;
 	DWORD	dwExitCode;
+#endif
 
 	if (!pszServiceFileName || !pszServiceName)
 		return ERROR_INVALID_PARAMETER;
@@ -456,7 +458,6 @@ ULONG UninstallService(PTCHAR pszServiceName)
 {
 	SC_HANDLE	hService;
 	SC_HANDLE	hScm;
-	SERVICE_STATUS	Status;
 	ULONG	uResult;
 	DWORD	dwCurrentState;
 	DWORD	dwExitCode;
@@ -521,7 +522,7 @@ ULONG ReportErrorToEventLog(ULONG uErrorMessageId)
 	HANDLE	hEventSource;
 	LPCTSTR	lpszStrings[1];
 
-#pragma prefast(suppress:28735, "This way we support XP+")
+//#pragma prefast(suppress:28735, "This way we support XP+")
 	hEventSource = RegisterEventSource(NULL, SERVICE_NAME);
 	if (NULL == hEventSource) {
 		uResult = GetLastError();

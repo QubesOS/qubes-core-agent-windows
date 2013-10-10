@@ -13,7 +13,7 @@
 int ReadUntilEOF(HANDLE fd, void *buf, int size)
 {
     int got_read = 0;
-    int ret;
+    DWORD ret;
     while (got_read < size) {
         if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
 			if (GetLastError() == ERROR_BROKEN_PIPE)
@@ -33,13 +33,13 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 {
 	HANDLE hglb;
 	PWCHAR pwszUtf16, pwszUtf16dest;
-	UCHAR lpStr[MAX_CLIPBOARD_SIZE+1];
+	char lpStr[MAX_CLIPBOARD_SIZE+1];
 	size_t cchwStr;
 	int  uRead;
 
 	uRead = ReadUntilEOF(hInput, lpStr, sizeof(lpStr)-1);
 	if (uRead < 0) {
-		fprintf(stderr, "failed to read stdin: %d\n", GetLastError());
+		fprintf(stderr, "failed to read stdin: %lu\n", GetLastError());
 		return FALSE;
 	}
 
@@ -136,7 +136,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 
 	hWin = createMainWindow(hInst);
 	if (!hWin) {
-		fprintf(stderr, "create window failed: %d\n", GetLastError());
+		fprintf(stderr, "create window failed: %lu\n", GetLastError());
 		return 1;
 	}
 

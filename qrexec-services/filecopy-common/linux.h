@@ -1,5 +1,9 @@
 #pragma once
 
+// fixme: ENAMETOOLONG is defined as 38 in mingw headers, which is different than the value here. Is this significant?
+// Also: there is no way to disable macro redefinition warnings selectively in GCC, even in 4.6 and above.
+#undef ENAMETOOLONG
+
 #define EIO              5      /* I/O error */
 #define EACCES          13      /* Permission denied */
 #define EEXIST          17      /* File exists */

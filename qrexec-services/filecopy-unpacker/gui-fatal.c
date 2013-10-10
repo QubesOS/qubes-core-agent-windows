@@ -12,7 +12,6 @@ extern HANDLE STDERR;
 
 static void produce_message(int icon, const PWCHAR fmt, va_list args)
 {
-	char *dialog_msg;
 	WCHAR buf[1024];
 	PWCHAR  pMessage = NULL;
 	ULONG	cchErrorTextSize;

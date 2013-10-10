@@ -1,16 +1,16 @@
 #pragma once
 
 
-#ifndef _PREFAST_
-#pragma warning(disable:4068)
-#endif
+//#ifndef _PREFAST_
+//#pragma warning(disable:4068)
+//#endif
 
 //#define BUILD_AS_SERVICE
 
 #define SERVICE_NAME	TEXT("qrexec-agent")
 #define DEFAULT_USER_PASSWORD_UNICODE	L"userpass"
 
-#define LOG_FILE		TEXT("c:\\qrexec-agent.log")
+#define LOG_FILE_PATH		TEXT("d:\\qubes\\qrexec-agent.log")
 
 //#define DISPLAY_CONSOLE_OUTPUT
 

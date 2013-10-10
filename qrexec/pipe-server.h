@@ -9,7 +9,7 @@
 #include "log.h"
 #include "agent.h"
 
-typedef enum {
+enum {
 	STATE_WAITING_FOR_CLIENT = 0,
 	STATE_RECEIVING_PARAMETERS,
 	STATE_WAITING_FOR_DAEMON_DECISION,
@@ -43,7 +43,7 @@ ULONG WINAPI WatchForTriggerEvents(
 
 ULONG ProceedWithExecution(
 	int assigned_client_id,
-	PUCHAR pszIdent
+	char *pszIdent
 );
 
 extern CRITICAL_SECTION	g_PipesCriticalSection;

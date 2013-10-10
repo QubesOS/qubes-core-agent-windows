@@ -14,15 +14,11 @@ BOOL CheckSession(DWORD	dSessionId) {
 	DWORD  cbUserName;
 
 	if (FAILED(WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE, dSessionId, WTSUserName, &pszUserName, &cbUserName))) {
-		fprintf(stderr, "WTSQuerySessionInformation failed: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"WTSQuerySessionInformation failed: %lu\n", GetLastError());
 		return FALSE;
 	}
 #ifdef DBG
-# ifdef UNICODE
-	fprintf(stderr, "Found session: %S\n", pszUserName);
-# else
-	fprintf(stderr, "Found session: %s\n", pszUserName);
-# endif
+	_ftprintf(stderr, L"Found session: %s\n", pszUserName);
 #endif
 	if (_tcscmp(pszUserName, pszExpectedUser)==0) {
 		bFound = TRUE;
@@ -38,7 +34,7 @@ BOOL CheckIfUserLoggedIn() {
 	DWORD i;
 
 	if (FAILED(WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dSessionCount))) {
-		fprintf(stderr, "Failed to enumerate sessions: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed to enumerate sessions: %lu\n", GetLastError());
 		return FALSE;
 	}
 	for (i = 0; i < dSessionCount; i++) {
@@ -61,8 +57,6 @@ LRESULT CALLBACK WindowProc(
 		WPARAM wParam,   // session state change event
 		LPARAM lParam    // session ID
 		) {
-	PTCHAR	pszUserName;
-	size_t	cbUserName;
 	switch (Msg) {
 		case WM_WTSSESSION_CHANGE:
 			if (wParam == WTS_SESSION_LOGON) {
@@ -116,7 +110,7 @@ HWND createMainWindow(HINSTANCE hInst)
 int ReadUntilEOF(HANDLE fd, void *buf, int size)
 {
 	int got_read = 0;
-	int ret;
+	DWORD ret;
 	while (got_read < size) {
 		if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
 			if (GetLastError() == ERROR_BROKEN_PIPE)
@@ -128,7 +122,7 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
 		}
 		got_read += ret;
 	}
-	//      fprintf(stderr, "read %d bytes\n", size);
+	//      _ftprintf(stderr, L"read %d bytes\n", size);
 	return got_read;
 }
 
@@ -136,7 +130,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PTCHAR pszCommandLi
 	HWND	hMainWindow;
 	size_t	cbExpectedUserUtf8;
 	size_t	cchExpectedUser = 0;
-	UCHAR	pszExpectedUserUtf8[USERNAME_LENGTH + 1];
+	char	pszExpectedUserUtf8[USERNAME_LENGTH + 1];
 	HANDLE	hStdIn;
 
 	// first try command parameter
@@ -152,7 +146,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PTCHAR pszCommandLi
 
 		cbExpectedUserUtf8 = ReadUntilEOF(hStdIn, pszExpectedUserUtf8, sizeof(pszExpectedUserUtf8));
 		if (cbExpectedUserUtf8 <= 0 || cbExpectedUserUtf8 >= sizeof(pszExpectedUserUtf8)) {
-			fprintf(stderr, "Failed to read the user name\n");
+			_ftprintf(stderr, L"Failed to read the user name\n");
 			return 1;
 		}
 
@@ -168,7 +162,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PTCHAR pszCommandLi
 
 #ifdef UNICODE
 		if (FAILED(ConvertUTF8ToUTF16(pszExpectedUserUtf8, &pszExpectedUser, &cchExpectedUser))) {
-			fprintf(stderr, "Failed to convert the user name to UTF16\n");
+			_ftprintf(stderr, L"Failed to convert the user name to UTF16\n");
 			return 1;
 		}
 #else
@@ -180,12 +174,12 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PTCHAR pszCommandLi
 	hMainWindow = createMainWindow(hInst);
 
 	if (hMainWindow == INVALID_HANDLE_VALUE) {
-		fprintf(stderr, "Failed to create main window: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed to create main window: %lu\n", GetLastError());
 		return 1;
 	}
 
 	if (FAILED(WTSRegisterSessionNotification(hMainWindow, NOTIFY_FOR_ALL_SESSIONS))) {
-		fprintf(stderr, "Failed to register session notification: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed to register session notification: %lu\n", GetLastError());
 		DestroyWindow(hMainWindow);
 		return 1;
 	}
@@ -196,11 +190,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PTCHAR pszCommandLi
 		MSG		msg;
 
 #ifdef DBG
-# ifdef UNICODE
-		fprintf(stderr, "Waiting for user %S\n", pszExpectedUser);
-# else
-		fprintf(stderr, "Waiting for user %s\n", pszExpectedUser);
-# endif
+		_ftprintf(stderr, L"Waiting for user %s\n", pszExpectedUser);
 #endif
 		while( (bRet = GetMessage( &msg, hMainWindow, 0, 0 )) != 0)
 		{

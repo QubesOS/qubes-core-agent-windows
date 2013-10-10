@@ -21,11 +21,9 @@ void set_error_gui_callbacks(HWND hD, show_error_t cb) {
 
 static void produce_message(int icon, const PTCHAR fmt, va_list args)
 {
-	char *dialog_msg;
 	TCHAR buf[1024];
 	PTCHAR  pMessage = NULL;
 	ULONG	cchErrorTextSize;
-	ULONG   nWritten;
 
 	if (FAILED(StringCchVPrintf(buf, RTL_NUMBER_OF(buf), fmt, args))) {
 		/* FIXME: some fallback method? */

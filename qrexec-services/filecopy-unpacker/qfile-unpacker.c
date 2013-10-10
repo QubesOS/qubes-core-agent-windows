@@ -9,7 +9,6 @@
 #include <ioall.h>
 #include <gui-fatal.h>
 #include "wdk.h"
-#include "linux.h"
 #include "filecopy.h"
 #include "crc32.h"
 
@@ -130,7 +129,7 @@ ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
 	}
 
 
-#pragma prefast(suppress:28132, "sizeof(hDirectoryObject) is the correct size of a HANDLE")
+//#pragma prefast(suppress:28132, "sizeof(hDirectoryObject) is the correct size of a HANDLE")
 	Status = ZwSetInformationProcess(GetCurrentProcess(), ProcessDeviceMap, &hDirectoryObject, sizeof(hDirectoryObject));
 	if (!NT_SUCCESS(Status)) {
 		internal_fatal(L"CreateLink(): ZwSetInformationProcess() failed with status 0x%08X\n", Status);
@@ -149,15 +148,11 @@ ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
 	WCHAR	wszIncomingDir[MAX_PATH + 1];
-	ULONG	nWritten;
-	WCHAR	wcMappedDriveLetter;
-	PWCHAR	pwszDocuments = NULL;
+	//PWCHAR	pwszDocuments = NULL;
+	WCHAR	pwszDocuments[MAX_PATH];
 	HRESULT	hResult;
 	ULONG	uResult;
 	WCHAR	wszRemoteDomainName[MAX_PATH];
-
-
-
 
 	STDERR = GetStdHandle(STD_ERROR_HANDLE);
 	if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE) {
@@ -181,8 +176,10 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		exit(1);
 	}
 
+	memset(pwszDocuments, 0, sizeof(pwszDocuments));
+	// mingw lacks FOLDERID definitions
 	//hResult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &pwszDocuments);
-	hResult = SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, KF_FLAG_CREATE, &pwszDocuments);
+	hResult = SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, pwszDocuments);
 	if (FAILED(hResult)) {
 		internal_fatal(L"Failed to get a path to My Documents, SHGetKnownFolderPath() failed with error 0x%x\n", hResult);
 		exit(1);
@@ -196,7 +193,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 			pwszDocuments, 
 			INCOMING_DIR_ROOT, 
 			wszRemoteDomainName);
-	CoTaskMemFree(pwszDocuments);
+	//CoTaskMemFree(pwszDocuments);
 
 	if (FAILED(hResult)) {
 		internal_fatal(L"Failed to print an incoming directory path, StringCchPrintf() failed with error %d\n", hResult);

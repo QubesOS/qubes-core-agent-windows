@@ -15,11 +15,10 @@ ULONG CreatePipeSecurityDescriptor(PSECURITY_DESCRIPTOR *ppPipeSecurityDescripto
 {
 	ULONG	uResult;
 	PSID	pEveryoneSid = NULL;
-	PSID	pAdminSID = NULL;
 	PACL	pACL = NULL;
 	PSECURITY_DESCRIPTOR	pSD = NULL;
 	EXPLICIT_ACCESS	ea[2];
-	SID_IDENTIFIER_AUTHORITY	SIDAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
+	SID_IDENTIFIER_AUTHORITY	SIDAuthWorld = {SECURITY_WORLD_SID_AUTHORITY};
 
 	if (!ppPipeSecurityDescriptor || !ppACL)
 		return ERROR_INVALID_PARAMETER;
@@ -195,7 +194,6 @@ ULONG DisconnectAndReconnect(ULONG i)
 ULONG ClosePipeHandles()
 {
 	ULONG	i;
-	ULONG	uResult;
 
 	for (i = 0; i < INSTANCES; i++) {
 		if (g_Pipes[i].fPendingIO) {
@@ -284,9 +282,9 @@ ULONG SendParametersToDaemon(ULONG i)
 	EnterCriticalSection(&g_PipesCriticalSection);
 
 	hResult = StringCchPrintfA(
-			&g_Pipes[i].params.process_fds.ident, 
-			sizeof(g_Pipes[i].params.process_fds.ident), 
-			"%I64x", 
+			(char*)&g_Pipes[i].params.process_fds.ident,
+			sizeof(g_Pipes[i].params.process_fds.ident),
+			"%I64x",
 			g_uDaemonRequestsCounter++);
 	if (FAILED(hResult)) {
 		perror("SendParametersToDaemon(): StringCchPrintfA()");
@@ -307,7 +305,7 @@ ULONG SendParametersToDaemon(ULONG i)
 	return ERROR_SUCCESS;
 }
 
-ULONG FindPipeByIdent(PUCHAR pszIdent, PULONG puPipeNumber)
+ULONG FindPipeByIdent(char *pszIdent, PULONG puPipeNumber)
 {
 	ULONG	i;
 
@@ -324,7 +322,7 @@ ULONG FindPipeByIdent(PUCHAR pszIdent, PULONG puPipeNumber)
 	return ERROR_NOT_FOUND;
 }
 
-ULONG ProceedWithExecution(int assigned_client_id, PUCHAR pszIdent)
+ULONG ProceedWithExecution(int assigned_client_id, char *pszIdent)
 {
 	ULONG	uPipeNumber;
 	ULONG	uResult;
@@ -359,7 +357,7 @@ ULONG ProceedWithExecution(int assigned_client_id, PUCHAR pszIdent)
 
 ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 { 
-	DWORD	dwWait, cbRet, cbToWrite, cbRead; 
+	DWORD	dwWait, cbRet, cbRead; 
 	ULONG	i;
 	ULONG	uResult;
 	BOOL	fSuccess; 
@@ -648,8 +646,6 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 			// passthrough
 
 		case STATE_SENDING_IO_HANDLES:
-
-			cbToWrite = IO_HANDLES_ARRAY_SIZE;
 
 			uResult = CreateClientPipes(
 					&g_Pipes[i].ClientInfo, 

@@ -304,7 +304,7 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
 	return uResult;
 }
 
-ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
+ULONG TextBOMToUTF16(char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 {
 	size_t cbSkipChars = 0;
 	PWCHAR  pwszUtf16 = NULL;
@@ -368,11 +368,10 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
 	return ERROR_SUCCESS;
 }
 
-ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, PBOOLEAN pbRunInteractively)
+ULONG ParseUtf8Command(char *pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, PBOOLEAN pbRunInteractively)
 {
 	ULONG	uResult;
 	PWCHAR	pwszCommand = NULL;
-	PWCHAR	pwszCommandLine = NULL;
 	PWCHAR	pwSeparator = NULL;
 	PWCHAR	pwszUserName = NULL;
 
@@ -763,7 +762,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 	PWCHAR	pwszServiceName = NULL;
 	PWCHAR	pwszSourceDomainName = NULL;
 	PWCHAR	pwSeparator = NULL;
-	UCHAR	szBuffer[sizeof(WCHAR) * (MAX_PATH + 1)];
+	char	szBuffer[sizeof(WCHAR) * (MAX_PATH + 1)];
 	WCHAR	wszServiceFilePath[MAX_PATH + 1];
 	PWCHAR	pwszRawServiceFilePath = NULL;
 	PWCHAR  pwszServiceArgs = NULL;
@@ -780,7 +779,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 
 	if (wcsncmp(pwszCommandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND))==0) {
 		// RPC_REQUEST_COMMAND contains trailing space, so this must succeed
-#pragma prefast(suppress:28193, "RPC_REQUEST_COMMAND contains trailing space, so this must succeed")
+//#pragma prefast(suppress:28193, "RPC_REQUEST_COMMAND contains trailing space, so this must succeed")
 		pwSeparator = wcschr(pwszCommandLine, L' ');
 		pwSeparator++;
 		pwszServiceName = pwSeparator;
@@ -923,8 +922,6 @@ ULONG handle_connect_existing(int client_id, int len)
 {
 	ULONG	uResult;
 	char *buf;
-	PCLIENT_INFO	pClientInfo;
-	DWORD	dwWritten;
 
 	if (!len)
 		return ERROR_SUCCESS;
@@ -1296,15 +1293,14 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
 ULONG WatchForEvents()
 {
 	HANDLE	evtchn;
-	ULONG	i, uEventNumber, uClientNumber;
+	ULONG	uEventNumber, uClientNumber;
 	DWORD	dwSignaledEvent;
 	PCLIENT_INFO	pClientInfo;
 	DWORD	dwExitCode;
 	ULONG	uResult;
 	BOOLEAN	bVchanReturnedError;
 	BOOLEAN	bVchanClientConnected;
-	int	client_id;
-
+	
 	// This will not block.
 	uResult = peer_server_init(VCHAN_PORT);
 	if (uResult) {
@@ -1391,9 +1387,6 @@ ULONG WatchForEvents()
 				}
 
 				if (STILL_ACTIVE != dwExitCode) {
-					int client_id;
-
-					client_id = pClientInfo->client_id;
 					pClientInfo->bChildExited = TRUE;
 					pClientInfo->dwExitCode = dwExitCode;
 					// send exit code only when all data was sent to the daemon
@@ -1551,6 +1544,11 @@ ULONG WatchForEvents()
 						perror("WatchForEvents(): send_exit_code()");
 					}
 
+					break;
+
+				default:
+					logf("WatchForEvents(): invalid handle type %d for event %d\n",
+						g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent);
 					break;
 			}
 		}

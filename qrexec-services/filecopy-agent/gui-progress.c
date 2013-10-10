@@ -1,5 +1,5 @@
-#include <windows.h>
 #include <tchar.h>
+#include <windows.h>
 #include <commctrl.h>
 #include <taskdialog.h> // definitions absent in mingw
 #include "gui-fatal.h"
@@ -17,9 +17,16 @@ TaskDialogIndirectProc *TaskDialogIndirectDynamic = NULL;
 void ResolveFunc()
 {
 	HMODULE comctl32 = LoadLibrary(TEXT("comctl32.dll"));
-	TaskDialogIndirectDynamic = (TaskDialogIndirectProc*) GetProcAddress(comctl32, TEXT("TaskDialogIndirect"));
-// end workaround
+	// todo: proper error handling
+	if (!comctl32)
+	{
+		MessageBox(NULL, TEXT("Failed to load comctl32.dll"), TEXT("gui-progress"), MB_ICONERROR);
+	}
+	TaskDialogIndirectDynamic = (TaskDialogIndirectProc*) GetProcAddress(comctl32, "TaskDialogIndirect");
+	if (!TaskDialogIndirectDynamic)
+		MessageBox(NULL, TEXT("Failed to GetProcAddress(TaskDialogIndirect)"), TEXT("gui-progress"), MB_ICONERROR);
 }
+// end workaround
 
 HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
 		WPARAM wParam, LPARAM lParam, LONG_PTR dwRefData)
@@ -93,7 +100,7 @@ void createProgressWindow()
 
 void do_notify_progress(long long written, int flag)
 {
-	if (!TaskDialogIndirect)
+	if (!TaskDialogIndirectDynamic)
 		ResolveFunc();
 	switch (flag) {
 		case PROGRESS_FLAG_INIT:

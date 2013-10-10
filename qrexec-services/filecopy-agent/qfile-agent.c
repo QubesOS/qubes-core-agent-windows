@@ -5,9 +5,10 @@
 #include <Shlwapi.h>
 #include <Shellapi.h>
 #include <Strsafe.h>
+
 #include <ioall.h>
-#include <linux.h>
 #include <gui-fatal.h>
+#include "linux.h"
 #include "gui-progress.h"
 #include "filecopy.h"
 #include "crc32.h"
@@ -89,7 +90,7 @@ void convertWindowTimeToUnix(PFILETIME srctime, unsigned int *puDstTime, unsigne
 void write_headers(struct file_header *hdr, PTCHAR pszFilename)
 {
 #ifdef UNICODE
-	PUCHAR pszFilenameUtf8 = NULL;
+	char *pszFilenameUtf8 = NULL;
 	size_t cbFilenameUtf8;
 
 	if (FAILED(ConvertUTF16ToUTF8(pszFilename, &pszFilenameUtf8, &cbFilenameUtf8)))

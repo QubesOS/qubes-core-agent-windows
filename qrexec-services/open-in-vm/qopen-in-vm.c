@@ -13,8 +13,8 @@
 void send_file(PTCHAR fname)
 {
 	PTCHAR	base, base1, base2;
-	PUCHAR	baseUTF8;
-	UCHAR	basePadded[DVM_FILENAME_SIZE];
+	char	*baseUTF8;
+	char	basePadded[DVM_FILENAME_SIZE];
 	HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	HANDLE fd = CreateFile(fname, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (fd == INVALID_HANDLE_VALUE)
@@ -80,7 +80,6 @@ void actually_recv_file(PTCHAR fname, PTCHAR tempfile, HANDLE tmpfd)
 void recv_file(PTCHAR fname)
 {
 	HANDLE tmpfd;
-	int ret;
 	TCHAR tempdir[32768];
 	TCHAR tempfile[32768];
 

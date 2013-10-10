@@ -22,8 +22,7 @@ int get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
 {
 	int		size, size_all;
 	PTCHAR	pTmpBuf;
-	PTCHAR	pDstBuf;
-
+	
 	size = GetTempPath(0, NULL);
 	if (!size)
 		return 0;
@@ -44,7 +43,7 @@ int get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
 		return 0;
 	}
 	if (!CreateDirectory(pTmpBuf, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
-		fprintf(stderr, "Failed to create tmp subdir: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed to create tmp subdir: %lu\n", GetLastError());
 		free(pTmpBuf);
 		return 0;
 	}
@@ -64,16 +63,16 @@ TCHAR *get_filename()
 	int i;
 
 	if (!read_all(hStdIn, buf, sizeof(buf))) {
-		fprintf(stderr, "Failed get filename: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed get filename: %lu\n", GetLastError());
 		exit(1);
 	}
 	buf[DVM_FILENAME_SIZE] = 0;
 	if (strchr(buf, '/')) {
-		fprintf(stderr, "filename contains /");
+		_ftprintf(stderr, L"filename contains /");
 		exit(1);
 	}
 	if (strchr(buf, '\\')) {
-		fprintf(stderr, "filename contains \\");
+		_ftprintf(stderr, L"filename contains \\");
 		exit(1);
 	}
 	for (i=0; i < DVM_FILENAME_SIZE && buf[i]!=0; i++) {
@@ -82,12 +81,12 @@ TCHAR *get_filename()
 			buf[i]='_';
 	}
 	if (FAILED(ConvertUTF8ToUTF16(buf, &basename, &basename_len))) {
-		fprintf(stderr, "Invalid filename\n");
+		_ftprintf(stderr, L"Invalid filename\n");
 		exit(1);
 	}
 	if (!get_tempdir(&tmpname, &tmpname_len)) {
 		free(basename);
-		fprintf(stderr, "Failed to get tmpdir\n");
+		_ftprintf(stderr, L"Failed to get tmpdir\n");
 		exit(1);
 	}
 	retname_len = tmpname_len + basename_len + 1;
@@ -106,13 +105,13 @@ void copy_file(PTCHAR filename)
  
 	if (fd == INVALID_HANDLE_VALUE) {
 		if (GetLastError() == ERROR_FILE_EXISTS)
-			fprintf(stderr, "File already exists, cleanup temp directory\n");
+			_ftprintf(stderr, L"File already exists, cleanup temp directory\n");
 		else
-			fprintf(stderr, "Failed to create file %s: 0x%x\n", filename, GetLastError());
+			_ftprintf(stderr, L"Failed to create file %s: %lu\n", filename, GetLastError());
 		exit(1);
 	}
 	if (!copy_fd_all(fd, hStdIn)) {
-		fprintf(stderr, "Failed read/write file: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed read/write file: %lu\n", GetLastError());
         exit(1);
 	}
 	CloseHandle(fd);
@@ -122,7 +121,7 @@ void send_file_back(PTCHAR filename)
 {
 	HANDLE fd = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (fd == INVALID_HANDLE_VALUE) {
-		fprintf(stderr, "Failed to open file %s: 0x%x\n", filename, GetLastError());
+		_ftprintf(stderr, L"Failed to open file %s: %lu\n", filename, GetLastError());
 		exit(1);
 	}
 	if (hStdOut == INVALID_HANDLE_VALUE) {
@@ -130,7 +129,7 @@ void send_file_back(PTCHAR filename)
 	}
 
 	if (!copy_fd_all(hStdOut, fd)) {
-		fprintf(stderr, "Failed read/write file: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Failed read/write file: %lu\n", GetLastError());
 		exit(1);
 	}
 	CloseHandle(fd);
@@ -139,15 +138,11 @@ void send_file_back(PTCHAR filename)
 
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
-	WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post, session_stat;
+	WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post;
 	PTCHAR	filename;
-	HANDLE	child;
-	TCHAR	cmdline[32768];
-	int		dwExitCode;
+	DWORD	dwExitCode;
 	SHELLEXECUTEINFO sei;
-	STARTUPINFO si;
-	PROCESS_INFORMATION pi;
-
+	
 	hStdIn = GetStdHandle(STD_INPUT_HANDLE);
 	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hStdIn == INVALID_HANDLE_VALUE || hStdOut == INVALID_HANDLE_VALUE) {
@@ -157,7 +152,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	filename = get_filename();
 	copy_file(filename);
 	if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &stat_pre)) {
-		fprintf(stderr, "ERROR stat pre: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"ERROR stat pre: %lu\n", GetLastError());
 		exit(1);
 	}
 
@@ -175,12 +170,12 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	sei.hProcess = NULL;
 
 	if (FAILED(ShellExecuteEx(&sei))) {
-		fprintf(stderr, "Editor startup failed: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Editor startup failed: %lu\n", GetLastError());
 		exit(1);
 	}
 
 	if (sei.hProcess == NULL) {
-		fprintf(stderr, "Don't know how to wait for editor finish, exiting\n");
+		_ftprintf(stderr, L"Don't know how to wait for editor finish, exiting\n");
 		exit(0);
 	}
 
@@ -188,7 +183,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     WaitForSingleObject(sei.hProcess, INFINITE );
 
 	if (!GetExitCodeProcess(sei.hProcess, &dwExitCode)) {
-		fprintf(stderr, "Cannot get editor exit code: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"Cannot get editor exit code: %lu\n", GetLastError());
 		exit(1);
 	}
 
@@ -196,12 +191,12 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     CloseHandle(sei.hProcess);
 
 	if (dwExitCode != 0) {
-		fprintf(stderr, "Editor failed: %d\n", dwExitCode);
+		_ftprintf(stderr, L"Editor failed: %d\n", dwExitCode);
 		exit(1);
 	}
 
 	if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &stat_post)) {
-		fprintf(stderr, "ERROR stat post: 0x%x\n", GetLastError());
+		_ftprintf(stderr, L"ERROR stat post: %lu\n", GetLastError());
 		exit(1);
 	}
 

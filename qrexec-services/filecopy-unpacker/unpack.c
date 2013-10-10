@@ -7,6 +7,7 @@
 #include <Shellapi.h>
 #include <ioall.h>
 #include <gui-fatal.h>
+
 #include "linux.h"
 #include "filecopy.h"
 #include "crc32.h"

@@ -37,7 +37,7 @@ void perror_wrapper(char * msg)
 int write_all(HANDLE fd, void *buf, int size)
 {
 	int written = 0;
-	int ret;
+	DWORD ret;
 	while (written < size) {
 		if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
 			perror_wrapper("write");
@@ -52,7 +52,7 @@ int write_all(HANDLE fd, void *buf, int size)
 int read_all(HANDLE fd, void *buf, int size)
 {
 	int got_read = 0;
-	int ret;
+	DWORD ret;
 	while (got_read < size) {
 		if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
 			perror_wrapper("read");
@@ -71,7 +71,7 @@ int read_all(HANDLE fd, void *buf, int size)
 
 int copy_fd_all(HANDLE fdout, HANDLE fdin)
 {
-	int ret;
+	DWORD ret;
 	char buf[4096];
 	for (;;) {
 		if (!ReadFile(fdin, buf, sizeof(buf), &ret, NULL)) {

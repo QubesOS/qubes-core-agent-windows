@@ -9,7 +9,7 @@ int copy_file(HANDLE outfd, HANDLE infd, long long size, unsigned long *crc32)
 {
 	char buf[4096];
 	long long written = 0;
-	int ret;
+	DWORD ret;
 	long long count;
 	while (written < size) {
 		if (size - written > sizeof(buf))
