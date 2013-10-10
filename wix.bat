@@ -13,7 +13,7 @@ IF "%DDK_TARGET_OS%"=="WinNET" (SET MSIOS=2003)
 IF "%DDK_TARGET_OS%"=="WinLH" (SET MSIOS=Vista2008)
 IF "%DDK_TARGET_OS%"=="Win7" (SET MSIOS=Win7)
 
-SET MSINAME=qubesagent_%MSIOS%%MSIARCH%_%VERSION%%MSIBUILD%.msi
+SET MSINAME=core-agent-windows-%MSIOS%%MSIARCH%%MSIBUILD%.msm
 
 "%WIX%\bin\candle" installer.wxs -arch %MSIARCH% -ext "%WIX%\bin\WixUIExtension.dll" -ext "%WIX%\bin\WixDifxAppExtension.dll" -ext "%WIX%\bin\WixIIsExtension.dll"
 "%WIX%\bin\light.exe" -o %MSINAME% installer.wixobj %DIFXLIB% -ext "%WIX%\bin\WixUIExtension.dll" -ext "%WIX%\bin\WixDifxAppExtension.dll" -ext "%WIX%\bin\WixIIsExtension.dll"

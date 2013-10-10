@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='windows-1252'?>
-<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi' xmlns:difx='http://schemas.microsoft.com/wix/DifxAppExtension' xmlns:iis='http://schemas.microsoft.com/wix/IIsExtension'>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
   <?if $(env._BUILDARCH) = x86 ?>
     <?define ARCHDIR = i386 ?>
     <?define PFILESDIR = ProgramFilesFolder ?>
@@ -8,25 +8,13 @@
     <?define PFILESDIR = ProgramFiles64Folder ?>
   <?endif ?>
 
-  <Product Name='Qubes Agent for Windows' Id='*'
-    UpgradeCode='0853bd66-91d5-449c-8450-64af366e42a5'
-    Language='1033' Codepage='1252' Version='$(env.VERSION)' Manufacturer='Invisible Things Lab'>
+  <Module  Id='coreAgentWindows'
+    Language='1033' Codepage='1252' Version='$(env.VERSION)'>
 
-    <Package Id='*' Keywords='Installer' Description="Qubes Agent for Windows"
+    <Package Id='{8925880F-EA34-4984-A4E1-F6CFF4AE7784}' Keywords='Installer' Description="Qubes Agent for Windows"
       Comments='no comment' Manufacturer='Invisible Things Lab' InstallScope='perMachine'
-      InstallerVersion='200' Languages='1033' Compressed='yes' SummaryCodepage='1252'
+      InstallerVersion='200' Languages='1033' SummaryCodepage='1252'
       InstallPrivileges="elevated" />
-
-    <WixVariable Id="WixUILicenseRtf" Value="license.rtf" />
-
-    <UI>
-      <UIRef Id="WixUI_Mondo" />
-      <UIRef Id="WixUI_ErrorProgressText" />
-    </UI>
-
-    <Media Id='1' Cabinet='qubescore.cab' EmbedCab='yes' />
-
-    <MajorUpgrade AllowDowngrades="yes"/>
 
     <Directory Id='TARGETDIR' Name='SourceDir'>
       <Directory Id='$(var.PFILESDIR)'>
@@ -91,14 +79,5 @@
       </Directory>
       <Directory Id='SendToFolder'/>
     </Directory>
-
-    <Feature Id='QrexecAgent' Title='QrexecAgent' Level='1' AllowAdvertise='no' InstallDefault='local' Absent='disallow'>
-      <ComponentRef Id='QrexecAgent' />
-      <ComponentRef Id='QrexecClientVM' />
-      <ComponentRef Id='AskVMClientWrapper' />
-      <ComponentRef Id='QrexecServices' />
-      <ComponentRef Id='QrexecServicesConfig' />
-    </Feature>
-
-  </Product>
+  </Module>
 </Wix>
