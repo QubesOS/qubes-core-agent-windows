@@ -31,8 +31,4 @@ enum {
 	WRITE_STDIN_ERROR
 };
 
-int flush_client_data(int fd, int client_id, struct buffer *buffer);
-int write_stdin(int fd, int client_id, char *data, int len, struct buffer *buffer);
-void set_nonblock(int fd);
-int fork_and_flush_stdin(int fd, struct buffer *buffer);
 extern libvchan_t *ctrl;
