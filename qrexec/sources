@@ -12,7 +12,7 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
                     ..\include; \
-                    ..\..\vchan;
+                    $(QUBES_INCLUDES);
 
 SOURCES=qrexec_agent.c txrx-vchan.c service.c getopt.c log.c errors.mc errors.rc exec.c pipe_server.c
 
@@ -29,6 +29,6 @@ TARGETLIBS=\
 	..\libs\*\evtchn.lib \
 	..\libs\*\libxs.lib \
 	..\libs\*\qubes_utils.lib \
-	..\libs\*\libvchan.lib
+    $(QUBES_LIBS)\libvchan.lib
 
 
