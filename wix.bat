@@ -1,6 +1,6 @@
 @ECHO OFF
 
-IF "%_BUILDARCH%"=="x86" (SET DIFXLIB="%WIX%bin\difxapp_x86.wixlib") ELSE (SET DIFXLIB="%WIX%bin\difxapp_x64.wixlib")
+IF "%_BUILDARCH%"=="x86" (SET DIFXLIB="%WIX%\bin\difxapp_x86.wixlib") ELSE (SET DIFXLIB="%WIX%\bin\difxapp_x64.wixlib")
 
 IF "%_BUILDARCH%"=="x86" (SET MSIARCH=x86) ELSE (SET MSIARCH=x64)
 
