@@ -939,7 +939,11 @@ ULONG handle_connect_existing(int client_id, int len)
 		return ERROR_INVALID_FUNCTION;
 	}
 
+#ifdef UNICODE
 	debugf("handle_connect_existing(): client %d, ident %S\n", client_id, buf);
+#else
+	debugf("handle_connect_existing(): client %d, ident %s\n", client_id, buf);
+#endif
 
 	uResult = ProceedWithExecution(client_id, buf);
 	free(buf);
