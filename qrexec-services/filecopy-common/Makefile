@@ -7,7 +7,7 @@ CFLAGS += -I.
 all: $(OUT_DIR)/$(TARGET).a
 
 $(OUT_DIR)/$(TARGET).a: copy-file.o crc32.o gui-fatal.o ioall.o
-	$(AR) rcs $(OUT_DIR)/$(TARGET).a copy-file.o crc32.o gui-fatal.o ioall.o
+	$(AR) rcs $(OUT_DIR)/$(TARGET).a copy-file.o crc32.o gui-fatal.o ioall.o $(QUBES_LIBS)/log.o
 
 clean:
 	rm -f *.o *.exe

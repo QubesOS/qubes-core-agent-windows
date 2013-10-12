@@ -4,7 +4,7 @@
 #include <strsafe.h>
 #include <stdlib.h>
 #include "resource.h"
-
+#include "log.h"
 
 INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
 {
@@ -25,6 +25,7 @@ INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 }
 
 void reportError(PTCHAR pszMessage) {
+	errorf("%s\n", pszMessage);
 	MessageBox(NULL, pszMessage, TEXT("Qubes"), MB_OK | MB_ICONERROR);
 }
 
@@ -32,11 +33,13 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 {
 	INT_PTR hResult;
 	TCHAR szQrexecClientPath[MAX_PATH];
-	PTCHAR pszQrexecClientCmdLine;
+	TCHAR *pszQrexecClientCmdLine;
 	size_t cchQrexecClientCmdLine;
-	PTCHAR pSeparator;
+	TCHAR *pSeparator;
 	PROCESS_INFORMATION pi;
 	STARTUPINFO si;
+
+	log_init(NULL, TEXT("ask-vm-and-run")); // default user-specific dir
 
 	hResult = DialogBox(hInst,                   // application instance
 			MAKEINTRESOURCE(IDD_INPUTBOX), // dialog box resource
@@ -82,6 +85,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
+	logf("Executing: %s %s\n", szQrexecClientPath, pszQrexecClientCmdLine);
 
 	if (!CreateProcess(szQrexecClientPath, pszQrexecClientCmdLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
 		reportError(TEXT("Failed to execute qrexec-client-vm.exe"));

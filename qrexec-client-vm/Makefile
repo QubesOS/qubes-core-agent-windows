@@ -2,7 +2,7 @@ TARGET = qrexec-client-vm
 SRCFILES = qrexec-client-vm.c
 
 CFLAGS += -I../include
-LDFLAGS += -lwindows-utils
+LDFLAGS += -lwindows-utils -luserenv -lwtsapi32
 
 OBJFILES = $(SRCFILES:.c=.o)
 

@@ -17,7 +17,10 @@ int copy_file(HANDLE outfd, HANDLE infd, long long size, unsigned long *crc32)
 		else
 			count = size - written;
 		if (!ReadFile(infd, buf, (DWORD)count, &ret, NULL))
+		{
+			perror("copy_file: ReadFile");
 			return COPY_FILE_READ_ERROR;
+		}
 		if (ret == 0)
 			return COPY_FILE_READ_EOF;
 		/* acumulate crc32 if requested */

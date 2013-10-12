@@ -6,76 +6,11 @@
 #include <qrexec.h>
 #include "log.h"
 #include "agent.h"
-#include <utf8-conv.h>
+#include "utf8-conv.h"
+#include "exec.h"
 #ifdef BACKEND_VMM_wni
 #include <lmcons.h>  // for UNLEN
 #endif
-
-ULONG CreatePipedProcessAsCurrentUser(
-		PTCHAR pszCommand,
-		BOOLEAN bRunInteractively,
-		HANDLE hPipeStdin,
-		HANDLE hPipeStdout,
-		HANDLE hPipeStderr,
-		HANDLE *phProcess)
-{
-	PROCESS_INFORMATION	pi;
-	STARTUPINFO	si;
-	ULONG	uResult;
-	BOOLEAN	bInheritHandles;
-
-
-	if (!pszCommand || !phProcess)
-		return ERROR_INVALID_PARAMETER;
-
-	*phProcess = INVALID_HANDLE_VALUE;
-
-	memset(&si, 0, sizeof(si));
-	si.cb = sizeof(si);
-
-	bInheritHandles = FALSE;
-
-	if (INVALID_HANDLE_VALUE != hPipeStdin &&
-		INVALID_HANDLE_VALUE != hPipeStdout &&
-		INVALID_HANDLE_VALUE != hPipeStderr) {
-
-		si.dwFlags = STARTF_USESTDHANDLES;
-		si.hStdInput = hPipeStdin;
-		si.hStdOutput = hPipeStdout;
-		si.hStdError = hPipeStderr;
-
-		bInheritHandles = TRUE;
-	}
-
-	if (!CreateProcess(
-			NULL,
-			pszCommand,
-			NULL,
-			NULL,
-			bInheritHandles, // inherit handles if IO is piped
-			0,
-			NULL,
-			NULL,
-			&si,
-			&pi)) {
-
-		uResult = GetLastError();
-		perror("CreateProcess");
-#ifdef UNICODE
-		logf("CreatePipedProcessAsCurrentUser(): CreateProcess(\"%S\") failed", pszCommand);
-#else
-		logf("CreatePipedProcessAsCurrentUser(): CreateProcess(\"%s\") failed", pszCommand);
-#endif
-		return uResult;
-	}
-
-	debugf("CreatePipedProcessAsCurrentUser(): pid %d\n", pi.dwProcessId);
-
-	*phProcess = pi.hProcess;
-	CloseHandle(pi.hThread);
-
-	return ERROR_SUCCESS;
-}
 
 ULONG SendCreateProcessResponse(HANDLE hPipe, CREATE_PROCESS_RESPONSE *pCpr)
 {
@@ -135,9 +70,10 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	HANDLE	hProcess;
 	CREATE_PROCESS_RESPONSE	CreateProcessResponse;
 
+	log_init(NULL, TEXT("qrexec-client-vm"));
 
 	if (argc < 4) {
-		_tprintf(TEXT("usage: %s target_vmname program_ident local_program [local program arguments]\n"), argv[0]);
+		errorf("usage: %s target_vmname service_id local_program [local program arguments]\n", argv[0]);
 		exit(1);
 	}
 
@@ -186,8 +122,6 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 #endif
 	pszParameter = NULL;
 
-	debugf("Connecting to the pipe server\n");
-
 #ifdef BACKEND_VMM_wni
     /* on WNI we don't have separate namespace for each VM (all is in the
      * single system) */
@@ -200,6 +134,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 #endif
 
 	// Try to open a named pipe; wait for it, if necessary.
+	logf("Connecting to the pipe server: %s\n", lpszPipename);
 
 	while (TRUE) {
 		hPipe = CreateFile(
@@ -246,8 +181,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		return uResult;
 	}
 
-	// Send the params to the pipe server.
-	debugf("Sending the parameters to the server\n");
+	// Send params to the pipe server.
+	debugf("Sending parameters to the server\n");
 
 	if (!WriteFile(hPipe, &params, sizeof(params), &cbWritten, NULL)) {
 		uResult = GetLastError();
@@ -256,7 +191,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		return uResult;
 	}
 
-	debugf("Receiving the IO handles\n");
+	debugf("Receiving IO handles\n");
 
 	// Read the handle array from the pipe.
 	fSuccess = ReadFile(
@@ -275,11 +210,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		return uResult;
 	}
 
-#ifdef UNICODE
-	debugf("Starting the local program \"%S\"\n", argv[3]);
-#else
-	debugf("Starting the local program \"%s\"\n", argv[3]);
-#endif
+	logf("Starting local program \"%s\"\n", argv[3]);
 
 	// find command line staring at third parameter _including_ quotes
 	pszLocalProgram = _tcsstr(GetCommandLine(), argv[2]);
@@ -289,7 +220,6 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 	uResult = CreatePipedProcessAsCurrentUser(
 			pszLocalProgram,	// local program
-			TRUE,
 			IoHandles.hPipeStdin,
 			IoHandles.hPipeStdout,
 			IoHandles.hPipeStderr,
@@ -303,14 +233,14 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 		perror("CreatePipedProcessAsCurrentUser()");
 
-		debugf("Sending the error code to the server\n");
+		debugf("Sending error code to the server\n");
 
 		CreateProcessResponse.bType = CPR_TYPE_ERROR_CODE;
 		CreateProcessResponse.ResponseData.dwErrorCode = uResult;
 
 	} else {
 
-		debugf("Sending the process handle of the local program to the server\n");
+		debugf("Sending process handle of the local program to the server\n");
 
 		CreateProcessResponse.bType = CPR_TYPE_HANDLE;
 		CreateProcessResponse.ResponseData.hProcess = hProcess;

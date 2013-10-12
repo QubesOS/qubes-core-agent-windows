@@ -9,6 +9,7 @@
 #include <gui-fatal.h>
 #include "dvm2.h"
 #include "utf8-conv.h"
+#include "log.h"
 
 void send_file(PTCHAR fname)
 {
@@ -49,7 +50,7 @@ void send_file(PTCHAR fname)
 	if (!copy_fd_all(hStdOut, fd))
 		gui_fatal(TEXT("send file to dispVM"));
 	CloseHandle(fd);
-	fprintf(stderr, "File sent\n");
+	errorf("File sent\n");
 	CloseHandle(hStdOut);
 }
 
@@ -105,9 +106,10 @@ void talk_to_daemon(PTCHAR fname)
 
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
+	log_init(NULL, TEXT("open-in-vm"));
 	if (argc!=2) 
 		gui_fatal(TEXT("OpenInVM - no file given?"));
-	fprintf(stderr, "OpenInVM starting\n");
+	errorf("OpenInVM starting\n");
 	talk_to_daemon(argv[1]);
 	return 0;
 }	

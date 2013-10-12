@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "utf8-conv.h"
+#include "log.h"
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -18,6 +19,7 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
         if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
 			if (GetLastError() == ERROR_BROKEN_PIPE)
 				return got_read;
+			perror("ReadUntilEOF: ReadFile");
             return -1;
         }
         if (ret == 0) {
@@ -25,7 +27,7 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
         }
         got_read += ret;
     }
-//      fprintf(stderr, "read %d bytes\n", size);
+    debugf("ReadUntilEOF: read %d bytes\n", size);
     return got_read;
 }
 
@@ -39,24 +41,26 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 
 	uRead = ReadUntilEOF(hInput, lpStr, sizeof(lpStr)-1);
 	if (uRead < 0) {
-		fprintf(stderr, "failed to read stdin: %lu\n", GetLastError());
+		errorf("setClipboard: failed to read stdin\n");
 		return FALSE;
 	}
 
 	lpStr[uRead] = '\0';
 
 	if (FAILED(ConvertUTF8ToUTF16(lpStr, &pwszUtf16, &cchwStr))) {
-		fprintf(stderr, "failed to convert text from UTF-8\n");
+		errorf("setClipboard: ConvertUTF8ToUTF16 failed\n");
 		return FALSE;
 	}
 
 	hglb = GlobalAlloc(GMEM_MOVEABLE, (cchwStr+1) * sizeof(WCHAR));
 	if (!hglb) {
+		perror("setClipboard: GlobalAlloc");
 		return FALSE;
 	}
 
 	pwszUtf16dest = GlobalLock(hglb);
 	if (!pwszUtf16dest) {
+		perror("setClipboard: GlobalLock");
 		GlobalFree(hglb);
 		return FALSE;
 	}
@@ -67,17 +71,20 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 	GlobalUnlock(hglb);
 
 	if (!OpenClipboard(hWin)) {
+		perror("setClipboard: OpenClipboard");
 		GlobalFree(hglb);
 		return FALSE;
 	}
 
 	if (!EmptyClipboard()) {
+		perror("setClipboard: EmptyClipboard");
 		GlobalFree(hglb);
 		CloseClipboard();
 		return FALSE;
 	}
 
 	if (!SetClipboardData(CLIPBOARD_FORMAT, hglb)) {
+		perror("setClipboard: SetClipboardData");
 		GlobalFree(hglb);
 		CloseClipboard();
 		return FALSE;
@@ -128,19 +135,22 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 	HANDLE hStdIn;
 	HWND hWin;
 
+	log_init(NULL, TEXT("clipboard-paste"));
+
 	hStdIn = GetStdHandle(STD_INPUT_HANDLE);
 	if (hStdIn == INVALID_HANDLE_VALUE) {
-		// some error handler?
+		perror("GetStdHandle");
 		return 1;
 	}
 
 	hWin = createMainWindow(hInst);
 	if (!hWin) {
-		fprintf(stderr, "create window failed: %lu\n", GetLastError());
+		perror("create window");
 		return 1;
 	}
 
 	if (!setClipboard(hWin, hStdIn)) {
+		errorf("setClipboard failed\n");
 		return 1;
 	}
 

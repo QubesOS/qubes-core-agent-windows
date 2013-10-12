@@ -10,9 +10,6 @@
 #define SERVICE_NAME	TEXT("qrexec-agent")
 #define DEFAULT_USER_PASSWORD_UNICODE	L"userpass"
 
-// todo: this should be taken from some system-wide configuration (or passed as argument)
-#define LOG_DIR TEXT("c:\\qubes\\logs")
-
 //#define DISPLAY_CONSOLE_OUTPUT
 
 //#define START_SERVICE_AFTER_INSTALLATION

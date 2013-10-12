@@ -4,6 +4,7 @@
 #include <taskdialog.h> // definitions absent in mingw
 #include "gui-fatal.h"
 #include "gui-progress.h"
+#include "log.h"
 
 extern INT64 total_size;
 extern BOOL cancel_operation;
@@ -20,11 +21,15 @@ void ResolveFunc()
 	// todo: proper error handling
 	if (!comctl32)
 	{
-		MessageBox(NULL, TEXT("Failed to load comctl32.dll"), TEXT("gui-progress"), MB_ICONERROR);
+		perror("ResolveFunc: LoadLibrary(comctl32)");
+		//MessageBox(NULL, TEXT("Failed to load comctl32.dll"), TEXT("gui-progress"), MB_ICONERROR);
 	}
 	TaskDialogIndirectDynamic = (TaskDialogIndirectProc*) GetProcAddress(comctl32, "TaskDialogIndirect");
 	if (!TaskDialogIndirectDynamic)
-		MessageBox(NULL, TEXT("Failed to GetProcAddress(TaskDialogIndirect)"), TEXT("gui-progress"), MB_ICONERROR);
+	{
+		perror("ResolveFunc: GetProcAddress(TaskDialogIndirect)");
+		//MessageBox(NULL, TEXT("Failed to GetProcAddress(TaskDialogIndirect)"), TEXT("gui-progress"), MB_ICONERROR);
+	}
 }
 // end workaround
 
@@ -93,7 +98,7 @@ void createProgressWindow()
 {
 	hProgressWindowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)doTaskDialogThread, NULL, 0, NULL);
 	if (!hProgressWindowThread) {
-		// TODO: error handler
+		perror("createProgressWindow: CreateThread");
 	}
 	set_error_gui_callbacks(hDialog, switch_progressbar_to_red);
 }

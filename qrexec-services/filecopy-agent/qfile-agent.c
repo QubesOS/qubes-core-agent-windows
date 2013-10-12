@@ -13,6 +13,7 @@
 #include "filecopy.h"
 #include "crc32.h"
 #include "utf8-conv.h"
+#include "log.h"
 
 HANDLE STDIN = INVALID_HANDLE_VALUE;
 HANDLE STDOUT = INVALID_HANDLE_VALUE;
@@ -21,14 +22,13 @@ HANDLE STDERR = INVALID_HANDLE_VALUE;
 INT64 total_size = 0;
 BOOL cancel_operation = FALSE;
 
-#ifdef DBG
+#ifdef DEBUG
 #define internal_fatal gui_fatal
 #else
 static __inline void internal_fatal(const PTCHAR fmt, ...) {
 	gui_fatal(TEXT("Internal error"));
 }
 #endif
-
 
 unsigned long crc32_sum;
 int write_all_with_crc(HANDLE hOutput, void *pBuf, int sSize)
@@ -54,6 +54,7 @@ void wait_for_result()
 	struct result_header hdr;
 
 	if (!read_all(STDIN, &hdr, sizeof(hdr))) {
+		errorf("wait_for_result: read_all failed\n");
 		exit(1);	// hopefully remote has produced error message
 	}
 	if (hdr.error_code != 0) {
@@ -65,8 +66,7 @@ void wait_for_result()
 				gui_fatal(TEXT("File copy: Corrupted data from packer"));
 				break;
 			default:
-				gui_fatal(TEXT("File copy: %hs"),
-						strerror(hdr.error_code));
+				gui_fatal(TEXT("File copy: %hs"), strerror(hdr.error_code));
 		}
 	}
 	if (hdr.crc32 != crc32_sum) {
@@ -279,6 +279,7 @@ PTCHAR GetAbsolutePath(PTCHAR pszCwd, PTCHAR pszPath)
 		return NULL;
 	}
 	if (FAILED(StringCchPrintf(pszAbsolutePath, cchAbsolutePath, TEXT("%s\\%s"), pszCwd, pszPath))) {
+		perror("GetAbsolutePath: StringCchPrintf");
 		free(pszAbsolutePath);
 		return NULL;
 	}
@@ -290,6 +291,8 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 	int i;
 	PTCHAR pszArgumentDirectory, pszArgumentBasename;
 	TCHAR szCwd[MAX_PATH_LENGTH];
+
+	log_init(NULL, TEXT("qfile-agent"));
 
 	STDERR = GetStdHandle(STD_ERROR_HANDLE);
 	if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE) {
@@ -313,6 +316,7 @@ int __cdecl _tmain(int argc, PTCHAR argv[])
 		exit(1);
 	}
 	// calculate total size for progressbar purpose
+	// fixme: this operation alone can take a long time
 	total_size = 0;
 	for (i = 1; i < argc; i++) {
 		if (cancel_operation)

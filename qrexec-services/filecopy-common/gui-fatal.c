@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <Strsafe.h>
 #include "gui-fatal.h"
+#include "log.h"
 
 typedef LONG NTSTATUS;
 
@@ -27,6 +28,7 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 
 	if (FAILED(StringCchVPrintf(buf, RTL_NUMBER_OF(buf), fmt, args))) {
 		/* FIXME: some fallback method? */
+		perror("produce_message: StringCchVPrintf");
 		return;
 	}
 
@@ -41,21 +43,24 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 
 	if (cchErrorTextSize > 0) {
 		if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT(": ")))) {
+			perror("produce_message: StringCchCat");
 			LocalFree(pMessage);
 			return;
 		}
 		if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), pMessage))) {
+			perror("produce_message: StringCchCat");
 			LocalFree(pMessage);
 			return;
 		}
 	}
 	if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT("\n")))) {
+		perror("produce_message: StringCchCat");
 		LocalFree(pMessage);
 		return;
 	}
 
 	// message for qrexec log in dom0
-	_ftprintf(stderr, TEXT("%s"), buf);
+	errorf("%s", buf);
 	MessageBox(hDialog, buf, TEXT("Qubes file copy error"), MB_OK | icon);
 	LocalFree(pMessage);
 }

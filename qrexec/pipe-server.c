@@ -226,7 +226,7 @@ ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClient
 
 	if (CPR_TYPE_ERROR_CODE == pCpr->bType) {
 
-		debugf("ConnectExisting(): client_id #%d: Process creation failed, got the error code %d\n", client_id, pCpr->ResponseData.dwErrorCode);
+		logf("ConnectExisting(): client_id #%d: Process creation failed, got the error code %d\n", client_id, pCpr->ResponseData.dwErrorCode);
 
 		uResult = send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.dwErrorCode));
 		if (ERROR_SUCCESS != uResult)
@@ -340,7 +340,7 @@ ULONG ProceedWithExecution(int assigned_client_id, char *pszIdent)
 	}
 
 	if (STATE_WAITING_FOR_DAEMON_DECISION != g_Pipes[uPipeNumber].uState) {
-		debugf("ProceedWithExecution(): Wrong pipe state %d, should be %d\n", g_Pipes[uPipeNumber].uState, STATE_WAITING_FOR_DAEMON_DECISION);
+		errorf("ProceedWithExecution(): Wrong pipe state %d, should be %d\n", g_Pipes[uPipeNumber].uState, STATE_WAITING_FOR_DAEMON_DECISION);
 		LeaveCriticalSection(&g_PipesCriticalSection);
 		return ERROR_INVALID_PARAMETER;
 	}
@@ -479,8 +479,8 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 
 		if (INSTANCES == i) {
 
-			// Service is shuttiung down, close the pipe handles.
-			debugf("WatchForTriggerEvents(): Shutting down\n");
+			// Service is shutting down, close the pipe handles.
+			logf("WatchForTriggerEvents(): Shutting down\n");
 			ClosePipeHandles();
 
 			return ERROR_SUCCESS;
@@ -531,7 +531,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 			// Make sure the incoming message has a right size
 			case STATE_RECEIVING_PARAMETERS:
 				if (sizeof(g_Pipes[i].params) != cbRet) {
-					debugf("WatchForTriggerEvents(): Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(g_Pipes[i].params));
+					errorf("WatchForTriggerEvents(): Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(g_Pipes[i].params));
 					DisconnectAndReconnect(i);
 					continue;
 				}
@@ -560,7 +560,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 			// Pending read operation
 			case STATE_RECEIVING_PROCESS_HANDLE:
 				if (sizeof(CREATE_PROCESS_RESPONSE) != cbRet) {
-					debugf("WatchForTriggerEvents(): Wrong incoming create process response size: %d\n", cbRet);
+					errorf("WatchForTriggerEvents(): Wrong incoming create process response size: %d\n", cbRet);
 					DisconnectAndReconnect(i);
 					continue;
 				}
@@ -580,7 +580,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 				continue;
 
 			default:
-				debugf("WatchForTriggerEvents(): Invalid pipe state %d\n", g_Pipes[i].uState);
+				errorf("WatchForTriggerEvents(): Invalid pipe state %d\n", g_Pipes[i].uState);
 				continue;
 			}
 		}

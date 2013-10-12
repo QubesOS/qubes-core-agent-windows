@@ -24,15 +24,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <errno.h>
-
-void perror_wrapper(char * msg)
-{
-	/* TODO */
-#if 0
-	lprintf_err(GetLastError(), msg);
-#endif
-}
-
+#include "log.h"
 
 int write_all(HANDLE fd, void *buf, int size)
 {
@@ -40,12 +32,12 @@ int write_all(HANDLE fd, void *buf, int size)
 	DWORD ret;
 	while (written < size) {
 		if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
-			perror_wrapper("write");
+			perror("write_all: WriteFile");
 			return 0;
 		}
 		written += ret;
 	}
-//      fprintf(stderr, "sent %d bytes\n", size);
+    debugf("write_all: sent %d bytes\n", size);
 	return 1;
 }
 
@@ -55,17 +47,18 @@ int read_all(HANDLE fd, void *buf, int size)
 	DWORD ret;
 	while (got_read < size) {
 		if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
-			perror_wrapper("read");
+			perror("read_all: ReadFile");
 			return 0;
 		}
 		if (ret == 0) {
 			errno = 0;
-			fprintf(stderr, "EOF\n");
+			//fprintf(stderr, "EOF\n");
+			debugf("read_all: EOF\n");
 			return 0;
 		}
 		got_read += ret;
 	}
-//      fprintf(stderr, "read %d bytes\n", size);
+    debugf("read_all: read %d bytes\n", size);
 	return 1;
 }
 
@@ -78,13 +71,13 @@ int copy_fd_all(HANDLE fdout, HANDLE fdin)
 			// PIPE returns ERROR_BROKEN_PIPE instead of 0-bytes read on EOF
 			if (GetLastError() == ERROR_BROKEN_PIPE)
 				break;
-			perror_wrapper("read");
+			perror("copy_fd_all: ReadFile");
 			return 0;
 		}
 		if (!ret)
 			break;
 		if (!write_all(fdout, buf, ret)) {
-			perror_wrapper("write");
+			errorf("copy_fd_all: write_all failed\n");
 			return 0;
 		}
 	}

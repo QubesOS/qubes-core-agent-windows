@@ -11,6 +11,7 @@
 #include "wdk.h"
 #include "filecopy.h"
 #include "crc32.h"
+#include "log.h"
 
 // older mingw workaround
 #define KF_FLAG_CREATE 0x00008000
@@ -21,7 +22,7 @@ HANDLE STDERR = INVALID_HANDLE_VALUE;
 
 #define INCOMING_DIR_ROOT L"incoming"
 
-#ifdef DBG
+#ifdef DEBUG
 #define internal_fatal gui_fatal
 #else
 static __inline void internal_fatal(const PWCHAR fmt, ...) {
@@ -153,6 +154,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	HRESULT	hResult;
 	ULONG	uResult;
 	WCHAR	wszRemoteDomainName[MAX_PATH];
+
+	log_init(NULL, TEXT("qfile-unpacker"));
 
 	STDERR = GetStdHandle(STD_ERROR_HANDLE);
 	if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE) {

@@ -85,8 +85,7 @@ void fix_times_and_perms(struct file_header *untrusted_hdr,
 */
 
 
-void process_one_file_reg(struct file_header *untrusted_hdr,
-			  char *untrusted_name)
+void process_one_file_reg(struct file_header *untrusted_hdr, char *untrusted_name)
 {
 	int	ret;
 	ULONG	uResult;
@@ -136,8 +135,7 @@ void process_one_file_reg(struct file_header *untrusted_hdr,
 }
 
 
-void process_one_file_dir(struct file_header *untrusted_hdr,
-			  char *untrusted_name)
+void process_one_file_dir(struct file_header *untrusted_hdr, char *untrusted_name)
 {
 // fix perms only when the directory is sent for the second time
 // it allows to transfer r.x directory contents, as we create it rwx initially
@@ -170,8 +168,7 @@ void process_one_file_dir(struct file_header *untrusted_hdr,
 //	fix_times_and_perms(untrusted_hdr, untrusted_name);
 }
 
-void process_one_file_link(struct file_header *untrusted_hdr,
-			   char *untrusted_name)
+void process_one_file_link(struct file_header *untrusted_hdr, char *untrusted_name)
 {
 /*
 	char untrusted_content[MAX_PATH_LENGTH];

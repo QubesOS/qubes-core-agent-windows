@@ -3,7 +3,7 @@ SRCFILES = ask-vm-and-run.c
 RCFILES = inputbox.rc
 
 CFLAGS += -mwindows
-LDFLAGS += -Wl,--subsystem,windows -lshlwapi
+LDFLAGS += -Wl,--subsystem,windows -lshlwapi -lwindows-utils
 
 OBJFILES = $(SRCFILES:.c=.o)
 RESFILES = $(RCFILES:.rc=.coff)

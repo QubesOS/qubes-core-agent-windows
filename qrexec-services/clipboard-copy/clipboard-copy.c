@@ -4,6 +4,7 @@
 #include <strsafe.h>
 #include <stdlib.h>
 #include "utf8-conv.h"
+#include "log.h"
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -13,7 +14,7 @@ int write_all(HANDLE fd, void *buf, int size)
     DWORD ret;
     while (written < size) {
         if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
-            // some error handler?
+            perror("write_all: WriteFile");
             return 0;
         }
         written += ret;
@@ -28,32 +29,39 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
 	char *lpstr;
 	size_t cbStr;
 	
-	if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
+	if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT)) {
+		perror("IsClipboardFormatAvailable");
 		return FALSE;
+	}
 
-	if (!OpenClipboard(hWin))
+	if (!OpenClipboard(hWin)) {
+		perror("OpenClipboard");
 		return FALSE;
+	}
 
 	hglb = GetClipboardData(CLIPBOARD_FORMAT);
 	if (!hglb) {
+		perror("GetClipboardData");
 		CloseClipboard();
 		return FALSE;
 	}
 
 	lpwstr = GlobalLock(hglb);
 	if (!lpwstr) {
+		perror("GlobalLock");
 		CloseClipboard();
 		return FALSE;
 	}
 
 	if (FAILED(ConvertUTF16ToUTF8(lpwstr, &lpstr, &cbStr))) {
+		errorf("ConvertUTF16ToUTF8 failed\n");
 		GlobalUnlock(hglb);
 		CloseClipboard();
 		return FALSE;
 	}
 
 	if (!write_all(hOutput, lpstr, cbStr)) {
-		// some error handler?
+		errorf("write_all failed\n");
 		GlobalUnlock(hglb); 
 		CloseClipboard();
 		return FALSE;
@@ -68,13 +76,15 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 {
 	HANDLE hStdOut;
 
+	log_init(NULL, TEXT("clipboard-copy"));
+
 	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hStdOut == INVALID_HANDLE_VALUE) {
-		// some error handler?
+		perror("GetStdHandle");
 		return 1;
 	}
 	if (!getClipboard(NULL, hStdOut)) {
-		// some error handler?
+		errorf("getClipboard failed\n");
 		return 1;
 	}
 

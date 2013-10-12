@@ -5,10 +5,13 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <Strsafe.h>
+#include "log.h"
 
 typedef LONG NTSTATUS;
 
 extern HANDLE STDERR;
+
+// fixme: use TCHARs
 
 static void produce_message(int icon, const PWCHAR fmt, va_list args)
 {
@@ -18,7 +21,7 @@ static void produce_message(int icon, const PWCHAR fmt, va_list args)
 	ULONG   nWritten;
 
 	if (FAILED(StringCbVPrintfW(buf, sizeof(buf), fmt, args))) {
-		/* FIXME: some fallback method? */
+		perror("produce_message: StringCbVPrintfW");
 		return;
 	}
 
@@ -33,21 +36,25 @@ static void produce_message(int icon, const PWCHAR fmt, va_list args)
 
 	if (cchErrorTextSize > 0) {
 		if (FAILED(StringCbCat(buf, sizeof(buf), L": "))) {
+			perror("produce_message: StringCbCat");
 			LocalFree(pMessage);
 			return;
 		}
 		if (FAILED(StringCbCat(buf, sizeof(buf), pMessage))) {
+			perror("produce_message: StringCbCat");
 			LocalFree(pMessage);
 			return;
 		}
 	}
 	if (FAILED(StringCbCat(buf, sizeof(buf), L"\n"))) {
+		perror("produce_message: StringCbCat");
 		LocalFree(pMessage);
 		return;
 	}
 
 	if (STDERR != INVALID_HANDLE_VALUE) {
 		// message for qrexec log in dom0
+		errorf("produce_message: %s\n", buf);
 		WriteFile(STDERR, buf, wcslen(buf) * sizeof(WCHAR), &nWritten, NULL);
 	}
 	MessageBoxW(NULL, buf, L"Qubes file copy error", MB_OK | icon); 
