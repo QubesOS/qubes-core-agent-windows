@@ -52,6 +52,23 @@
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
                 <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-filecopy-wrapper-installed" Type="integer" Value="1" KeyPath="yes"/>
               </Component>
+              <Component Id='networkSetup' Guid='7201739e-35fb-11e3-9760-00163e5e6c10'>
+                <File Id='qubes_network_setup.exe' DiskId='1' Source='network_setup\bin\$(var.ARCHDIR)\qubes-network-setup.exe' KeyPath="yes"/>
+                <ServiceInstall
+                Id="SetupServiceInst"
+                Type="ownProcess"
+                Vital="yes"
+                Name="QubesNetworkSetup"
+                DisplayName="Qubes Network Setup"
+                Description="Setup network according to qubes VM settings"
+                Start="auto"
+                Account="LocalSystem"
+                ErrorControl="ignore"
+                Interactive="no"
+				Arguments="-service"
+                />
+                <ServiceControl Id="StartSetupService" Start="install" Stop="both" Remove="uninstall" Name="QubesNetworkSetup" Wait="yes" />
+              </Component>
             </Directory>
             <Directory Id='QubesRPCDir' Name='qubes_rpc'>
               <Component Id='QrexecServicesConfig' Guid='9efff253-25a8-40ed-861a-0d576f0ca439'>

@@ -1,0 +1,26 @@
+TARGETNAME=qubes-network-setup
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+
+UMTYPE=console
+USE_MSVCRT=1
+
+UMENTRY = main
+
+INCLUDES=$(INCLUDES); \
+                    $(SDK_INC_PATH)\..\ddk; \
+                    ..\include; \
+                    $(QUBES_INCLUDES);
+
+SOURCES=qubes-network-setup.c service.c
+
+TARGETLIBS=\
+		   $(SDK_LIB_PATH)\setupapi.lib     \
+		   $(SDK_LIB_PATH)\kernel32.lib \
+		   $(QUBES_LIBS)\gntmem.lib \
+		   $(QUBES_LIBS)\evtchn.lib \
+		   $(QUBES_LIBS)\libxs.lib \
+		   $(QUBES_LIBS)\libvchan.lib
+
+
