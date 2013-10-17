@@ -53,7 +53,7 @@ int get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
 
 TCHAR *get_filename()
 {
-	char buf[DVM_FILENAME_SIZE];
+	char buf[DVM_FILENAME_SIZE+1];
 	PTCHAR basename;
 	PTCHAR retname;
 	PTCHAR tmpname;
