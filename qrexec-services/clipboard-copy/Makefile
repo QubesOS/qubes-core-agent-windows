@@ -2,7 +2,7 @@ TARGET = clipboard-copy
 SRCFILES = clipboard-copy.c
 
 CFLAGS += -mwindows
-LDFLAGS += -Wl,--subsystem,windows -L../libs -lshlwapi -lwindows-utils
+LDFLAGS += -Wl,--subsystem,windows -L../libs -lwindows-utils -lshlwapi
 
 OBJFILES = $(SRCFILES:.c=.o)
 

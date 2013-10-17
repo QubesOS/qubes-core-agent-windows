@@ -2,7 +2,7 @@ TARGET = qfile-unpacker
 SRCFILES = qfile-unpacker.c gui-fatal.c unpack.c
 
 CFLAGS += -mwindows -I../filecopy-common
-LDFLAGS += -Wl,--subsystem,windows -L../libs -lshlwapi -lntdll -lole32 -lshfolder -lwindows-utils -lfilecopy-common
+LDFLAGS += -Wl,--subsystem,windows -L../libs -lntdll -lole32 -lshfolder -lwindows-utils -lfilecopy-common -lshlwapi
 
 OBJFILES = $(SRCFILES:.c=.o)
 

@@ -4,7 +4,7 @@ RCFILES = qfile-agent.rc
 
 CFLAGS += -mwindows
 CFLAGS += -I../filecopy-common
-LDFLAGS += -Wl,--subsystem,windows -municode -L../libs -lshlwapi -lcomctl32 -lwindows-utils -lfilecopy-common
+LDFLAGS += -Wl,--subsystem,windows -municode -L../libs -lcomctl32 -lwindows-utils -lshlwapi -lfilecopy-common
 
 OBJFILES = $(SRCFILES:.c=.o)
 RESFILES = $(RCFILES:.rc=.coff)
