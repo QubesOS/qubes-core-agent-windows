@@ -13,6 +13,15 @@
       InstallerVersion='200' Languages='1033' SummaryCodepage='1252'
       InstallPrivileges="elevated" />
 
+    <Configuration Name="ProductFolder" Format="Key" Type="Identifier" DefaultValue="QubesProgramFilesDir"
+      Description="Installation directory" DisplayName="Installation directory"/>
+    <Substitution Table="Directory" Column="Directory_Parent"
+      Row="BinDir" Value="[=ProductFolder]"/>
+    <Substitution Table="Directory" Column="Directory_Parent"
+      Row="QubesRPCDir" Value="[=ProductFolder]"/>
+    <Substitution Table="Directory" Column="Directory_Parent"
+      Row="QubesRPCServicesDir" Value="[=ProductFolder]"/>
+
     <Directory Id='TARGETDIR' Name='SourceDir'>
       <Directory Id='$(var.PFILESDIR)'>
         <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
