@@ -182,7 +182,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	memset(pwszDocuments, 0, sizeof(pwszDocuments));
 	// mingw lacks FOLDERID definitions
 	//hResult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &pwszDocuments);
-	hResult = SHGetFolderPath(NULL, CSIDL_MYDOCUMENTS, NULL, SHGFP_TYPE_CURRENT, pwszDocuments);
+	hResult = SHGetFolderPath(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, pwszDocuments);
 	if (FAILED(hResult)) {
 		internal_fatal(L"Failed to get a path to My Documents, SHGetKnownFolderPath() failed with error 0x%x\n", hResult);
 		exit(1);
@@ -197,6 +197,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 			INCOMING_DIR_ROOT, 
 			wszRemoteDomainName);
 	//CoTaskMemFree(pwszDocuments);
+
+	debugf("incoming dir: %s\n", wszIncomingDir);
 
 	if (FAILED(hResult)) {
 		internal_fatal(L"Failed to print an incoming directory path, StringCchPrintf() failed with error %d\n", hResult);
