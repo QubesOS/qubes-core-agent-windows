@@ -30,12 +30,14 @@ int write_all(HANDLE fd, void *buf, int size)
 {
 	int written = 0;
 	DWORD ret;
+	debugf("write_all: start, %d bytes\n", size);
 	while (written < size) {
 		if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
 			perror("write_all: WriteFile");
 			return 0;
 		}
 		written += ret;
+		debugf("write_all: partial write, total %d bytes\n", written);
 	}
     debugf("write_all: sent %d bytes\n", size);
 	return 1;
@@ -45,6 +47,7 @@ int read_all(HANDLE fd, void *buf, int size)
 {
 	int got_read = 0;
 	DWORD ret;
+	debugf("read_all: start, %d bytes\n", size);
 	while (got_read < size) {
 		if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
 			perror("read_all: ReadFile");
@@ -57,6 +60,7 @@ int read_all(HANDLE fd, void *buf, int size)
 			return 0;
 		}
 		got_read += ret;
+		debugf("read_all: partial read, total %d bytes\n", got_read);
 	}
     debugf("read_all: read %d bytes\n", size);
 	return 1;

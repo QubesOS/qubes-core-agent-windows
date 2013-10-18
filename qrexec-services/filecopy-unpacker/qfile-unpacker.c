@@ -188,7 +188,6 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 		exit(1);
 	}
 
-
 	hResult = StringCchPrintf(
 			wszIncomingDir, 
 			RTL_NUMBER_OF(wszIncomingDir), 

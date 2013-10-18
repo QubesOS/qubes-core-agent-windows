@@ -2,6 +2,7 @@
 #include "ioall.h"
 #include "filecopy.h"
 #include "crc32.h"
+#include "log.h"
 
 extern void notify_progress(int, int);
 
@@ -11,19 +12,23 @@ int copy_file(HANDLE outfd, HANDLE infd, long long size, unsigned long *crc32)
 	long long written = 0;
 	DWORD ret;
 	long long count;
+
+	debugf("copy_file: size %lu\n", size);
 	while (written < size) {
 		if (size - written > sizeof(buf))
 			count = sizeof buf;
 		else
 			count = size - written;
+		debugf("copy_file: reading %d...", count);
 		if (!ReadFile(infd, buf, (DWORD)count, &ret, NULL))
 		{
 			perror("copy_file: ReadFile");
 			return COPY_FILE_READ_ERROR;
 		}
+		debugf("done\n");
 		if (ret == 0)
 			return COPY_FILE_READ_EOF;
-		/* acumulate crc32 if requested */
+		/* accumulate crc32 if requested */
 		if (crc32)
 			*crc32 = Crc32_ComputeBuf(*crc32, buf, ret);
 		if (!write_all(outfd, buf, ret))

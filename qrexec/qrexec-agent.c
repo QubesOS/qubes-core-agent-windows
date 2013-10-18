@@ -127,6 +127,7 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 	ULONG uResult = ERROR_SUCCESS;
 
 	debugf("ReturnData(%d), size %d\n", client_id, uDataSize);
+	hex_dump(0, pData, uDataSize);
 
 	EnterCriticalSection(&g_VchanCriticalSection);
 
@@ -134,13 +135,17 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 		// allow partial write only when puDataWritten given
 		*puDataWritten = 0;
 		vchan_space_avail = buffer_space_vchan_ext();
+		debugf("ReturnData: vchan_space_avail=%d\n", vchan_space_avail);
+
 		if (vchan_space_avail < sizeof(s_hdr)) {
 			LeaveCriticalSection(&g_VchanCriticalSection);
+			logf("ReturnData: vchan full (%d)\n", vchan_space_avail);
 			return ERROR_INSUFFICIENT_BUFFER;
 		}
 		// inhibit zero-length write when not requested
 		if (uDataSize && vchan_space_avail == sizeof(s_hdr)) {
 			LeaveCriticalSection(&g_VchanCriticalSection);
+			logf("ReturnData: inhibit zero-length write when not requested\n");
 			return ERROR_INSUFFICIENT_BUFFER;
 		}
 
@@ -155,8 +160,9 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 	s_hdr.type = type;
 	s_hdr.client_id = client_id;
 	s_hdr.len = uDataSize;
-	if (write_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0) {
-		perror("ReturnData(): write_all_vchan_ext(s_hdr)");
+	debugf("ReturnData: writing %d bytes to vchan\n", sizeof(s_hdr));
+	if (write_all_vchan_ext(&s_hdr, sizeof(s_hdr)) <= 0) {
+		perror("ReturnData: write_all_vchan_ext(s_hdr)");
 		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_INVALID_FUNCTION;
 	}
@@ -166,13 +172,15 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 		return ERROR_SUCCESS;
 	}
 
+	debugf("ReturnData: writing %d bytes to vchan\n", uDataSize);
 	if (write_all_vchan_ext(pData, uDataSize) <= 0) {
-		perror("ReturnData(): write_all_vchan_ext()");
+		perror("ReturnData: write_all_vchan_ext()");
 		LeaveCriticalSection(&g_VchanCriticalSection);
 		return ERROR_INVALID_FUNCTION;
 	}
 
 	LeaveCriticalSection(&g_VchanCriticalSection);
+	debugf("ReturnData: all OK\n");
 	return uResult;
 }
 
@@ -794,6 +802,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 				perror("InterceptRPCRequest(): _wcsdup()");
 				return ERROR_NOT_ENOUGH_MEMORY;
 			}
+			debugf("InterceptRPCRequest(): source domain: %s\n", pwszSourceDomainName);
 		} else {
 			logf("InterceptRPCRequest(): No source domain given\n");
 			// Most qrexec services do not use source domain at all, so do not
@@ -989,6 +998,7 @@ ULONG handle_exec(int client_id, int len)
 
 	free(buf);
 	buf = NULL;
+	debugf("handle_exec: cmdline: %s\n", pwszCommandLine);
 
 	uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
 	if (ERROR_SUCCESS != uResult) {
@@ -1323,6 +1333,7 @@ ULONG WatchForEvents()
 	for (;;) {
 		uEventNumber = 0;
 
+		debugf("WatchForEvents: loop start\n");
 		// Order matters.
 		g_WatchedEvents[uEventNumber++] = g_hStopServiceEvent;
 		g_WatchedEvents[uEventNumber++] = g_hAddExistingClientEvent;
@@ -1361,6 +1372,7 @@ ULONG WatchForEvents()
 		}
 		LeaveCriticalSection(&g_ClientsCriticalSection);
 
+		debugf("WatchForEvents: waiting\n");
 		dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
 
 		//debugf("signaled\n");
@@ -1569,7 +1581,10 @@ ULONG WatchForEvents()
 		}
 
 		if (bVchanReturnedError)
+		{
+			errorf("vchan error\n");
 			break;
+		}
 	}
 
 	RemoveAllClients();

@@ -12,6 +12,7 @@
 #include "filecopy.h"
 #include "crc32.h"
 #include "utf8-conv.h"
+#include "log.h"
 
 char untrusted_namebuf[MAX_PATH_LENGTH];
 long long bytes_limit = 0;
@@ -109,6 +110,7 @@ void process_one_file_reg(struct file_header *untrusted_hdr, char *untrusted_nam
 	if (FAILED(hResult)) 
 		do_exit(EINVAL);
 
+	logf("process_one_file_reg: %s\n", wszTrustedFilePath);
 
 	fdout = CreateFileW(wszTrustedFilePath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, 0, NULL);	/* safe because of chroot */
 	if (INVALID_HANDLE_VALUE == fdout) {
@@ -193,6 +195,9 @@ void process_one_file(struct file_header *untrusted_hdr)
 	if (!read_all_with_crc(STDIN, untrusted_namebuf, namelen))
 		do_exit(LEGAL_EOF);	// hopefully remote has produced error message
 	untrusted_namebuf[namelen] = 0;
+
+	debugf("process_one_file: %S\n", untrusted_namebuf);
+
 	if (S_ISREG(untrusted_hdr->mode))
 		process_one_file_reg(untrusted_hdr, untrusted_namebuf);
 	else if (S_ISLNK(untrusted_hdr->mode))
