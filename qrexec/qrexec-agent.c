@@ -19,7 +19,6 @@ extern HANDLE	g_hStopServiceEvent;
 HANDLE	g_hCleanupFinishedEvent;
 #endif
 
-
 ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUTES *pSecurityAttributes)
 {
 	TCHAR	szPipeName[MAX_PATH + 1];
@@ -137,17 +136,26 @@ ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG p
 		vchan_space_avail = buffer_space_vchan_ext();
 		debugf("ReturnData: vchan_space_avail=%d\n", vchan_space_avail);
 
+		// FIXME: blocking wait
+		while ((vchan_space_avail=libvchan_buffer_space(ctrl)) < sizeof(s_hdr))
+			Sleep(10);
+
 		if (vchan_space_avail < sizeof(s_hdr)) {
 			LeaveCriticalSection(&g_VchanCriticalSection);
 			logf("ReturnData: vchan full (%d)\n", vchan_space_avail);
 			return ERROR_INSUFFICIENT_BUFFER;
 		}
+		/*
 		// inhibit zero-length write when not requested
 		if (uDataSize && vchan_space_avail == sizeof(s_hdr)) {
 			LeaveCriticalSection(&g_VchanCriticalSection);
 			logf("ReturnData: inhibit zero-length write when not requested\n");
 			return ERROR_INSUFFICIENT_BUFFER;
 		}
+		*/
+		// FIXME: blocking wait
+		while ((vchan_space_avail=libvchan_buffer_space(ctrl)) < sizeof(s_hdr)+uDataSize)
+			Sleep(10);
 
 		if (vchan_space_avail < sizeof(s_hdr)+uDataSize) {
 			uResult = ERROR_INSUFFICIENT_BUFFER;
@@ -1442,7 +1450,9 @@ ULONG WatchForEvents()
 			// When this thread (in this switch) calls RemoveClient() later the g_Clients
 			// list will be locked as usual.
 
-			debugf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
+			debugf("client %d, type %d, signaled %d, events: %d\n", 
+				g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
+			
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_VCHAN:
 
@@ -1649,7 +1659,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
 		if (!WaitForSingleObject(g_hStopServiceEvent, 0))
 			break;
 
-		Sleep(1000);
+		Sleep(10);
 	}
 
 	debugf("ServiceExecutionThread(): Waiting for the trigger thread to exit\n");

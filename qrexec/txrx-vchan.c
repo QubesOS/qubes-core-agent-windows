@@ -76,7 +76,7 @@ int buffer_space_vchan_ext()
 int peer_server_init(int port)
 {
     /* FIXME: "0" here is remote domain id */
-	ctrl = libvchan_server_init(0, port, 4096, 4096);
+	ctrl = libvchan_server_init(0, port, 16384, 16384);
 	if (!ctrl)
 		return 1;
 
