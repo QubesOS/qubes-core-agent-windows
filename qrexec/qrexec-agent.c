@@ -1456,12 +1456,9 @@ ULONG WatchForEvents()
 			switch (g_HandlesInfo[dwSignaledEvent].bType) {
 				case HTYPE_VCHAN:
 
-					// the following will never block; we need to do this to
-					// clear libvchan_fd pending state
-					libvchan_wait(ctrl);
-
 					if (!bVchanClientConnected) {
 
+						libvchan_wait(ctrl);
 						logf("WatchForEvents(): A vchan client has connected\n");
 
 						bVchanClientConnected = TRUE;
@@ -1469,6 +1466,18 @@ ULONG WatchForEvents()
 					}
 
 					EnterCriticalSection(&g_VchanCriticalSection);
+
+					// libvchan_wait can block if there is no data available
+					if (libvchan_data_ready(ctrl) > 0)
+					{
+						debugf("HTYPE_VCHAN event: libvchan_wait...");
+						libvchan_wait(ctrl);
+						debugf("done\n");
+					}
+					else
+					{
+						debugf("HTYPE_VCHAN event: no data\n");
+					}
 
 					if (!libvchan_is_open(ctrl)) {
 						bVchanReturnedError = TRUE;
