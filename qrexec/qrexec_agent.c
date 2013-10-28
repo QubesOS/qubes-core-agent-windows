@@ -19,6 +19,8 @@ extern HANDLE	g_hStopServiceEvent;
 HANDLE	g_hCleanupFinishedEvent;
 #endif
 
+// from advertise_tools.c
+LONG advertise_tools();
 
 ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUTES *pSecurityAttributes)
 {
@@ -1529,6 +1531,11 @@ ULONG WatchForEvents()
 						}
 
 						bVchanClientConnected = TRUE;
+
+						// ignore error - perhaps core-admin too old and didn't
+						// created appropriate xenstore directory?
+						advertise_tools();
+
 						break;
 					}
 
