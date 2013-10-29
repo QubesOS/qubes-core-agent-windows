@@ -18,7 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
- 
+
 int peer_server_init(int port);
 int read_ready_vchan_ext();
 int read_all_vchan_ext(void *buf, int size);
@@ -31,4 +31,4 @@ enum {
 	WRITE_STDIN_ERROR
 };
 
-extern libvchan_t *ctrl;
+extern libvchan_t *g_daemon_vchan;

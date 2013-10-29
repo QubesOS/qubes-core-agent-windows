@@ -1,5 +1,5 @@
 TARGET = qrexec-agent
-SRCFILES = qrexec-agent.c txrx-vchan.c service.c pipe-server.c
+SRCFILES = qrexec-agent.c service.c pipe-server.c
 RCFILES = errors.rc
 # need to manually compile .mc file with mc from win sdk for now...
 CFLAGS += -I../include

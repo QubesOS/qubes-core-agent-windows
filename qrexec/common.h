@@ -1,9 +1,7 @@
 #pragma once
-
-
-//#ifndef _PREFAST_
-//#pragma warning(disable:4068)
-//#endif
+#include <windows.h>
+#include "libvchan.h"
+#include "qrexec.h"
 
 //#define BUILD_AS_SERVICE
 
@@ -14,71 +12,78 @@
 
 //#define START_SERVICE_AFTER_INSTALLATION
 
-// wr_ring_size[=1024] - sizeof(hdr)[=12]
-#define READ_BUFFER_SIZE	1012
+#define READ_BUFFER_SIZE (65536)
+
+#define VCHAN_BUFFER_SIZE 65536
+#define PIPE_BUFFER_SIZE 65536
+#define PIPE_DEFAULT_TIMEOUT 50
 
 typedef enum {
-	PTYPE_INVALID = 0,
-	PTYPE_STDOUT,
-	PTYPE_STDERR
+    PTYPE_INVALID = 0,
+    PTYPE_STDOUT,
+    PTYPE_STDERR
 } PIPE_TYPE;
 
+// child i/o state for a single pipe
+typedef struct _PIPE_DATA {
+    HANDLE	hReadPipe;
+    PIPE_TYPE	bPipeType;
+    BOOL	bReadInProgress;
+    BOOL	bDataIsReady;
+    BOOL bPipeClosed;
+    BOOL bVchanWritePending;
+    DWORD	dwSentBytes;
+    OVERLAPPED	olRead;
+    CHAR	ReadBuffer[READ_BUFFER_SIZE + 1];
+} PIPE_DATA;
 
-typedef struct _PIPE_DATA {	
-	HANDLE	hReadPipe;
-	PIPE_TYPE	bPipeType;
-	BOOLEAN	bReadInProgress;
-	BOOLEAN	bDataIsReady;
-	BOOLEAN bPipeClosed;
-	BOOLEAN bVchanWritePending;
-	DWORD	dwSentBytes;
-	OVERLAPPED	olRead;
-	CHAR	ReadBuffer[READ_BUFFER_SIZE + 1];
-} PIPE_DATA, *PPIPE_DATA;
+// state of a child process
+typedef struct _CHILD_INFO {
+    //int	client_id;
+    BOOLEAN	bChildIsReady;
 
-typedef struct _CLIENT_INFO {
-	int	client_id;
-	BOOLEAN	bClientIsReady;
+    HANDLE	hProcess;
+    HANDLE	hWriteStdinPipe;
+    BOOL	bStdinPipeClosed;
+    BOOL	bChildExited;
+    DWORD	dwExitCode;
 
-	HANDLE	hProcess;
-	HANDLE	hWriteStdinPipe;
-	BOOLEAN	bStdinPipeClosed;
-	BOOLEAN	bChildExited;
-	DWORD	dwExitCode;
+    BOOL	bReadingIsDisabled;
 
-	BOOLEAN	bReadingIsDisabled;
+    PIPE_DATA	Stdout;
+    PIPE_DATA	Stderr;
 
-	PIPE_DATA	Stdout;
-	PIPE_DATA	Stderr;
-	
-} CLIENT_INFO, *PCLIENT_INFO;
+    libvchan_t *vchan; // associated client's vchan for i/o data exchange
+} CHILD_INFO;
 
 ULONG AddExistingClient(
-	int client_id, 
-	PCLIENT_INFO pClientInfo
+    libvchan_t *vchan,
+    CHILD_INFO *pChildInfo
 );
 
-ULONG CreateClientPipes(
-	CLIENT_INFO *pClientInfo, 
-	HANDLE *phPipeStdin, 
-	HANDLE *phPipeStdout, 
-	HANDLE *phPipeStderr
+ULONG CreateChildPipes(
+    CHILD_INFO *pChildInfo,
+    HANDLE *phPipeStdin,
+    HANDLE *phPipeStdout,
+    HANDLE *phPipeStderr
 );
 
 ULONG CloseReadPipeHandles(
-	int client_id, 
-	PIPE_DATA *pPipeData
+    libvchan_t *vchan,
+    PIPE_DATA *pPipeData
 );
 
-ULONG ReturnData(
-	int client_id,
-	int type,
-	PVOID pData,
-	ULONG uDataSize,
-	PULONG puDataWritten
+ULONG send_msg_to_vchan(
+    libvchan_t *vchan,
+    int type,
+    void *pData,
+    ULONG uDataSize,
+    ULONG *puDataWritten
 );
 
 ULONG send_exit_code(
-	int client_id,
-	int status
+    libvchan_t *vchan,
+    int status
 );
+
+ULONG handle_input(struct msg_header *hdr, libvchan_t *vchan);

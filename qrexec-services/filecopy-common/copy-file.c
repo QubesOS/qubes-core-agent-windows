@@ -13,7 +13,7 @@ int copy_file(HANDLE outfd, HANDLE infd, long long size, unsigned long *crc32)
 	DWORD ret;
 	long long count;
 
-	debugf("copy_file: size %lu\n", size);
+	logf("copy_file: size %lu\n", size);
 	while (written < size) {
 		if (size - written > sizeof(buf))
 			count = sizeof buf;
