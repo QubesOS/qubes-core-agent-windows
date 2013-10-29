@@ -75,7 +75,9 @@
                 ErrorControl="ignore"
                 Interactive="no"
 				Arguments="-service"
-                />
+                >
+                  <ServiceDependency Id='iphlpsvc'/>
+                </ServiceInstall>
                 <ServiceControl Id="StartSetupService" Start="install" Stop="both" Remove="uninstall" Name="QubesNetworkSetup" Wait="yes" />
               </Component>
             </Directory>
