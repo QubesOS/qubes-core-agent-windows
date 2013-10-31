@@ -39,7 +39,6 @@ typedef struct _PIPE_DATA {
 
 // state of a child process
 typedef struct _CHILD_INFO {
-    //int	client_id;
     BOOLEAN	bChildIsReady;
 
     HANDLE	hProcess;
@@ -54,10 +53,13 @@ typedef struct _CHILD_INFO {
     PIPE_DATA	Stderr;
 
     libvchan_t *vchan; // associated client's vchan for i/o data exchange
+
+    // Usually qrexec-client is the vchan server, but in vm/vm connections
+    // two agents are connected. This field is TRUE if we're the server.
+    BOOL bIsVchanServer;
 } CHILD_INFO;
 
-ULONG AddExistingClient(
-    libvchan_t *vchan,
+ULONG AddExistingChild(
     CHILD_INFO *pChildInfo
 );
 
@@ -69,7 +71,7 @@ ULONG CreateChildPipes(
 );
 
 ULONG CloseReadPipeHandles(
-    libvchan_t *vchan,
+    CHILD_INFO *pChildInfo,
     PIPE_DATA *pPipeData
 );
 
@@ -81,9 +83,17 @@ ULONG send_msg_to_vchan(
     ULONG *puDataWritten
 );
 
-ULONG send_exit_code(
+ULONG send_exit_code_vchan(
     libvchan_t *vchan,
     int status
-);
+    );
 
-ULONG handle_input(struct msg_header *hdr, libvchan_t *vchan);
+ULONG send_exit_code(
+    CHILD_INFO *,
+    int status
+    );
+
+// data handlers for vchan (qrexec-client or another agent in case of vm/vm connection)
+ULONG handle_stdin(struct msg_header *hdr, CHILD_INFO *);
+ULONG handle_stdout(struct msg_header *hdr, CHILD_INFO *);
+ULONG handle_stderr(struct msg_header *hdr, CHILD_INFO *);

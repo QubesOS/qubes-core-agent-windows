@@ -212,23 +212,24 @@ ULONG ClosePipeHandles()
     return ERROR_SUCCESS;
 }
 
-ULONG ConnectExisting(libvchan_t *vchan, HANDLE hClientProcess, CHILD_INFO *pClientInfo, struct trigger_service_params *pparams, CREATE_PROCESS_RESPONSE *pCpr)
+// get process created by client-vm and pass it to be watched by main event loop
+ULONG ConnectExisting(libvchan_t *vchan, HANDLE hClientProcess, CHILD_INFO *pChildInfo, struct trigger_service_params *pparams, CREATE_PROCESS_RESPONSE *pCpr)
 {
     ULONG	uResult;
 
-    if (!pClientInfo || !pparams || !pCpr)
+    if (!pChildInfo || !pparams || !pCpr)
         return ERROR_INVALID_PARAMETER;
 
 #ifdef UNICODE
-    logf("ConnectExisting: vchan 0x%x: Got params \"%S\", domain \"%S\"\n", vchan, pparams->service_name, pparams->target_domain);
+    logf("ConnectExisting: vchan 0x%x: service \"%S\", domain \"%S\"\n", vchan, pparams->service_name, pparams->target_domain);
 #else
-    logf("ConnectExisting: vchan 0x%x: Got params \"%s\", domain \"%s\"\n", vchan, pparams->service_name, pparams->target_domain);
+    logf("ConnectExisting: vchan 0x%x: service \"%s\", domain \"%s\"\n", vchan, pparams->service_name, pparams->target_domain);
 #endif
 
     if (CPR_TYPE_ERROR_CODE == pCpr->bType) {
         errorf("ConnectExisting: vchan 0x%x: Process creation failed, got error code %d\n", vchan, pCpr->ResponseData.dwErrorCode);
 
-        uResult = send_exit_code(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.dwErrorCode));
+        uResult = send_exit_code(pChildInfo, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.dwErrorCode));
         if (ERROR_SUCCESS != uResult)
             perror("ConnectExisting: send_exit_code");
 
@@ -239,7 +240,7 @@ ULONG ConnectExisting(libvchan_t *vchan, HANDLE hClientProcess, CHILD_INFO *pCli
         hClientProcess,
         pCpr->ResponseData.hProcess,
         GetCurrentProcess(),
-        &pClientInfo->hProcess,
+        &pChildInfo->hProcess,
         0,
         TRUE,
         DUPLICATE_SAME_ACCESS))
@@ -249,7 +250,9 @@ ULONG ConnectExisting(libvchan_t *vchan, HANDLE hClientProcess, CHILD_INFO *pCli
         return uResult;
     }
 
-    uResult = AddExistingClient(vchan, pClientInfo);
+    // add child created by client-vm to watched processes
+    pChildInfo->vchan = vchan;
+    uResult = AddExistingChild(pChildInfo);
     if (ERROR_SUCCESS != uResult) {
         perror("ConnectExisting: AddExistingClient");
         // DisconnectAndReconnect will close all the handles later
@@ -257,7 +260,7 @@ ULONG ConnectExisting(libvchan_t *vchan, HANDLE hClientProcess, CHILD_INFO *pCli
     }
 
     // Clear the handles; now the WatchForEvents thread takes care of them.
-    memset(pClientInfo, 0, sizeof(CHILD_INFO));
+    memset(pChildInfo, 0, sizeof(CHILD_INFO));
 
     return ERROR_SUCCESS;
 }
@@ -478,8 +481,8 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
         dwWait = WaitForMultipleObjects(
                 INSTANCES + 1, // number of event objects
                 g_hEvents, // array of event objects
-                FALSE, // does not wait for all
-                INFINITE); // waits indefinitely
+                FALSE, // do not wait for all
+                INFINITE); // wait indefinitely
 
         // dwWait shows which pipe completed the operation.
 
@@ -498,7 +501,8 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
             return dwWait;
         }
 
-        debugf("WatchForTriggerEvents: signaled pipe %d, original state %d\n", i, g_Pipes[i].uState);
+        debugf("WatchForTriggerEvents: signaled pipe %d, original state %d, vchan 0x%x\n", 
+            i, g_Pipes[i].uState, g_Pipes[i].vchan);
 
         // Get the result of the pending operation that has just finished.
         if (g_Pipes[i].fPendingIO) {
@@ -543,6 +547,11 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
                 }
 
                 debugf("STATE_RECEIVING_PARAMETERS (pending): Received parameters, sending them to the daemon\n");
+#ifdef UNICODE
+                logf("Request from client-vm: %S, %S\n", g_Pipes[i].params.service_name, g_Pipes[i].params.target_domain);
+#else
+                logf("Request from client-vm: %s, %s\n", g_Pipes[i].params.service_name, g_Pipes[i].params.target_domain);
+#endif
                 uResult = SendParametersToDaemon(i);
                 if (ERROR_SUCCESS != uResult) {
                     perror("WatchForTriggerEvents: SendParametersToDaemon");

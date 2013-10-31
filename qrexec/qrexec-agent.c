@@ -3,7 +3,7 @@
 
 libvchan_t *g_daemon_vchan;
 
-HANDLE g_hAddExistingClienEvent;
+HANDLE g_hAddExistingChildEvent;
 
 CHILD_INFO g_Children[MAX_CHILDREN];
 HANDLE g_WatchedEvents[MAXIMUM_WAIT_OBJECTS];
@@ -189,17 +189,28 @@ ULONG send_msg_to_vchan(libvchan_t *vchan, int type, void *pData, ULONG uDataSiz
     return uResult;
 }
 
-// send to qrexec-client and close vchan
-ULONG send_exit_code(libvchan_t *vchan, int status)
+ULONG send_exit_code(CHILD_INFO *pChildInfo, int status)
+{
+    // don't send anything if we act as a qrexec-client (data server)
+    if (pChildInfo->bIsVchanServer)
+        return ERROR_SUCCESS;
+
+    return send_exit_code_vchan(pChildInfo->vchan, status);
+}
+
+// send to data peer and close vchan
+// should be used only if the CHILD_INFO struct is not properly initialized
+// (process creation failed etc)
+ULONG send_exit_code_vchan(libvchan_t *vchan, int status)
 {
     ULONG uResult;
 
     uResult = send_msg_to_vchan(vchan, MSG_DATA_EXIT_CODE, &status, sizeof(status), NULL);
     if (ERROR_SUCCESS != uResult) {
-        perror("send_exit_code: send_msg_to_vchan");
+        perror("send_exit_code_vchan: send_msg_to_vchan");
         return uResult;
     } else
-        debugf("send_exit_code: sent %d to 0x%x\n", status, vchan);
+        debugf("send_exit_code_vchan: sent %d to 0x%x\n", status, vchan);
 
     libvchan_close(vchan);
 
@@ -217,23 +228,19 @@ CHILD_INFO *FindChildByVchan(libvchan_t *vchan)
     return NULL;
 }
 
-// send i/o to qrexec-client
-ULONG ReturnPipeData(libvchan_t *vchan, PIPE_DATA *pPipeData)
+// send output to vchan data peer
+ULONG ReturnPipeData(CHILD_INFO *pChildInfo, PIPE_DATA *pPipeData)
 {
     DWORD dwRead;
     int message_type;
-    CHILD_INFO *pChildInfo;
     ULONG uResult;
     ULONG uDataSent;
+    libvchan_t *vchan = pChildInfo->vchan;
 
     uResult = ERROR_SUCCESS;
 
     if (!pPipeData)
         return ERROR_INVALID_PARAMETER;
-
-    pChildInfo = FindChildByVchan(vchan);
-    if (!pChildInfo)
-        return ERROR_FILE_NOT_FOUND;
 
     if (pChildInfo->bReadingIsDisabled)
         // The client does not want to receive any data from this console.
@@ -255,8 +262,24 @@ ULONG ReturnPipeData(libvchan_t *vchan, PIPE_DATA *pPipeData)
 
     dwRead = 0;
     if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE)) {
+        uResult = GetLastError();
         perror("ReturnPipeData: GetOverlappedResult");
-        errorf("ReturnPipeData: GetOverlappedResult, client 0x%x, dwRead %d\n", vchan, dwRead);
+        errorf("ReturnPipeData: GetOverlappedResult, client 0x%x, msg 0x%x, dwRead %d\n", vchan, message_type, dwRead);
+
+        logf("ReturnPipeData: EOF\n");
+        pPipeData->bPipeClosed = TRUE;
+        return ERROR_HANDLE_EOF;
+    }
+
+    // we act as a vchan data server (qrexec-client) and it only sends MSG_DATA_STDIN
+    if (pChildInfo->bIsVchanServer)
+    {
+        if (message_type == MSG_DATA_STDERR)
+        {
+            logf("ReturnPipeData: tried to send MSG_DATA_STDERR (size %d) while being a vchan server\n", dwRead);
+            return ERROR_SUCCESS;
+        }
+        message_type = MSG_DATA_STDIN;
     }
 
     uResult = send_msg_to_vchan(vchan, message_type, pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent);
@@ -269,15 +292,10 @@ ULONG ReturnPipeData(libvchan_t *vchan, PIPE_DATA *pPipeData)
 
     pPipeData->bVchanWritePending = FALSE;
 
-    if (!dwRead) {
-        pPipeData->bPipeClosed = TRUE;
-        uResult = ERROR_HANDLE_EOF;
-    }
-
     return uResult;
 }
 
-ULONG CloseReadPipeHandles(libvchan_t *vchan, PIPE_DATA *pPipeData)
+ULONG CloseReadPipeHandles(CHILD_INFO *pChildInfo, PIPE_DATA *pPipeData)
 {
     ULONG uResult;
 
@@ -288,7 +306,7 @@ ULONG CloseReadPipeHandles(libvchan_t *vchan, PIPE_DATA *pPipeData)
 
     if (pPipeData->olRead.hEvent) {
         if (pPipeData->bDataIsReady)
-            ReturnPipeData(vchan, pPipeData);
+            ReturnPipeData(pChildInfo, pPipeData);
 
         // ReturnPipeData() clears both bDataIsReady and bReadInProgress, but they cannot be ever set to a non-FALSE value at the same time.
         // So, if the above ReturnPipeData() has been executed (bDataIsReady was not FALSE), then bReadInProgress was FALSE
@@ -302,7 +320,7 @@ ULONG CloseReadPipeHandles(libvchan_t *vchan, PIPE_DATA *pPipeData)
                 WaitForSingleObject(pPipeData->olRead.hEvent, INFINITE);
 
                 // See if there is something to return.
-                ReturnPipeData(vchan, pPipeData);
+                ReturnPipeData(pChildInfo, pPipeData);
             } else {
                 uResult = GetLastError();
                 perror("CloseReadPipeHandles: CancelIo");
@@ -562,7 +580,7 @@ ULONG AddFilledChildInfo(ULONG uChildIndex, CHILD_INFO *pChildInfo)
     return ERROR_SUCCESS;
 }
 
-// creates child process that's associated with qrexec-client's vchan for i/o exchange
+// creates child process that's associated with data peer's vchan for i/o exchange
 ULONG CreateChild(libvchan_t *vchan, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL bRunInteractively)
 {
     ULONG uResult;
@@ -652,6 +670,8 @@ ULONG CreateChild(libvchan_t *vchan, PWCHAR pwszUserName, PWCHAR pwszCommandLine
         return uResult;
     }
 
+    // we're the data client
+    ChildInfo.bIsVchanServer = FALSE;
     uResult = AddFilledChildInfo(uChildIndex, &ChildInfo);
     if (ERROR_SUCCESS != uResult) {
         perror("CreateChild: AddFilledChildInfo");
@@ -670,7 +690,8 @@ ULONG CreateChild(libvchan_t *vchan, PWCHAR pwszUserName, PWCHAR pwszCommandLine
     return ERROR_SUCCESS;
 }
 
-ULONG AddExistingClient(libvchan_t *vchan, CHILD_INFO *pChildInfo)
+// add process created by client-vm to watched children
+ULONG AddExistingChild(CHILD_INFO *pChildInfo)
 {
     ULONG uChildIndex;
     ULONG uResult;
@@ -678,24 +699,26 @@ ULONG AddExistingClient(libvchan_t *vchan, CHILD_INFO *pChildInfo)
     if (!pChildInfo)
         return ERROR_INVALID_PARAMETER;
 
-    uResult = ReserveChildIndex(vchan, &uChildIndex);
+    uResult = ReserveChildIndex(pChildInfo->vchan, &uChildIndex);
     if (ERROR_SUCCESS != uResult) {
-        perror("AddExistingClient: ReserveChildIndex");
+        perror("AddExistingChild: ReserveChildIndex");
         return uResult;
     }
 
-    pChildInfo->vchan = vchan;
+    // this is a VM/VM connection and we're the data server
+    // this affects how we handle some parts of the protocol
+    pChildInfo->bIsVchanServer = TRUE;
 
     uResult = AddFilledChildInfo(uChildIndex, pChildInfo);
     if (ERROR_SUCCESS != uResult) {
-        perror("AddExistingClient: AddFilledChildInfo");
+        perror("AddExistingChild: AddFilledChildInfo");
         ReleaseChildIndex(uChildIndex);
         return uResult;
     }
 
-    debugf("AddExistingClient: added 0x%x (local id %d)\n", vchan, uChildIndex);
+    debugf("AddExistingChild: added 0x%x (local id %d)\n", pChildInfo->vchan, uChildIndex);
 
-    SetEvent(g_hAddExistingClienEvent);
+    SetEvent(g_hAddExistingChildEvent);
 
     return ERROR_SUCCESS;
 }
@@ -710,8 +733,8 @@ VOID RemoveChildNoLocks(CHILD_INFO *pChildInfo)
     if (!pChildInfo->bStdinPipeClosed)
         CloseHandle(pChildInfo->hWriteStdinPipe);
 
-    CloseReadPipeHandles(pChildInfo->vchan, &pChildInfo->Stdout);
-    CloseReadPipeHandles(pChildInfo->vchan, &pChildInfo->Stderr);
+    CloseReadPipeHandles(pChildInfo, &pChildInfo->Stdout);
+    CloseReadPipeHandles(pChildInfo, &pChildInfo->Stderr);
 
     debugf("RemoveChildNoLocks: Child 0x%x removed\n", pChildInfo->vchan);
 
@@ -746,8 +769,9 @@ ULONG PossiblyHandleTerminatedChildNoLocks(CHILD_INFO *pChildInfo)
 {
     ULONG uResult;
 
+    debugf("PossiblyHandleTerminatedChildNoLocks: vchan 0x%x\n", pChildInfo->vchan);
     if (pChildInfo->bChildExited && pChildInfo->Stdout.bPipeClosed && pChildInfo->Stderr.bPipeClosed) {
-        uResult = send_exit_code(pChildInfo->vchan, pChildInfo->dwExitCode);
+        uResult = send_exit_code(pChildInfo, pChildInfo->dwExitCode);
         // guaranteed that all data was already sent (above bPipeClosed==TRUE)
         // so no worry about returning some data after exit code
         RemoveChildNoLocks(pChildInfo);
@@ -761,7 +785,7 @@ ULONG PossiblyHandleTerminatedChild(CHILD_INFO *pChildInfo)
     ULONG uResult;
 
     if (pChildInfo->bChildExited && pChildInfo->Stdout.bPipeClosed && pChildInfo->Stderr.bPipeClosed) {
-        uResult = send_exit_code(pChildInfo->vchan, pChildInfo->dwExitCode);
+        uResult = send_exit_code(pChildInfo, pChildInfo->dwExitCode);
         // guaranteed that all data was already sent (above bPipeClosed==TRUE)
         // so no worry about returning some data after exit code
         RemoveChild(pChildInfo);
@@ -932,7 +956,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
 
         *ppwszServiceCommandLine = pwszServiceCommandLine;
         *ppwszSourceDomainName = pwszSourceDomainName;
-        logf("InterceptRPCRequest: RPC %s, domain %s, path: %s\n", 
+        logf("InterceptRPCRequest: RPC %s, domain %s, path: %s\n",
             pwszServiceName, *ppwszSourceDomainName, *ppwszServiceCommandLine);
     }
     return ERROR_SUCCESS;
@@ -958,6 +982,17 @@ struct exec_params *recv_cmdline(int len)
     return exec;
 }
 
+BOOL send_hello_to_vchan(libvchan_t *vchan)
+{
+    struct peer_info info;
+
+    info.version = QREXEC_PROTOCOL_VERSION;
+
+    if (ERROR_SUCCESS != send_msg_to_vchan(vchan, MSG_HELLO, &info, sizeof(info), NULL))
+        return FALSE;
+    return TRUE;
+}
+
 // This will return error only if vchan fails.
 ULONG handle_service_connect(struct msg_header *hdr)
 {
@@ -967,8 +1002,6 @@ ULONG handle_service_connect(struct msg_header *hdr)
 
     debugf("handle_service_connect: msg 0x%x, len %d\n", hdr->type, hdr->len);
 
-    // qrexec-client always listens on a vchan (details in exec_params)
-    vchan = NULL;
     exec = recv_cmdline(hdr->len);
     if (!exec)
     {
@@ -976,24 +1009,32 @@ ULONG handle_service_connect(struct msg_header *hdr)
         return ERROR_INVALID_FUNCTION;
     }
 
-    vchan = libvchan_client_init(exec->connect_domain, exec->connect_port);
-    if (vchan)
+    // this is a vm/vm connection, we act as a qrexec-client (data server)
+    debugf("handle_service_connect: starting vchan server (%d, %d)\n", exec->connect_domain, exec->connect_port);
+    vchan = libvchan_server_init(exec->connect_domain, exec->connect_port, VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
+    if (!vchan)
     {
-        debugf("handle_service_connect: connected to qrexec-client over vchan (%d, %d)\n",
-            exec->connect_domain, exec->connect_port);
-    }
-    else
-    {
-        errorf("handle_service_connect: connect to qrexec-client over vchan (%d, %d) failed\n",
+        errorf("handle_service_connect: libvchan_server_init(%d, %d) failed\n",
             exec->connect_domain, exec->connect_port);
         free(exec);
-        return FALSE;
+        return ERROR_INVALID_FUNCTION;
     }
 
+    debugf("handle_service_connect: server vchan: 0x%x, waiting for target agent (data client)\n", vchan);
+    // FIXME: should we wait here?
+    if (libvchan_wait(vchan) < 0)
+    {
+        errorf("handle_service_connect: libvchan_wait failed\n");
+        return ERROR_INVALID_FUNCTION;
+    }
+    debugf("handle_service_connect: target agent (data client) connected\n");
+    if (!send_hello_to_vchan(vchan))
+        return ERROR_INVALID_FUNCTION;
+
 #ifdef UNICODE
-    debugf("handle_service_connect: client 0x%x, ident %S\n", vchan, exec->cmdline);
+    debugf("handle_service_connect: client 0x%x, ident '%S'\n", vchan, exec->cmdline);
 #else
-    debugf("handle_service_connect: client 0x%x, ident %s\n", vchan, exec->cmdline);
+    debugf("handle_service_connect: client 0x%x, ident '%s'\n", vchan, exec->cmdline);
 #endif
 
     uResult = ProceedWithExecution(vchan, exec->cmdline);
@@ -1024,7 +1065,7 @@ ULONG handle_service_refused(struct msg_header *hdr)
 #endif
 
     uResult = ProceedWithExecution(NULL, params.ident);
-    
+
     if (ERROR_SUCCESS != uResult)
         perror("handle_service_refused: ProceedWithExecution");
 
@@ -1034,7 +1075,7 @@ ULONG handle_service_refused(struct msg_header *hdr)
 // returns vchan for qrexec-client that initiated the request
 // fails only if vchan fails
 // returns TRUE and sets pVchan to NULL if cmdline parsing failed (caller should return with success status)
-BOOL handle_exec_common(int len, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, BOOL *pbRunInteractively, 
+BOOL handle_exec_common(int len, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, BOOL *pbRunInteractively,
                         libvchan_t **pVchan)
 {
     struct exec_params *exec = NULL;
@@ -1044,6 +1085,7 @@ BOOL handle_exec_common(int len, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine
     PWCHAR pwszServiceCommandLine = NULL;
 
     // qrexec-client always listens on a vchan (details in exec_params)
+    // it may be another agent (for vm/vm connection), but then it acts just as a qrexec-client
     *pVchan = NULL;
     exec = recv_cmdline(len);
     if (!exec)
@@ -1058,17 +1100,17 @@ BOOL handle_exec_common(int len, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine
 #else
     debugf("handle_exec_common: cmdline: %s\n", exec->cmdline);
 #endif
-    debugf("handle_exec_common: connecting to qrexec-client (domain %d, port %d)...\n",
+    debugf("handle_exec_common: connecting to vchan server (%d, %d)...\n",
         exec->connect_domain, exec->connect_port);
     *pVchan = libvchan_client_init(exec->connect_domain, exec->connect_port);
     if (*pVchan)
     {
-        debugf("handle_exec_common: connected to qrexec-client over vchan (%d, %d)\n",
-            exec->connect_domain, exec->connect_port);
+        debugf("handle_exec_common: connected to vchan server (%d, %d): 0x%x\n",
+            exec->connect_domain, exec->connect_port, *pVchan);
     }
     else
     {
-        errorf("handle_exec_common: connect to qrexec-client over vchan (%d, %d) failed\n",
+        errorf("handle_exec_common: connect to vchan server (%d, %d) failed\n",
             exec->connect_domain, exec->connect_port);
         free(exec);
         return FALSE;
@@ -1079,7 +1121,7 @@ BOOL handle_exec_common(int len, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine
     if (ERROR_SUCCESS != uResult) {
         errorf("handle_exec_common: ParseUtf8Command failed\n");
         free(exec);
-        send_exit_code(*pVchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+        send_exit_code_vchan(*pVchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
         *pVchan = NULL;
         return TRUE;
     }
@@ -1090,12 +1132,12 @@ BOOL handle_exec_common(int len, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine
     uResult = InterceptRPCRequest(*ppwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
     if (ERROR_SUCCESS != uResult) {
         errorf("handle_exec_common: InterceptRPCRequest failed\n");
-        send_exit_code(*pVchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+        send_exit_code_vchan(*pVchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
         *pVchan = NULL;
         free(pwszCommand);
         return TRUE;
     }
-    
+
     if (pwszRemoteDomainName) {
         SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
         free(pwszRemoteDomainName);
@@ -1139,7 +1181,7 @@ ULONG handle_exec(struct msg_header *hdr)
     if (ERROR_SUCCESS == uResult)
         logf("handle_exec: Executed %s\n", pwszCommandLine);
     else {
-        send_exit_code(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+        send_exit_code_vchan(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
         errorf("handle_exec: CreateChild(%s) failed\n", pwszCommandLine);
     }
 
@@ -1195,7 +1237,7 @@ ULONG handle_just_exec(struct msg_header *hdr)
     }
 
     // send status to qrexec-client (not real *exit* code, but we can at least return that process creation failed)
-    send_exit_code(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+    send_exit_code_vchan(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
 
     free(pwszCommandLine);
     free(pwszUserName);
@@ -1286,16 +1328,40 @@ ULONG handle_daemon_message()
     return ERROR_SUCCESS;
 }
 
-// entry for all qrexec-client messages
-ULONG handle_client_message(libvchan_t *vchan)
+BOOL handle_client_exit_code(CHILD_INFO *pChildInfo)
+{
+    int exit_code;
+
+    if (!recv_from_vchan(pChildInfo->vchan, &exit_code, sizeof(exit_code), "vchan client exit code"))
+        return FALSE;
+
+    logf("handle_client_exit_code(0x%x): %d\n", pChildInfo->vchan, exit_code);
+    RemoveChild(pChildInfo);
+    return TRUE;
+}
+
+// entry for all qrexec-client messages (or peer agent if we're the vchan server)
+ULONG handle_data_message(libvchan_t *vchan)
 {
     struct msg_header hdr;
     ULONG uResult;
+    struct peer_info info;
+    CHILD_INFO *pChildInfo;
 
-    debugf("handle_client_message(0x%x)\n", vchan);
+    pChildInfo = FindChildByVchan(vchan);
+    debugf("handle_client_message(0x%x), bIsVchanServer=%d\n", vchan, pChildInfo->bIsVchanServer);
     if (!recv_from_vchan(vchan, &hdr, sizeof(hdr), "client header")) {
         return ERROR_INVALID_FUNCTION;
     }
+
+    /*
+     * qrexec-client is the vchan server
+     * sends: MSG_HELLO, MSG_DATA_STDIN
+     * expects: MSG_HELLO, MSG_DATA_STDOUT, MSG_DATA_STDERR, MSG_DATA_EXIT_CODE
+     *
+     * if CHILD_INFO.bIsVchanServer is set, we act as a qrexec-client (vchan server)
+     * (vm/vm connection to another agent that is the usual vchan client)
+     */
 
     switch (hdr.type) {
     /*
@@ -1308,22 +1374,76 @@ ULONG handle_client_message(libvchan_t *vchan)
         set_blocked_outerr(s_hdr.client_id, TRUE);
         break;
     */
+    case MSG_HELLO:
+        debugf("handle_client_message: MSG_HELLO\n");
+        if (!recv_from_vchan(vchan, &info, sizeof(info), "peer info"))
+            return ERROR_INVALID_FUNCTION;
+        debugf("handle_client_message: protocol version %d\n", info.version);
+
+        if (info.version != QREXEC_PROTOCOL_VERSION)
+        {
+            errorf("handle_client_message: incompatible protocol version (got %d, expected %d)\n",
+                info.version, QREXEC_PROTOCOL_VERSION);
+            return ERROR_INVALID_FUNCTION;
+        }
+        break;
+
     case MSG_DATA_STDIN:
         debugf("MSG_DATA_STDIN\n");
-
+        if (pChildInfo->bIsVchanServer)
+        {
+            errorf("handle_client_message: got MSG_DATA_STDIN while being a vchan server\n");
+            return ERROR_INVALID_FUNCTION;
+        }
         // This will return error only if vchan fails.
-        uResult = handle_input(&hdr, vchan);
+        uResult = handle_stdin(&hdr, pChildInfo);
         if (ERROR_SUCCESS != uResult) {
-            perror("handle_client_message: handle_input");
+            perror("handle_client_message: handle_stdin");
             return uResult;
         }
         break;
-    /*
-    case MSG_SERVER_TO_AGENT_CLIENT_END:
-        debugf("MSG_SERVER_TO_AGENT_CLIENT_END\n");
-        RemoveChild(FindChildByVchan(vchan));
+
+    case MSG_DATA_STDOUT:
+        debugf("MSG_DATA_STDOUT\n");
+        if (!pChildInfo->bIsVchanServer)
+        {
+            errorf("handle_client_message: got MSG_DATA_STDOUT while being a vchan client\n");
+            return ERROR_INVALID_FUNCTION;
+        }
+        // This will return error only if vchan fails.
+        uResult = handle_stdout(&hdr, pChildInfo);
+        if (ERROR_SUCCESS != uResult) {
+            perror("handle_client_message: handle_stdout");
+            return uResult;
+        }
         break;
-    */
+
+    case MSG_DATA_STDERR:
+        debugf("MSG_DATA_STDERR\n");
+        if (!pChildInfo->bIsVchanServer)
+        {
+            errorf("handle_client_message: got MSG_DATA_STDERR while being a vchan client\n");
+            return ERROR_INVALID_FUNCTION;
+        }
+        // This will return error only if vchan fails.
+        uResult = handle_stderr(&hdr, pChildInfo);
+        if (ERROR_SUCCESS != uResult) {
+            perror("handle_client_message: handle_stderr");
+            return uResult;
+        }
+        break;
+
+    case MSG_DATA_EXIT_CODE:
+        debugf("MSG_DATA_EXIT_CODE\n");
+        if (!pChildInfo->bIsVchanServer)
+        {
+            errorf("handle_client_message: got MSG_DATA_EXIT_CODE while being a vchan client\n");
+            return ERROR_INVALID_FUNCTION;
+        }
+        if (!handle_client_exit_code(pChildInfo))
+            return ERROR_INVALID_FUNCTION;
+        break;
+
     default:
         errorf("handle_client_message: unknown message type: 0x%x\n", hdr.type);
         return ERROR_INVALID_FUNCTION;
@@ -1334,20 +1454,16 @@ ULONG handle_client_message(libvchan_t *vchan)
 
 // read input from vchan (qrexec-client), send to child
 // This will return error only if vchan fails.
-ULONG handle_input(struct msg_header *hdr, libvchan_t *vchan)
+ULONG handle_stdin(struct msg_header *hdr, CHILD_INFO *pChildInfo)
 {
-    char *buf;
-    CHILD_INFO *pChildInfo;
+    void *buf;
     DWORD dwWritten;
 
-    debugf("handle_input(0x%x): msg 0x%x, len %d, vchan data ready %d\n",
-        vchan, hdr->type, hdr->len, libvchan_data_ready(vchan));
-    // If pChildInfo is NULL after this it means we couldn't find a specified client.
-    // Read and discard any data in the channel in this case.
-    pChildInfo = FindChildByVchan(vchan);
+    debugf("handle_stdin(0x%x): msg 0x%x, len %d, vchan data ready %d\n",
+        pChildInfo->vchan, hdr->type, hdr->len, libvchan_data_ready(pChildInfo->vchan));
 
     if (!hdr->len) {
-        debugf("handle_input: EOF from client 0x%x\n", vchan);
+        debugf("handle_stdin: EOF from client 0x%x\n", pChildInfo->vchan);
         if (pChildInfo) {
             CloseHandle(pChildInfo->hWriteStdinPipe);
             pChildInfo->bStdinPipeClosed = TRUE;
@@ -1355,11 +1471,11 @@ ULONG handle_input(struct msg_header *hdr, libvchan_t *vchan)
         return ERROR_SUCCESS;
     }
 
-    buf = (char*) malloc(hdr->len);
+    buf = malloc(hdr->len);
     if (!buf)
         return ERROR_NOT_ENOUGH_MEMORY;
 
-    if (!recv_from_vchan(vchan, buf, hdr->len, "stdin data")) {
+    if (!recv_from_vchan(pChildInfo->vchan, buf, hdr->len, "stdin data")) {
         free(buf);
         return ERROR_INVALID_FUNCTION;
     }
@@ -1367,8 +1483,81 @@ ULONG handle_input(struct msg_header *hdr, libvchan_t *vchan)
     // send to child
     if (pChildInfo && !pChildInfo->bStdinPipeClosed) {
         if (!WriteFile(pChildInfo->hWriteStdinPipe, buf, hdr->len, &dwWritten, NULL))
-            perror("handle_input: WriteFile");
+            perror("handle_stdin: WriteFile");
     }
+
+    free(buf);
+    return ERROR_SUCCESS;
+}
+
+ULONG handle_stdout(struct msg_header *hdr, CHILD_INFO *pChildInfo)
+{
+    void *buf;
+    DWORD dwWritten;
+
+    debugf("handle_stdout(0x%x): msg 0x%x, len %d, vchan data ready %d\n",
+        pChildInfo->vchan, hdr->type, hdr->len, libvchan_data_ready(pChildInfo->vchan));
+
+    // we expect this only if we're a vchan server (vm/vm)
+    if (!hdr->len) {
+        debugf("handle_stdout: EOF from client 0x%x\n", pChildInfo->vchan);
+        if (pChildInfo) {
+            CloseHandle(pChildInfo->hWriteStdinPipe);
+            pChildInfo->bStdinPipeClosed = TRUE;
+        }
+        return ERROR_SUCCESS;
+    }
+
+    buf = malloc(hdr->len);
+    if (!buf)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    if (!recv_from_vchan(pChildInfo->vchan, buf, hdr->len, "stdout data")) {
+        free(buf);
+        return ERROR_INVALID_FUNCTION;
+    }
+
+    // send to child
+    // this is a vm/vm connection and we're the server so the roles are reversed from the usual
+    if (pChildInfo && !pChildInfo->bStdinPipeClosed) {
+        if (!WriteFile(pChildInfo->hWriteStdinPipe, buf, hdr->len, &dwWritten, NULL))
+            perror("handle_stdout: WriteFile");
+    }
+
+    free(buf);
+    return ERROR_SUCCESS;
+}
+
+ULONG handle_stderr(struct msg_header *hdr, CHILD_INFO *pChildInfo)
+{
+    void *buf;
+
+    debugf("handle_stderr(0x%x): msg 0x%x, len %d, vchan data ready %d\n",
+        pChildInfo->vchan, hdr->type, hdr->len, libvchan_data_ready(pChildInfo->vchan));
+
+    // we expect this only if we're a vchan server (vm/vm)
+    if (!hdr->len) {
+        debugf("handle_stderr: EOF from client 0x%x\n", pChildInfo->vchan);
+        if (pChildInfo) {
+            CloseHandle(pChildInfo->hWriteStdinPipe);
+            pChildInfo->bStdinPipeClosed = TRUE;
+        }
+        return ERROR_SUCCESS;
+    }
+
+    buf = malloc(hdr->len);
+    if (!buf)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    if (!recv_from_vchan(pChildInfo->vchan, buf, hdr->len, "stderr data")) {
+        free(buf);
+        return ERROR_INVALID_FUNCTION;
+    }
+
+    // write to log file
+    logf("STDERR from client 0x%x (size %d):", pChildInfo->vchan, hdr->len);
+    // FIXME: is this unicode or ascii or what?
+    logf("%s", buf);
 
     free(buf);
     return ERROR_SUCCESS;
@@ -1436,10 +1625,7 @@ ULONG WatchForEvents()
     ULONG	uResult;
     BOOL	bVchanReturnedError;
     BOOL	bDaemonConnected;
-    libvchan_t *client_vchan;
-    struct peer_info info;
-
-    info.version = QREXEC_PROTOCOL_VERSION;
+    libvchan_t *data_vchan;
 
     g_daemon_vchan = vchan_server_init(VCHAN_BASE_PORT);
     if (!g_daemon_vchan) {
@@ -1458,7 +1644,7 @@ ULONG WatchForEvents()
         debugf("WatchForEvents: loop start\n");
         // Order matters.
         g_WatchedEvents[uEventCount++] = g_hStopServiceEvent;
-        g_WatchedEvents[uEventCount++] = g_hAddExistingClienEvent;
+        g_WatchedEvents[uEventCount++] = g_hAddExistingChildEvent;
 
         g_HandlesInfo[0].bType = g_HandlesInfo[1].bType = HTYPE_INVALID;
 
@@ -1470,7 +1656,7 @@ ULONG WatchForEvents()
         }
 
         g_HandlesInfo[uEventCount].uChildIndex = -1;
-        g_HandlesInfo[uEventCount].bType = HTYPE_DAEMON_VCHAN;
+        g_HandlesInfo[uEventCount].bType = HTYPE_CONTROL_VCHAN;
         g_WatchedEvents[uEventCount++] = vchan_event;
 
         EnterCriticalSection(&g_ChildrenCriticalSection);
@@ -1485,10 +1671,10 @@ ULONG WatchForEvents()
                     g_WatchedEvents[uEventCount++] = g_Children[uChildIndex].hProcess;
                 }
 
-                // event for associated qrexec-client vchan
+                // event for associated data vchan peer
                 if (g_Children[uChildIndex].vchan)
                 {
-                    g_HandlesInfo[uEventCount].bType = HTYPE_CLIENT_VCHAN;
+                    g_HandlesInfo[uEventCount].bType = HTYPE_DATA_VCHAN;
                     g_HandlesInfo[uEventCount].uChildIndex = uChildIndex;
                     g_WatchedEvents[uEventCount++] = libvchan_fd_for_select(g_Children[uChildIndex].vchan);
                 }
@@ -1577,14 +1763,14 @@ ULONG WatchForEvents()
                 g_HandlesInfo[dwSignaledEvent].uChildIndex, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent);
 
             switch (g_HandlesInfo[dwSignaledEvent].bType) {
-                case HTYPE_DAEMON_VCHAN:
+                case HTYPE_CONTROL_VCHAN:
 
                     EnterCriticalSection(&g_DaemonCriticalSection);
                     if (!bDaemonConnected) {
                         libvchan_wait(g_daemon_vchan); // ACK
                         logf("WatchForEvents: qrexec-daemon has connected (event %d)\n", dwSignaledEvent);
 
-                        if (ERROR_SUCCESS != send_msg_to_vchan(g_daemon_vchan, MSG_HELLO, &info, sizeof(info), NULL))
+                        if (!send_hello_to_vchan(g_daemon_vchan))
                         {
                             errorf("WatchForEvents: failed to send hello to daemon\n");
                             bVchanReturnedError = TRUE;
@@ -1605,7 +1791,7 @@ ULONG WatchForEvents()
                     // libvchan_wait can block if there is no data available
                     if (libvchan_data_ready(g_daemon_vchan) > 0)
                     {
-                        debugf("HTYPE_DAEMON_VCHAN event: libvchan_wait...");
+                        debugf("HTYPE_CONTROL_VCHAN event: libvchan_wait...");
                         libvchan_wait(g_daemon_vchan);
                         debugf("done\n");
 
@@ -1622,7 +1808,7 @@ ULONG WatchForEvents()
                     }
                     else
                     {
-                        debugf("HTYPE_DAEMON_VCHAN event: no data\n");
+                        debugf("HTYPE_CONTROL_VCHAN event: no data\n");
                         LeaveCriticalSection(&g_DaemonCriticalSection);
                         break;
                     }
@@ -1630,45 +1816,46 @@ ULONG WatchForEvents()
                     LeaveCriticalSection(&g_DaemonCriticalSection);
                     break;
 
-                case HTYPE_CLIENT_VCHAN:
+                case HTYPE_DATA_VCHAN:
                     // FIXME: critical section for client vchans?
-                    client_vchan = g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].vchan;
+                    data_vchan = g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].vchan;
 
-                    if (!libvchan_is_open(client_vchan)) {
+                    if (!libvchan_is_open(data_vchan)) {
                         bVchanReturnedError = TRUE;
                         break;
                     }
 
                     // libvchan_wait can block if there is no data available
-                    if (libvchan_data_ready(client_vchan) > 0)
+                    if (libvchan_data_ready(data_vchan) > 0)
                     {
-                        debugf("HTYPE_CLIENT_VCHAN event: libvchan_wait...");
-                        libvchan_wait(client_vchan);
+                        debugf("HTYPE_DATA_VCHAN event: libvchan_wait...");
+                        libvchan_wait(data_vchan);
                         debugf("done\n");
                         // handle data from qrexec-client
-                        while (libvchan_data_ready(client_vchan) > 0) {
-                            uResult = handle_client_message(client_vchan);
+                        while (libvchan_data_ready(data_vchan) > 0) {
+                            uResult = handle_data_message(data_vchan);
                             if (ERROR_SUCCESS != uResult) {
                                 bVchanReturnedError = TRUE;
-                                perror("WatchForEvents: handle_input");
+                                perror("WatchForEvents: handle_data_message");
                                 break;
                             }
                         }
                     }
                     else
                     {
-                        debugf("HTYPE_CLIENT_VCHAN event: no data\n");
+                        debugf("HTYPE_DATA_VCHAN event: no data\n");
                     }
 
-                    // if there is pending output from children, pass it to qrexec-client vchan
+                    // if there is pending output from children, pass it to data vchan
                     EnterCriticalSection(&g_ChildrenCriticalSection);
 
                     for (uChildIndex = 0; uChildIndex < MAX_CHILDREN; uChildIndex++) {
-                        if (g_Children[uChildIndex].bChildIsReady && !g_Children[uChildIndex].bReadingIsDisabled) {
-                            if (g_Children[uChildIndex].Stdout.bVchanWritePending) {
-                                uResult = ReturnPipeData(g_Children[uChildIndex].vchan, &g_Children[uChildIndex].Stdout);
+                        pChildInfo = &g_Children[uChildIndex];
+                        if (pChildInfo->bChildIsReady && !pChildInfo->bReadingIsDisabled) {
+                            if (pChildInfo->Stdout.bVchanWritePending) {
+                                uResult = ReturnPipeData(pChildInfo, &pChildInfo->Stdout);
                                 if (ERROR_HANDLE_EOF == uResult) {
-                                    PossiblyHandleTerminatedChildNoLocks(&g_Children[uChildIndex]);
+                                    PossiblyHandleTerminatedChildNoLocks(pChildInfo);
                                 } else if (ERROR_INSUFFICIENT_BUFFER == uResult) {
                                     // no more space in vchan
                                     break;
@@ -1677,10 +1864,10 @@ ULONG WatchForEvents()
                                     perror("WatchForEvents: ReturnPipeData(STDOUT)");
                                 }
                             }
-                            if (g_Children[uChildIndex].Stderr.bVchanWritePending) {
-                                uResult = ReturnPipeData(g_Children[uChildIndex].vchan, &g_Children[uChildIndex].Stderr);
+                            if (pChildInfo->Stderr.bVchanWritePending) {
+                                uResult = ReturnPipeData(pChildInfo, &pChildInfo->Stderr);
                                 if (ERROR_HANDLE_EOF == uResult) {
-                                    PossiblyHandleTerminatedChildNoLocks(&g_Children[uChildIndex]);
+                                    PossiblyHandleTerminatedChildNoLocks(pChildInfo);
                                 } else if (ERROR_INSUFFICIENT_BUFFER == uResult) {
                                     // no more space in vchan
                                     break;
@@ -1697,20 +1884,19 @@ ULONG WatchForEvents()
                     break;
 
                 case HTYPE_STDOUT:
+                    pChildInfo = &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex];
                     // output from child
 #ifdef DISPLAY_CONSOLE_OUTPUT
 #ifdef UNICODE
-                    _tprintf("%S", &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].Stdout.ReadBuffer);
+                    _tprintf("%S", pChildInfo->Stdout.ReadBuffer);
 #else
-                    _tprintf("%s", &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].Stdout.ReadBuffer);
+                    _tprintf("%s", pChildInfo->Stdout.ReadBuffer);
 #endif
 #endif
                     // pass to vchan
-                    uResult = ReturnPipeData(
-                            g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].vchan,
-                            &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].Stdout);
+                    uResult = ReturnPipeData(pChildInfo, &pChildInfo->Stdout);
                     if (ERROR_HANDLE_EOF == uResult) {
-                        PossiblyHandleTerminatedChild(&g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex]);
+                        PossiblyHandleTerminatedChild(pChildInfo);
                     } else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
                         bVchanReturnedError = TRUE;
                         perror("WatchForEvents: ReturnPipeData(STDOUT)");
@@ -1718,20 +1904,19 @@ ULONG WatchForEvents()
                     break;
 
                 case HTYPE_STDERR:
+                    pChildInfo = &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex];
                     // stderr from child
 #ifdef DISPLAY_CONSOLE_OUTPUT
 #ifdef UNICODE
-                    _ftprintf(stderr, "%S", &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].Stderr.ReadBuffer);
+                    _ftprintf(stderr, "%S", pChildInfo->Stderr.ReadBuffer);
 #else
-                    _ftprintf(stderr, "%s", &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].Stderr.ReadBuffer);
+                    _ftprintf(stderr, "%s", pChildInfo->Stderr.ReadBuffer);
 #endif
 #endif
                     // pass to vchan
-                    uResult = ReturnPipeData(
-                            g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].vchan,
-                            &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].Stderr);
+                    uResult = ReturnPipeData(pChildInfo, &pChildInfo->Stderr);
                     if (ERROR_HANDLE_EOF == uResult) {
-                        PossiblyHandleTerminatedChild(&g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex]);
+                        PossiblyHandleTerminatedChild(pChildInfo);
                     } else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
                         bVchanReturnedError = TRUE;
                         perror("WatchForEvents: ReturnPipeData(STDERR)");
@@ -1753,7 +1938,7 @@ ULONG WatchForEvents()
                     uResult = PossiblyHandleTerminatedChild(pChildInfo);
                     if (ERROR_SUCCESS != uResult) {
                         bVchanReturnedError = TRUE;
-                        perror("WatchForEvents: send_exit_code");
+                        perror("WatchForEvents: PossiblyHandleTerminatedChild");
                     }
 
                     break;
@@ -1808,8 +1993,8 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
     logf("ServiceExecutionThread: Service started\n");
 
     // Auto reset, initial state is not signaled
-    g_hAddExistingClienEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!g_hAddExistingClienEvent) {
+    g_hAddExistingChildEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!g_hAddExistingChildEvent) {
         uResult = GetLastError();
         perror("ServiceExecutionThread: CreateEvent");
         return uResult;
@@ -1819,7 +2004,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
     if (!hTriggerEventsThread) {
         uResult = GetLastError();
         perror("ServiceExecutionThread: CreateThread");
-        CloseHandle(g_hAddExistingClienEvent);
+        CloseHandle(g_hAddExistingChildEvent);
         return uResult;
     }
 
@@ -1837,7 +2022,7 @@ ULONG WINAPI ServiceExecutionThread(PVOID pParam)
     debugf("ServiceExecutionThread: Waiting for the trigger thread to exit\n");
     WaitForSingleObject(hTriggerEventsThread, INFINITE);
     CloseHandle(hTriggerEventsThread);
-    CloseHandle(g_hAddExistingClienEvent);
+    CloseHandle(g_hAddExistingChildEvent);
 
     DeleteCriticalSection(&g_ChildrenCriticalSection);
     DeleteCriticalSection(&g_DaemonCriticalSection);

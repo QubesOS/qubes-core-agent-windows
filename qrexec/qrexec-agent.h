@@ -10,7 +10,6 @@
 #include "common.h"
 #include "qrexec.h"
 #include "vchan-common.h"
-#include "glue.h"
 //#include "service.h"
 #include "getopt.h"
 #include "errors.h"
@@ -22,8 +21,8 @@ typedef enum {
     HTYPE_PROCESS,
     HTYPE_STDOUT,
     HTYPE_STDERR,
-    HTYPE_DAEMON_VCHAN,
-    HTYPE_CLIENT_VCHAN
+    HTYPE_CONTROL_VCHAN,
+    HTYPE_DATA_VCHAN
 } HANDLE_TYPE;
 
 typedef struct _HANDLE_INFO {
