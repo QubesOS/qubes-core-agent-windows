@@ -2,9 +2,44 @@
 #include <shlwapi.h>
 #include <tchar.h>
 #include <xenstore.h>
+#include <Wtsapi32.h>
 #include "log.h"
 
 #define XS_TOOLS_PREFIX "qubes-tools/"
+
+BOOL get_current_user(PCHAR *ppUserName) {
+	PWTS_SESSION_INFOA   pSessionInfo;
+	DWORD               dSessionCount;
+	DWORD i;
+	DWORD				cbUserName;
+	BOOL				bFound;
+
+	if (FAILED(WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dSessionCount))) {
+		fprintf(stderr, "Failed to enumerate sessions: 0x%x\n", GetLastError());
+		return FALSE;
+	}
+	bFound = FALSE;
+	for (i = 0; i < dSessionCount; i++) {
+		if (pSessionInfo[i].State == WTSActive) {
+			if (FAILED(WTSQuerySessionInformationA(WTS_CURRENT_SERVER_HANDLE,
+							pSessionInfo[i].SessionId, WTSUserName,
+							ppUserName,
+							&cbUserName))) {
+				fprintf(stderr, "WTSQuerySessionInformation failed: 0x%x\n", GetLastError());
+				goto cleanup;
+			}
+#ifdef DBG
+			fprintf(stderr, "Found session: %s\n", *ppszUserName);
+#endif
+			bFound = TRUE;
+		}
+	}
+
+cleanup:
+	WTSFreeMemory(pSessionInfo);
+	return bFound;
+}
+
 
 /* just a helper function, the buffer needs to be at least MAX_PATH+1 length */
 BOOL prepare_exe_path(PTCHAR buffer, PTCHAR exe_name) {
@@ -79,6 +114,7 @@ LONG advertise_tools() {
 	struct xs_handle *xs;
 	LONG ret = ERROR_INVALID_FUNCTION;
 	BOOL gui_present;
+	PCHAR	pszUserName;
 
 	xs = xs_domain_open();
 	if (!xs) {
@@ -105,6 +141,15 @@ LONG advertise_tools() {
 	if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "gui", gui_present ? "1" : "0", 1)) {
 		lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'gui' entry");
 		goto cleanup;
+	}
+
+	if (get_current_user(&pszUserName)) {
+		if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "default-user", pszUserName, strlen(pszUserName))) {
+			lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'default-user' entry");
+			WTSFreeMemory(pszUserName);
+			goto cleanup;
+		}
+		WTSFreeMemory(pszUserName);
 	}
 
 	if (!notify_dom0()) {
