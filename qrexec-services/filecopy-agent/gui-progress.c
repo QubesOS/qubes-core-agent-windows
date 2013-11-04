@@ -18,7 +18,6 @@ TaskDialogIndirectProc *TaskDialogIndirectDynamic = NULL;
 void ResolveTaskDialogProc()
 {
     HMODULE comctl32 = LoadLibrary(TEXT("comctl32.dll"));
-    // todo: proper error handling
     if (!comctl32)
     {
         perror("ResolveTaskDialogProc: LoadLibrary(comctl32)");
@@ -28,7 +27,7 @@ void ResolveTaskDialogProc()
     {
         perror("ResolveTaskDialogProc: GetProcAddress(TaskDialogIndirect)");
     }
-    debugf("ResolveTaskDialogProc: TaskDialogIndirect=0x%x\n", TaskDialogIndirectDynamic);
+    debugf("ResolveTaskDialogProc: TaskDialogIndirect=0x%p\n", TaskDialogIndirectDynamic);
 }
 // end workaround
 
@@ -48,6 +47,7 @@ HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
         case TDN_BUTTON_CLICKED:
             if (wParam == IDCANCEL) {
                 cancel_operation = TRUE;
+                debugf("TaskDialogCallbackProc: cancel pressed\n");
                 return S_FALSE;
             }
             // IDOK -> close dialog

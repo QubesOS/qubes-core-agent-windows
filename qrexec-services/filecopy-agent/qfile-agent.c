@@ -37,7 +37,8 @@ int write_all_with_crc(HANDLE hOutput, void *pBuf, int sSize)
     return write_all(hOutput, pBuf, sSize);
 }
 
-void notify_progress(int size, int flag)
+// return 0 on success, 1 if operation should be aborted
+int notify_progress(int size, int flag)
 {
     static long long total_written = 0;
     static long long prev_total = 0;
@@ -47,6 +48,9 @@ void notify_progress(int size, int flag)
         do_notify_progress(total_written, flag);
         prev_total = total_written;
     }
+    if (cancel_operation)
+        return 1;
+    return 0;
 }
 
 void wait_for_result()
@@ -196,13 +200,13 @@ INT64 getFileSizeByPath(PTCHAR pszFilename)
     return dwFileSize.QuadPart;
 }
 
-INT64 do_fs_walk(PTCHAR pszPath, BOOL bCalcSize)
+INT64 do_fs_walk(TCHAR *pszPath, BOOL bCalcSize)
 {
-    PTCHAR pszCurrentPath;
+    TCHAR *pszCurrentPath;
     size_t cchCurrentPath, cchSearchPath;
     DWORD dwAttrs;
     WIN32_FIND_DATA ent;
-    PTCHAR pszSearchPath;
+    TCHAR *pszSearchPath;
     HANDLE hSearch;
     INT64 size = 0;
 
