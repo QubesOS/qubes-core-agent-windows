@@ -132,7 +132,7 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, PIPE_TYPE bPipeTyp
     return ERROR_SUCCESS;
 }
 
-ULONG send_msg_to_vchan(libvchan_t *vchan, int type, void *pData, ULONG uDataSize, ULONG *puDataWritten)
+ULONG send_msg_to_vchan(libvchan_t *vchan, int type, void *pData, ULONG uDataSize, ULONG *puDataWritten, TCHAR *what)
 {
     int vchan_space_avail;
     ULONG uResult = ERROR_SUCCESS;
@@ -144,7 +144,7 @@ ULONG send_msg_to_vchan(libvchan_t *vchan, int type, void *pData, ULONG uDataSiz
         // allow partial write only when puDataWritten given
         *puDataWritten = 0;
         vchan_space_avail = libvchan_buffer_space(vchan);
-        debugf("send_msg_to_vchan: libvchan_buffer_space=%d\n", vchan_space_avail);
+        debugf("send_msg_to_vchan(%s, size %d): libvchan_buffer_space=%d\n", what, uDataSize, vchan_space_avail);
 
         if (vchan_space_avail < sizeof(hdr)) {
             LeaveCriticalSection(&g_DaemonCriticalSection);
@@ -180,7 +180,7 @@ ULONG send_msg_to_vchan(libvchan_t *vchan, int type, void *pData, ULONG uDataSiz
         return ERROR_SUCCESS;
     }
 
-    if (!send_to_vchan(vchan, pData, uDataSize, "data")) {
+    if (!_send_to_vchan(vchan, pData, uDataSize, what)) {
         LeaveCriticalSection(&g_DaemonCriticalSection);
         return ERROR_INVALID_FUNCTION;
     }
@@ -205,14 +205,12 @@ ULONG send_exit_code_vchan(libvchan_t *vchan, int status)
 {
     ULONG uResult;
 
-    uResult = send_msg_to_vchan(vchan, MSG_DATA_EXIT_CODE, &status, sizeof(status), NULL);
+    uResult = send_msg_to_vchan(vchan, MSG_DATA_EXIT_CODE, &status, sizeof(status), NULL, TEXT("exit code"));
     if (ERROR_SUCCESS != uResult) {
         perror("send_exit_code_vchan: send_msg_to_vchan");
         return uResult;
     } else
         debugf("send_exit_code_vchan: sent %d to 0x%x\n", status, vchan);
-
-    libvchan_close(vchan);
 
     return ERROR_SUCCESS;
 }
@@ -245,6 +243,12 @@ ULONG ReturnPipeData(CHILD_INFO *pChildInfo, PIPE_DATA *pPipeData)
     if (pChildInfo->bReadingIsDisabled)
         // The client does not want to receive any data from this console.
         return ERROR_INVALID_FUNCTION;
+
+    if (pChildInfo->bStdinPipeClosed /*&& !pChildInfo->bIsVchanServer*/)
+    {
+        logf("ReturnPipeData: trying to send after peer sent EOF, probably broken vchan connection\n");
+        return ERROR_SUCCESS;
+    }
 
     pPipeData->bReadInProgress = FALSE;
     pPipeData->bDataIsReady = FALSE;
@@ -282,7 +286,9 @@ ULONG ReturnPipeData(CHILD_INFO *pChildInfo, PIPE_DATA *pPipeData)
         message_type = MSG_DATA_STDIN;
     }
 
-    uResult = send_msg_to_vchan(vchan, message_type, pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent);
+    uResult = send_msg_to_vchan(vchan, message_type, 
+        pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent,
+        TEXT("output data"));
     if (ERROR_INSUFFICIENT_BUFFER == uResult) {
         pPipeData->dwSentBytes += uDataSent;
         pPipeData->bVchanWritePending = TRUE;
@@ -303,6 +309,8 @@ ULONG CloseReadPipeHandles(CHILD_INFO *pChildInfo, PIPE_DATA *pPipeData)
         return ERROR_INVALID_PARAMETER;
 
     uResult = ERROR_SUCCESS;
+
+    debugf("CloseReadPipeHandles(0x%x)\n", pChildInfo->vchan);
 
     if (pPipeData->olRead.hEvent) {
         if (pPipeData->bDataIsReady)
@@ -725,20 +733,37 @@ ULONG AddExistingChild(CHILD_INFO *pChildInfo)
 
 VOID RemoveChildNoLocks(CHILD_INFO *pChildInfo)
 {
+    struct msg_header hdr;
+
     if (!pChildInfo || (NULL == pChildInfo->vchan))
         return;
 
     CloseHandle(pChildInfo->hProcess);
 
     if (!pChildInfo->bStdinPipeClosed)
+    {
         CloseHandle(pChildInfo->hWriteStdinPipe);
+        pChildInfo->bStdinPipeClosed = TRUE;
+    }
 
     CloseReadPipeHandles(pChildInfo, &pChildInfo->Stdout);
     CloseReadPipeHandles(pChildInfo, &pChildInfo->Stderr);
 
     debugf("RemoveChildNoLocks: Child 0x%x removed\n", pChildInfo->vchan);
+    
+    // if we're data server, send EOF if we can
+    if (pChildInfo->bIsVchanServer && pChildInfo->vchan)
+    {
+        hdr.type = MSG_DATA_STDIN;
+        hdr.len = 0;
+        send_to_vchan(pChildInfo->vchan, &hdr, sizeof(hdr), "EOF");
+    }
 
-    pChildInfo->vchan = NULL;
+    if (pChildInfo->vchan)
+    {
+        libvchan_close(pChildInfo->vchan);
+        pChildInfo->vchan = NULL;
+    }
     pChildInfo->bChildIsReady = FALSE;
 }
 
@@ -947,7 +972,7 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
         free(pwszRawServiceFilePath);
         pwszServiceCommandLine = (WCHAR*) malloc((wcslen(wszServiceFilePath) + 1) * sizeof(WCHAR));
         if (pwszServiceCommandLine == NULL) {
-            perror("InterceptRPCRequest(): malloc()");
+            perror("InterceptRPCRequest: malloc");
             if (pwszSourceDomainName)
                 free(pwszSourceDomainName);
             return ERROR_NOT_ENOUGH_MEMORY;
@@ -988,7 +1013,7 @@ BOOL send_hello_to_vchan(libvchan_t *vchan)
 
     info.version = QREXEC_PROTOCOL_VERSION;
 
-    if (ERROR_SUCCESS != send_msg_to_vchan(vchan, MSG_HELLO, &info, sizeof(info), NULL))
+    if (ERROR_SUCCESS != send_msg_to_vchan(vchan, MSG_HELLO, &info, sizeof(info), NULL, TEXT("hello")))
         return FALSE;
     return TRUE;
 }
@@ -1336,6 +1361,11 @@ BOOL handle_client_exit_code(CHILD_INFO *pChildInfo)
         return FALSE;
 
     logf("handle_client_exit_code(0x%x): %d\n", pChildInfo->vchan, exit_code);
+
+    // peer is closing vchan on their side so we shouldn't attempt to use it
+    libvchan_close(pChildInfo->vchan);
+    pChildInfo->vchan = NULL;
+
     RemoveChild(pChildInfo);
     return TRUE;
 }
@@ -1452,7 +1482,7 @@ ULONG handle_data_message(libvchan_t *vchan)
     return ERROR_SUCCESS;
 }
 
-// read input from vchan (qrexec-client), send to child
+// read input from vchan (data server), send to child
 // This will return error only if vchan fails.
 ULONG handle_stdin(struct msg_header *hdr, CHILD_INFO *pChildInfo)
 {
@@ -1463,10 +1493,11 @@ ULONG handle_stdin(struct msg_header *hdr, CHILD_INFO *pChildInfo)
         pChildInfo->vchan, hdr->type, hdr->len, libvchan_data_ready(pChildInfo->vchan));
 
     if (!hdr->len) {
-        debugf("handle_stdin: EOF from client 0x%x\n", pChildInfo->vchan);
+        debugf("handle_stdin: EOF from vchan 0x%x\n", pChildInfo->vchan);
         if (pChildInfo) {
             CloseHandle(pChildInfo->hWriteStdinPipe);
             pChildInfo->bStdinPipeClosed = TRUE;
+            RemoveChild(pChildInfo);
         }
         return ERROR_SUCCESS;
     }
@@ -1500,10 +1531,11 @@ ULONG handle_stdout(struct msg_header *hdr, CHILD_INFO *pChildInfo)
 
     // we expect this only if we're a vchan server (vm/vm)
     if (!hdr->len) {
-        debugf("handle_stdout: EOF from client 0x%x\n", pChildInfo->vchan);
+        debugf("handle_stdout: EOF from vchan 0x%x\n", pChildInfo->vchan);
         if (pChildInfo) {
             CloseHandle(pChildInfo->hWriteStdinPipe);
             pChildInfo->bStdinPipeClosed = TRUE;
+            RemoveChild(pChildInfo);
         }
         return ERROR_SUCCESS;
     }
@@ -1537,10 +1569,11 @@ ULONG handle_stderr(struct msg_header *hdr, CHILD_INFO *pChildInfo)
 
     // we expect this only if we're a vchan server (vm/vm)
     if (!hdr->len) {
-        debugf("handle_stderr: EOF from client 0x%x\n", pChildInfo->vchan);
+        debugf("handle_stderr: EOF from vchan 0x%x\n", pChildInfo->vchan);
         if (pChildInfo) {
             CloseHandle(pChildInfo->hWriteStdinPipe);
             pChildInfo->bStdinPipeClosed = TRUE;
+            RemoveChild(pChildInfo);
         }
         return ERROR_SUCCESS;
     }
@@ -1672,7 +1705,7 @@ ULONG WatchForEvents()
                 }
 
                 // event for associated data vchan peer
-                if (g_Children[uChildIndex].vchan)
+                if (g_Children[uChildIndex].vchan && !g_Children[uChildIndex].bStdinPipeClosed)
                 {
                     g_HandlesInfo[uEventCount].bType = HTYPE_DATA_VCHAN;
                     g_HandlesInfo[uEventCount].uChildIndex = uChildIndex;
@@ -1695,15 +1728,24 @@ ULONG WatchForEvents()
         //debugf("signaled\n");
 
         if (dwSignaledEvent > MAXIMUM_WAIT_OBJECTS) {
+            uResult = GetLastError();
             perror("WatchForEvents: WaitForMultipleObjects");
             logf("WatchForEvents: dwSignaledEvent (%d) >= MAXIMUM_WAIT_OBJECTS\n", dwSignaledEvent);
 
-            uResult = GetLastError();
             if (ERROR_INVALID_HANDLE != uResult) {
-                perror("WatchForEvents: WaitForMultipleObjects");
                 break;
             }
 
+            for (uChildIndex=0; uChildIndex<RTL_NUMBER_OF(g_HandlesInfo); uChildIndex++)
+            {
+                debugf("Event %02d: 0x%x, type %d, child idx %d\n", uChildIndex,
+                    g_WatchedEvents[uChildIndex], g_HandlesInfo[uChildIndex].bType, g_HandlesInfo[uChildIndex].uChildIndex);
+            }
+            for (uChildIndex=0; uChildIndex<RTL_NUMBER_OF(g_Children); uChildIndex++)
+            {
+                debugf("Child %d: 0x%x, stdin closed=%d\n", uChildIndex,
+                    g_Children[uChildIndex].vchan, g_Children[uChildIndex].bStdinPipeClosed);
+            }
             // WaitForMultipleObjects() may fail with ERROR_INVALID_HANDLE if the process which just has been added
             // to the client list terminated before WaitForMultipleObjects(). In this case IO pipe handles are closed
             // and invalidated, while a process handle is in the signaled state.
@@ -1860,7 +1902,7 @@ ULONG WatchForEvents()
                                     // no more space in vchan
                                     break;
                                 } else if (ERROR_SUCCESS != uResult) {
-                                    bVchanReturnedError = TRUE;
+                                    //bVchanReturnedError = TRUE; // not a critical error
                                     perror("WatchForEvents: ReturnPipeData(STDOUT)");
                                 }
                             }
@@ -1872,7 +1914,7 @@ ULONG WatchForEvents()
                                     // no more space in vchan
                                     break;
                                 } else if (ERROR_SUCCESS != uResult) {
-                                    bVchanReturnedError = TRUE;
+                                    //bVchanReturnedError = TRUE; // not a critical error
                                     perror("WatchForEvents: ReturnPipeData(STDERR)");
                                 }
                             }
@@ -1898,7 +1940,7 @@ ULONG WatchForEvents()
                     if (ERROR_HANDLE_EOF == uResult) {
                         PossiblyHandleTerminatedChild(pChildInfo);
                     } else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
-                        bVchanReturnedError = TRUE;
+                        //bVchanReturnedError = TRUE; // not a critical error
                         perror("WatchForEvents: ReturnPipeData(STDOUT)");
                     }
                     break;
@@ -1918,7 +1960,7 @@ ULONG WatchForEvents()
                     if (ERROR_HANDLE_EOF == uResult) {
                         PossiblyHandleTerminatedChild(pChildInfo);
                     } else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult) {
-                        bVchanReturnedError = TRUE;
+                        //bVchanReturnedError = TRUE; // not a critical error
                         perror("WatchForEvents: ReturnPipeData(STDERR)");
                     }
                     break;
@@ -1934,7 +1976,7 @@ ULONG WatchForEvents()
 
                     pChildInfo->bChildExited = TRUE;
                     pChildInfo->dwExitCode = dwExitCode;
-                    // send exit code only when all data was sent to the daemon
+                    // send exit code only when all data was sent to the data peer
                     uResult = PossiblyHandleTerminatedChild(pChildInfo);
                     if (ERROR_SUCCESS != uResult) {
                         bVchanReturnedError = TRUE;

@@ -80,7 +80,8 @@ ULONG send_msg_to_vchan(
     int type,
     void *pData,
     ULONG uDataSize,
-    ULONG *puDataWritten
+    ULONG *puDataWritten,
+    TCHAR *what
 );
 
 ULONG send_exit_code_vchan(

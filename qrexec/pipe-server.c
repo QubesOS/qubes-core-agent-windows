@@ -154,7 +154,10 @@ ULONG DisconnectAndReconnect(ULONG i)
     g_Pipes[i].CreateProcessResponse.bType = CPR_TYPE_NONE;
 
     if (g_Pipes[i].ChildInfo.hWriteStdinPipe)
+    {
         CloseHandle(g_Pipes[i].ChildInfo.hWriteStdinPipe);
+        g_Pipes[i].ChildInfo.bStdinPipeClosed = TRUE;
+    }
 
     // There is no IO going in these pipes, so we can safely pass any
     // vchan to CloseReadPipeHandles - it will not be used anywhere.
@@ -301,7 +304,7 @@ ULONG SendParametersToDaemon(ULONG i)
 
     debugf("SendParametersToDaemon(%d): %S\n", i, params.request_id.ident);
 
-    uResult = send_msg_to_vchan(g_daemon_vchan, MSG_TRIGGER_SERVICE, &params, sizeof(params), NULL);
+    uResult = send_msg_to_vchan(g_daemon_vchan, MSG_TRIGGER_SERVICE, &params, sizeof(params), NULL, TEXT("trigger_service_params"));
     if (ERROR_SUCCESS != uResult) {
         perror("SendParametersToDaemon: send_msg_to_vchan");
         return uResult;
