@@ -55,7 +55,6 @@ HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
 	return S_OK;
 }
 
-
 DWORD doTaskDialogThread(LPVOID lpThreadParameter)
 {
 	int nButtonPressed                  = 0;
@@ -92,7 +91,6 @@ void switch_progressbar_to_red(int red) {
 	else
 		do_notify_progress(0, PROGRESS_FLAG_NORMAL);
 }
-
 
 void createProgressWindow()
 {

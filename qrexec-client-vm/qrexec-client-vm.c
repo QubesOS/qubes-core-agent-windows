@@ -53,7 +53,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 #define MAX_PIPENAME_LEN (RTL_NUMBER_OF(TRIGGER_PIPE_NAME) + UNLEN)
     TCHAR	lpszPipename[MAX_PIPENAME_LEN];
     DWORD	user_name_len = UNLEN + 1;
-    TCHAR	user_name[user_name_len];
+    TCHAR	user_name[UNLEN + 1];
 #else
     LPTSTR	lpszPipename = TRIGGER_PIPE_NAME;
 #endif

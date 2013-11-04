@@ -1,11 +1,14 @@
 // copied from commctrl.h - definitions absent in most recent mingw
 #pragma once
+
 // Task Dialog is only available starting Windows Vista
 #if (NTDDI_VERSION >= NTDDI_VISTA)
 
 #ifdef _WIN32
 #include <pshpack1.h>
 #endif
+
+#ifdef __GNUC__
 
 typedef HRESULT (CALLBACK *PFTASKDIALOGCALLBACK)(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData);
 
@@ -135,6 +138,8 @@ typedef struct _TASKDIALOGCONFIG
     LONG_PTR    lpCallbackData;
     UINT        cxWidth;                                // width of the Task Dialog's client area in DLU's. If 0, Task Dialog will calculate the ideal width.
 } TASKDIALOGCONFIG;
+
+#endif // __GNUC__
 
 typedef HRESULT WINAPI TaskDialogIndirectProc(const TASKDIALOGCONFIG *pTaskConfig, int *pnButton, int *pnRadioButton, BOOL *pfVerificationFlagChecked);
 
