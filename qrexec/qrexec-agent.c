@@ -286,7 +286,7 @@ ULONG ReturnPipeData(CHILD_INFO *pChildInfo, PIPE_DATA *pPipeData)
         message_type = MSG_DATA_STDIN;
     }
 
-    uResult = send_msg_to_vchan(vchan, message_type, 
+    uResult = send_msg_to_vchan(vchan, message_type,
         pPipeData->ReadBuffer+pPipeData->dwSentBytes, dwRead-pPipeData->dwSentBytes, &uDataSent,
         TEXT("output data"));
     if (ERROR_INSUFFICIENT_BUFFER == uResult) {
@@ -713,10 +713,6 @@ ULONG AddExistingChild(CHILD_INFO *pChildInfo)
         return uResult;
     }
 
-    // this is a VM/VM connection and we're the data server
-    // this affects how we handle some parts of the protocol
-    pChildInfo->bIsVchanServer = TRUE;
-
     uResult = AddFilledChildInfo(uChildIndex, pChildInfo);
     if (ERROR_SUCCESS != uResult) {
         perror("AddExistingChild: AddFilledChildInfo");
@@ -750,7 +746,7 @@ VOID RemoveChildNoLocks(CHILD_INFO *pChildInfo)
     CloseReadPipeHandles(pChildInfo, &pChildInfo->Stderr);
 
     debugf("RemoveChildNoLocks: Child 0x%x removed\n", pChildInfo->vchan);
-    
+
     // if we're data server, send EOF if we can
     if (pChildInfo->bIsVchanServer && pChildInfo->vchan)
     {
@@ -1024,6 +1020,7 @@ ULONG handle_service_connect(struct msg_header *hdr)
     ULONG uResult;
     struct exec_params *exec = NULL;
     libvchan_t *vchan = NULL;
+    BOOL bIsVchanServer = FALSE;
 
     debugf("handle_service_connect: msg 0x%x, len %d\n", hdr->type, hdr->len);
 
@@ -1034,35 +1031,56 @@ ULONG handle_service_connect(struct msg_header *hdr)
         return ERROR_INVALID_FUNCTION;
     }
 
-    // this is a vm/vm connection, we act as a qrexec-client (data server)
-    debugf("handle_service_connect: starting vchan server (%d, %d)\n", exec->connect_domain, exec->connect_port);
-    vchan = libvchan_server_init(exec->connect_domain, exec->connect_port, VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
-    if (!vchan)
+    // this is a service connection
+    if (exec->connect_domain == 0) // target is dom0
     {
-        errorf("handle_service_connect: libvchan_server_init(%d, %d) failed\n",
+        // in this case dom0 side (qrexec-client) is the vchan server as usual
+        debugf("handle_service_connect: vm->dom0 service, connecting to vchan (%d, %d)\n",
             exec->connect_domain, exec->connect_port);
-        free(exec);
-        return ERROR_INVALID_FUNCTION;
-    }
 
-    debugf("handle_service_connect: server vchan: 0x%x, waiting for target agent (data client)\n", vchan);
-    // FIXME: should we wait here?
-    if (libvchan_wait(vchan) < 0)
-    {
-        errorf("handle_service_connect: libvchan_wait failed\n");
-        return ERROR_INVALID_FUNCTION;
+        vchan = libvchan_client_init(exec->connect_domain, exec->connect_port);
+        if (!vchan)
+        {
+            errorf("handle_service_connect: libvchan_client_init(%d, %d) failed\n",
+                exec->connect_domain, exec->connect_port);
+            free(exec);
+            return ERROR_INVALID_FUNCTION;
+        }
+        debugf("handle_service_connect: connected to vchan server\n");
     }
-    debugf("handle_service_connect: target agent (data client) connected\n");
-    if (!send_hello_to_vchan(vchan))
-        return ERROR_INVALID_FUNCTION;
+    else
+    {
+        bIsVchanServer = TRUE;
+        // vm-vm connection, we act as a qrexec-client (data server)
+        debugf("handle_service_connect: vm-vm service, starting vchan server (%d, %d)\n",
+            exec->connect_domain, exec->connect_port);
+        vchan = libvchan_server_init(exec->connect_domain, exec->connect_port, VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
+        if (!vchan)
+        {
+            errorf("handle_service_connect: libvchan_server_init(%d, %d) failed\n",
+                exec->connect_domain, exec->connect_port);
+            free(exec);
+            return ERROR_INVALID_FUNCTION;
+        }
+
+        debugf("handle_service_connect: server vchan: 0x%x, waiting for target agent (data client)\n", vchan);
+        if (libvchan_wait(vchan) < 0)
+        {
+            errorf("handle_service_connect: libvchan_wait failed\n");
+            return ERROR_INVALID_FUNCTION;
+        }
+        debugf("handle_service_connect: target agent (data client) connected\n");
+        if (!send_hello_to_vchan(vchan))
+            return ERROR_INVALID_FUNCTION;
+    }
 
 #ifdef UNICODE
-    debugf("handle_service_connect: client 0x%x, ident '%S'\n", vchan, exec->cmdline);
+    debugf("handle_service_connect: vchan 0x%x, request id '%S'\n", vchan, exec->cmdline);
 #else
-    debugf("handle_service_connect: client 0x%x, ident '%s'\n", vchan, exec->cmdline);
+    debugf("handle_service_connect: vchan 0x%x, request id '%s'\n", vchan, exec->cmdline);
 #endif
 
-    uResult = ProceedWithExecution(vchan, exec->cmdline);
+    uResult = ProceedWithExecution(vchan, exec->cmdline, bIsVchanServer);
     free(exec);
 
     if (ERROR_SUCCESS != uResult)
@@ -1089,7 +1107,7 @@ ULONG handle_service_refused(struct msg_header *hdr)
     debugf("handle_service_refused: ident %s\n", params.ident);
 #endif
 
-    uResult = ProceedWithExecution(NULL, params.ident);
+    uResult = ProceedWithExecution(NULL, params.ident, FALSE);
 
     if (ERROR_SUCCESS != uResult)
         perror("handle_service_refused: ProceedWithExecution");

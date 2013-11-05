@@ -42,7 +42,8 @@ ULONG WINAPI WatchForTriggerEvents(
 
 ULONG ProceedWithExecution(
     libvchan_t *vchan,
-    char *pszIdent
+    char *pszIdent,
+    BOOL bIsVchanServer
 );
 
 extern CRITICAL_SECTION	g_PipesCriticalSection;

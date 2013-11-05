@@ -255,6 +255,7 @@ ULONG ConnectExisting(libvchan_t *vchan, HANDLE hClientProcess, CHILD_INFO *pChi
 
     // add child created by client-vm to watched processes
     pChildInfo->vchan = vchan;
+
     uResult = AddExistingChild(pChildInfo);
     if (ERROR_SUCCESS != uResult) {
         perror("ConnectExisting: AddExistingClient");
@@ -331,7 +332,8 @@ ULONG FindPipeByIdent(char *pszIdent, ULONG *puPipeNumber)
 }
 
 // if vchan is NULL, service request was denied by daemon/qrexec-policy
-ULONG ProceedWithExecution(libvchan_t *vchan, char *pszIdent)
+// bIsVchanServer states whether we should be the vchan server or client
+ULONG ProceedWithExecution(libvchan_t *vchan, char *pszIdent, BOOL bIsVchanServer)
 {
     ULONG uPipeNumber;
     ULONG uResult;
@@ -356,7 +358,11 @@ ULONG ProceedWithExecution(libvchan_t *vchan, char *pszIdent)
     }
 
     g_Pipes[uPipeNumber].vchan = vchan;
-    
+
+    // we're the server in vm/vm connections, client otherwise
+    // this affects how we handle some parts of the protocol
+    g_Pipes[uPipeNumber].ChildInfo.bIsVchanServer = bIsVchanServer;
+
     // Signal that we can proceed (WatchForTriggerEvents will check status)
     SetEvent(g_hEvents[uPipeNumber]);
 
@@ -504,7 +510,7 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
             return dwWait;
         }
 
-        debugf("WatchForTriggerEvents: signaled pipe %d, original state %d, vchan 0x%x\n", 
+        debugf("WatchForTriggerEvents: signaled pipe %d, original state %d, vchan 0x%x\n",
             i, g_Pipes[i].uState, g_Pipes[i].vchan);
 
         // Get the result of the pending operation that has just finished.
