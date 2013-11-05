@@ -65,7 +65,7 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 	LocalFree(pMessage);
 }
 
-void gui_fatal(const PTCHAR fmt, ...)
+void gui_fatal(TCHAR *fmt, ...)
 {
 	va_list args;
 	show_error_cb(1);
@@ -75,7 +75,7 @@ void gui_fatal(const PTCHAR fmt, ...)
 	exit(1);
 }
 
-void gui_nonfatal(const PTCHAR fmt, ...)
+void gui_nonfatal(TCHAR *fmt, ...)
 {
 	va_list args;
 	show_error_cb(1);
