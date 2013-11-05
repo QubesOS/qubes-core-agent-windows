@@ -1360,13 +1360,15 @@ BOOL handle_client_exit_code(CHILD_INFO *pChildInfo)
     if (!recv_from_vchan(pChildInfo->vchan, &exit_code, sizeof(exit_code), "vchan client exit code"))
         return FALSE;
 
-    logf("handle_client_exit_code(0x%x): %d\n", pChildInfo->vchan, exit_code);
-
+    EnterCriticalSection(&g_ChildrenCriticalSection);
+    logf("handle_client_exit_code(0x%x): %d, pChildInfo 0x%p\n", pChildInfo->vchan, exit_code, pChildInfo);
     // peer is closing vchan on their side so we shouldn't attempt to use it
+    debugf("handle_client_exit_code: closing vchan 0x%x\n", pChildInfo->vchan);
     libvchan_close(pChildInfo->vchan);
     pChildInfo->vchan = NULL;
+    RemoveChildNoLocks(pChildInfo);
+    LeaveCriticalSection(&g_ChildrenCriticalSection);
 
-    RemoveChild(pChildInfo);
     return TRUE;
 }
 
@@ -1859,11 +1861,21 @@ ULONG WatchForEvents()
                     break;
 
                 case HTYPE_DATA_VCHAN:
-                    // FIXME: critical section for client vchans?
-                    data_vchan = g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex].vchan;
+                    EnterCriticalSection(&g_ChildrenCriticalSection);
+                    pChildInfo = &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex];
+                    data_vchan = pChildInfo->vchan;
 
-                    if (!libvchan_is_open(data_vchan)) {
-                        bVchanReturnedError = TRUE;
+                    if (!data_vchan)
+                    {
+                        logf("WatchForEvents: HTYPE_DATA_VCHAN: vchan is NULL\n", data_vchan);
+                        LeaveCriticalSection(&g_ChildrenCriticalSection);
+                        break;
+                    }
+
+                    if (!libvchan_is_open(data_vchan) || pChildInfo->bStdinPipeClosed)
+                    {
+                        logf("WatchForEvents: HTYPE_DATA_VCHAN: vchan 0x%x is closed\n", data_vchan);
+                        LeaveCriticalSection(&g_ChildrenCriticalSection);
                         break;
                     }
 
@@ -1879,6 +1891,7 @@ ULONG WatchForEvents()
                             if (ERROR_SUCCESS != uResult) {
                                 bVchanReturnedError = TRUE;
                                 perror("WatchForEvents: handle_data_message");
+                                LeaveCriticalSection(&g_ChildrenCriticalSection);
                                 break;
                             }
                         }
@@ -1889,7 +1902,6 @@ ULONG WatchForEvents()
                     }
 
                     // if there is pending output from children, pass it to data vchan
-                    EnterCriticalSection(&g_ChildrenCriticalSection);
 
                     for (uChildIndex = 0; uChildIndex < MAX_CHILDREN; uChildIndex++) {
                         pChildInfo = &g_Children[uChildIndex];
