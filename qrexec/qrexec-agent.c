@@ -1863,6 +1863,8 @@ ULONG WatchForEvents()
                 case HTYPE_DATA_VCHAN:
                     EnterCriticalSection(&g_ChildrenCriticalSection);
                     pChildInfo = &g_Children[g_HandlesInfo[dwSignaledEvent].uChildIndex];
+                    //debugf("HTYPE_DATA_VCHAN event: pChildInfo = 0x%x, vchan = 0x%x\n", pChildInfo, pChildInfo->vchan);
+                    //log_flush();
                     data_vchan = pChildInfo->vchan;
 
                     if (!data_vchan)
@@ -1885,8 +1887,10 @@ ULONG WatchForEvents()
                         debugf("HTYPE_DATA_VCHAN event: libvchan_wait...");
                         libvchan_wait(data_vchan);
                         debugf("done\n");
-                        // handle data from qrexec-client
-                        while (libvchan_data_ready(data_vchan) > 0) {
+                        // handle data from vchan peer
+
+                        // don't handle more than one message at once because vchan may be invalidated in the meantime
+                        //while (libvchan_data_ready(data_vchan) > 0) {
                             uResult = handle_data_message(data_vchan);
                             if (ERROR_SUCCESS != uResult) {
                                 bVchanReturnedError = TRUE;
@@ -1894,7 +1898,7 @@ ULONG WatchForEvents()
                                 LeaveCriticalSection(&g_ChildrenCriticalSection);
                                 break;
                             }
-                        }
+                        //}
                     }
                     else
                     {
