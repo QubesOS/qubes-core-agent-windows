@@ -26,15 +26,21 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
 	memset(&ipInterfaceRow, 0, sizeof(ipInterfaceRow));
 
 	ulOutBufLen = 0;
-	if ((dwRetVal=GetAdaptersInfo( NULL, &ulOutBufLen)) != ERROR_BUFFER_OVERFLOW) {
-		    fprintf(stderr, "GetAdaptersInfo call failed with %d\n", dwRetVal);
-			goto cleanup;
+	/* wait for adapters to initialize */
+	while ((dwRetVal=GetAdaptersInfo( NULL, &ulOutBufLen)) == ERROR_NO_DATA) {
+		fprintf(stderr, "GetAdaptersInfo call failed with %d, retrying\n", dwRetVal);
+		Sleep(200);
+	}
+
+	if (dwRetVal != ERROR_BUFFER_OVERFLOW) {
+		fprintf(stderr, "GetAdaptersInfo call failed with %d\n", dwRetVal);
+		goto cleanup;
 	}
 	pAdapterInfo = (IP_ADAPTER_INFO *)malloc (ulOutBufLen);
 
 	if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) != ERROR_SUCCESS) {
-		    printf("GetAdaptersInfo call failed with %d\n", dwRetVal);
-			goto cleanup;
+		printf("GetAdaptersInfo call(2) failed with %d\n", dwRetVal);
+		goto cleanup;
 	}
 
 	/* set IP address */
