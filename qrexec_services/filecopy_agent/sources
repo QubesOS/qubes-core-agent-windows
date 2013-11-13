@@ -13,8 +13,7 @@ INCLUDES=$(INCLUDES); \
                     ..\filecopy_common; \
                     ..\..\include;
     
-#SOURCES=qfile-agent.c gui-progress.c qfile-agent.rc
-SOURCES=qfile-agent.c gui-progress.c
+SOURCES=qfile-agent.c gui-progress.c qfile-agent.rc
 
 SXS_APPLICATION_MANIFEST=qfile_agent.exe.manifest
 
