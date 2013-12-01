@@ -60,7 +60,7 @@ TCHAR *get_filename()
 	size_t basename_len, retname_len, tmpname_len;
 	int i;
 
-	if (!read_all(hStdIn, buf, sizeof(buf))) {
+	if (!read_all(hStdIn, buf, DVM_FILENAME_SIZE)) {
 		fprintf(stderr, "Failed get filename: 0x%x\n", GetLastError());
 		exit(1);
 	}
