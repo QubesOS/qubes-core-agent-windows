@@ -18,7 +18,7 @@ HANDLE STDIN = INVALID_HANDLE_VALUE;
 HANDLE STDOUT = INVALID_HANDLE_VALUE;
 HANDLE STDERR = INVALID_HANDLE_VALUE;
 
-#define INCOMING_DIR_ROOT L"incoming"
+#define INCOMING_DIR_ROOT L"QubesIncoming"
 
 #ifdef DBG
 #define internal_fatal gui_fatal
@@ -189,7 +189,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	hResult = StringCchPrintf(
 			wszIncomingDir, 
 			RTL_NUMBER_OF(wszIncomingDir), 
-			L"%s\\%s\\from-%s", 
+			L"%s\\%s\\%s", 
 			pwszDocuments, 
 			INCOMING_DIR_ROOT, 
 			wszRemoteDomainName);
