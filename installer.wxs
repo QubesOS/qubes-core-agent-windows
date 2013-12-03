@@ -55,7 +55,7 @@
               </Component>
               <Component Id='AskVMClientWrapper' Guid='b5700d68-2ceb-4764-9e4b-11ae33b2d05b'>
                 <File Id='ask_vm_and_run.exe' Name='ask-vm-and-run.exe' DiskId='1' Source='ask-vm-and-run\bin\$(var.ARCHDIR)\ask-vm-and-run.exe' KeyPath="no">
-                  <Shortcut Id='qfile_sendto_shortcut' Name='Other VM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\qfile-agent.exe"' Advertise="no"/>
+                  <Shortcut Id='qfile_sendto_shortcut' Name='Copy to other AppVM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\qfile-agent.exe"' Advertise="no"/>
                   <Shortcut Id='qopen_sendto_shortcut' Name='Edit in VM' Directory='SendToFolder' Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
                 </File>
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
