@@ -80,7 +80,7 @@ BOOL notify_dom0() {
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
 
-	if (!prepare_exe_path(szQrxecClientVmPath, TEXT("qrexec_client_vm.exe")))
+	if (!prepare_exe_path(szQrxecClientVmPath, TEXT("qrexec-client-vm.exe")))
 		return FALSE;
 
 	memset(&si, 0, sizeof(si));
@@ -90,7 +90,7 @@ BOOL notify_dom0() {
 
 	if (!CreateProcess(
 			szQrxecClientVmPath,
-			TEXT("qrexec_client_vm.exe dom0 qubes.NotifyTools dummy"),
+			TEXT("qrexec-client-vm.exe dom0 qubes.NotifyTools dummy"),
 			NULL,
 			NULL,
 			FALSE,
@@ -99,7 +99,7 @@ BOOL notify_dom0() {
 			NULL,
 			&si,
 			&pi)) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): Failed to start qrexec_client_vm.exe");
+		lprintf_err(GetLastError(), __FUNCTION__ "(): Failed to start qrexec-client-vm.exe");
 		return FALSE;
 	}
 
