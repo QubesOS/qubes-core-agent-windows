@@ -197,7 +197,7 @@ cleanup:
 	return ret;
 }
 
-int main(int argc, char **argv) {
+int __cdecl main(int argc, char **argv) {
 	if (argc >= 2 && 0==strcmp(argv[1], "-service")) {
 		return service_main();
 	} else {
