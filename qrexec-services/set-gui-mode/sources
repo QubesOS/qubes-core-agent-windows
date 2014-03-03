@@ -1,0 +1,21 @@
+TARGETNAME=set-gui-mode
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+UMTYPE=windows
+USE_MSVCRT=1
+
+UMENTRY = wwinmain
+C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+
+INCLUDES=$(INCLUDES); \
+                    $(SDK_INC_PATH)\..\ddk; \
+                    ..\include; \
+                    ..\..\include; \
+
+SOURCES=set-gui-mode.c
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\kernel32.lib \
+        $(SDK_LIB_PATH)\user32.lib \
+        ..\..\libs\*\qubes-utils.lib \
