@@ -99,7 +99,7 @@ void do_notify_progress(long long written, int flag)
 			if (hDialog)
 				SendNotifyMessage(hDialog, TDM_CLICK_BUTTON, IDOK, 0);
 			if (hProgressWindowThread) {
-				WaitForSingleObject(hProgressWindowThread, INFINITE);
+				WaitForSingleObject(hProgressWindowThread, 1000);
 				CloseHandle(hProgressWindowThread);
 			}
 			break;
