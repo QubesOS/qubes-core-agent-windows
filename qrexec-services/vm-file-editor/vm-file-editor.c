@@ -14,78 +14,79 @@
 HANDLE hStdIn = INVALID_HANDLE_VALUE;
 HANDLE hStdOut = INVALID_HANDLE_VALUE;
 
-int get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
+BOOL get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
 {
-    int		size, size_all;
-    TCHAR	*pTmpBuf;
-    TCHAR	*pDstBuf;
+    BOOL retval = FALSE;
+    int size = 0, size_all = 0;
+    TCHAR *pTmpBuf = NULL;
+    TCHAR *pDstBuf = NULL;
     UUID uuid;
     TCHAR subdir[64] = {0};
 
     if (UuidCreate(&uuid) != RPC_S_OK)
-        return 0;
+        goto cleanup;
     // there is no UuidToString version that operates on TCHARs
     if (FAILED(StringCchPrintf(subdir, RTL_NUMBER_OF(subdir), TEXT("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\\"),
         uuid.Data1, uuid.Data2, uuid.Data3,
         uuid.Data4[0], uuid.Data4[1],
-        uuid.Data4[2], uuid.Data4[3], uuid.Data4[4], uuid.Data4[5], uuid.Data4[6], uuid.Data4[7])))
-        return 0;
+        uuid.Data4[2], uuid.Data4[3], uuid.Data4[4], uuid.Data4[5], uuid.Data4[6], uuid.Data4[7]))) {
+
+        goto cleanup;
+    }
 
     size = GetTempPath(0, NULL);
     if (!size)
-        return 0;
+        goto cleanup;
 
     size_all = size + _tcslen(subdir);
     pTmpBuf = (TCHAR*) malloc(size_all * sizeof(TCHAR));
     if (!pTmpBuf)
-        return 0;
+        goto cleanup;
 
     size = GetTempPath(size, pTmpBuf);
-    if (!size) {
-        free(pTmpBuf);
-        return 0;
-    }
+    if (!size)
+        goto cleanup;
 
-    if (FAILED(StringCchCat(pTmpBuf, size_all, subdir))) {
-        free(pTmpBuf);
-        return 0;
-    }
+    if (FAILED(StringCchCat(pTmpBuf, size_all, subdir)))
+        goto cleanup;
 
     if (!CreateDirectory(pTmpBuf, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
         fprintf(stderr, "Failed to create tmp subdir: 0x%x\n", GetLastError());
-        free(pTmpBuf);
-        return 0;
+        goto cleanup;
     }
 
     // todo? check if directory already exists
     // This is extremely unlikely, GUIDs v4 are totally PRNG-based.
+    retval = TRUE;
 
+cleanup:
+    if (!retval)
+        free(pTmpBuf);
     *pBuf = pTmpBuf;
     *pcchBuf = size_all;
-    return size_all * sizeof(TCHAR);
+    return retval;
 }
 
-TCHAR *get_filename()
+TCHAR *get_filename(PTCHAR *tmpname)
 {
     char buf[DVM_FILENAME_SIZE+1];
     PTCHAR basename;
     PTCHAR retname;
-    PTCHAR tmpname;
     size_t basename_len, retname_len, tmpname_len;
     int i;
 
     if (!read_all(hStdIn, buf, DVM_FILENAME_SIZE)) {
         fprintf(stderr, "Failed get filename: 0x%x\n", GetLastError());
-        exit(1);
+        return NULL;
     }
     buf[DVM_FILENAME_SIZE] = 0;
     if (strchr(buf, '/')) {
         fprintf(stderr, "filename contains /");
-        exit(1);
+        return NULL;
     }
     if (strchr(buf, '\\')) {
         fprintf(stderr, "filename contains \\");
-        exit(1);
+        return NULL;
     }
     for (i=0; i < DVM_FILENAME_SIZE && buf[i]!=0; i++) {
         // replace some characters with _ (eg mimeopen have problems with some of them)
@@ -94,47 +95,52 @@ TCHAR *get_filename()
     }
     if (FAILED(ConvertUTF8ToUTF16(buf, &basename, &basename_len))) {
         fprintf(stderr, "Invalid filename\n");
-        exit(1);
+        return NULL;
     }
-    if (!get_tempdir(&tmpname, &tmpname_len)) {
+    if (!get_tempdir(tmpname, &tmpname_len)) {
         free(basename);
         fprintf(stderr, "Failed to get tmpdir\n");
-        exit(1);
+        return NULL;
     }
     retname_len = tmpname_len + basename_len + 1;
     retname = malloc(sizeof(TCHAR) * retname_len);
-    // TODO: better tmp filename set up - at least unique...
-    StringCchPrintf(retname, retname_len, TEXT("%s%s"), tmpname, basename);
-    free(tmpname);
+
+    StringCchPrintf(retname, retname_len, TEXT("%s%s"), *tmpname, basename);
     free(basename);
     return retname;
 }
 
-void copy_file(PTCHAR filename)
+BOOL copy_file(PTCHAR filename)
 {
+    BOOL retval = FALSE;
     HANDLE fd = CreateFile(filename, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 
- 
     if (fd == INVALID_HANDLE_VALUE) {
         if (GetLastError() == ERROR_FILE_EXISTS)
             fprintf(stderr, "File already exists, cleanup temp directory\n");
         else
             fprintf(stderr, "Failed to create file %s: 0x%x\n", filename, GetLastError());
-        exit(1);
+        goto cleanup;
     }
     if (!copy_fd_all(fd, hStdIn)) {
-        fprintf(stderr, "Failed read/write file: 0x%x\n", GetLastError());
-        exit(1);
+        fprintf(stderr, "Failed to read/write file: 0x%x\n", GetLastError());
+        goto cleanup;
     }
+
+    retval = TRUE;
+
+cleanup:
     CloseHandle(fd);
+    return retval;
 }
 
-void send_file_back(PTCHAR filename)
+BOOL send_file_back(PTCHAR filename)
 {
+    BOOL retval = FALSE;
     HANDLE fd = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (fd == INVALID_HANDLE_VALUE) {
         fprintf(stderr, "Failed to open file %s: 0x%x\n", filename, GetLastError());
-        exit(1);
+        goto cleanup;
     }
     if (hStdOut == INVALID_HANDLE_VALUE) {
         fprintf(stderr, "Failed to open STDOUT: 0x%x\n", GetLastError());
@@ -146,9 +152,12 @@ void send_file_back(PTCHAR filename)
         goto cleanup;
     }
 
+    retval = TRUE;
+
 cleanup:
     CloseHandle(fd);
     CloseHandle(hStdOut);
+    return retval;
 }
 
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
@@ -157,23 +166,34 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     PTCHAR	filename;
     HANDLE	child;
     TCHAR	cmdline[32768];
-    int		dwExitCode;
+    int		exitCode = 1, childExitCode;
     SHELLEXECUTEINFO sei;
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
+    PTCHAR tempDir = NULL;
 
     hStdIn = GetStdHandle(STD_INPUT_HANDLE);
-    hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hStdIn == INVALID_HANDLE_VALUE || hStdOut == INVALID_HANDLE_VALUE) {
-        fprintf(stderr, "Failed to open STDIN/STDOUT: 0x%x\n", GetLastError());
-        exit(1);
+    if (hStdIn == INVALID_HANDLE_VALUE) {
+        exitCode = GetLastError();
+        fprintf(stderr, "Failed to open STDIN: 0x%x\n", exitCode);
+        goto cleanup;
     }
 
-    filename = get_filename();
-    copy_file(filename);
+    hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdOut == INVALID_HANDLE_VALUE) {
+        exitCode = GetLastError();
+        fprintf(stderr, "Failed to open STDOUT: 0x%x\n", exitCode);
+        goto cleanup;
+    }
+
+    filename = get_filename(&tempDir);
+    if (!copy_file(filename))
+        goto cleanup;
+
     if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &stat_pre)) {
-        fprintf(stderr, "ERROR stat pre: 0x%x\n", GetLastError());
-        exit(1);
+        exitCode = GetLastError();
+        fprintf(stderr, "ERROR stat pre: 0x%x\n", exitCode);
+        goto cleanup;
     }
 
     sei.cbSize = sizeof(sei);
@@ -190,39 +210,49 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     sei.hProcess = NULL;
 
     if (FAILED(ShellExecuteEx(&sei))) {
-        fprintf(stderr, "Editor startup failed: 0x%x\n", GetLastError());
-        exit(1);
+        exitCode = GetLastError();
+        fprintf(stderr, "Editor startup failed: 0x%x\n", exitCode);
+        goto cleanup;
     }
 
     if (sei.hProcess == NULL) {
         fprintf(stderr, "Don't know how to wait for editor finish, exiting\n");
-        exit(0);
+        exitCode = ERROR_SUCCESS;
+        goto cleanup;
     }
 
     // Wait until child process exits.
     WaitForSingleObject(sei.hProcess, INFINITE );
 
-    if (!GetExitCodeProcess(sei.hProcess, &dwExitCode)) {
-        fprintf(stderr, "Cannot get editor exit code: 0x%x\n", GetLastError());
-        exit(1);
+    if (!GetExitCodeProcess(sei.hProcess, &childExitCode)) {
+        exitCode = GetLastError();
+        fprintf(stderr, "Cannot get editor exit code: 0x%x\n", exitCode);
+        goto cleanup;
     }
 
-    // Close process handle. 
+    // Close child process handle.
     CloseHandle(sei.hProcess);
 
-    if (dwExitCode != 0) {
-        fprintf(stderr, "Editor failed: %d\n", dwExitCode);
-        exit(1);
+    if (childExitCode != 0) {
+        fprintf(stderr, "Editor failed: %d\n", childExitCode);
+        exitCode = childExitCode;
+        goto cleanup;
     }
 
     if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &stat_post)) {
-        fprintf(stderr, "ERROR stat post: 0x%x\n", GetLastError());
-        exit(1);
+        exitCode = GetLastError();
+        fprintf(stderr, "ERROR stat post: 0x%x\n", exitCode);
+        goto cleanup;
     }
 
     if (stat_pre.ftLastWriteTime.dwLowDateTime != stat_post.ftLastWriteTime.dwLowDateTime ||
         stat_pre.ftLastWriteTime.dwHighDateTime != stat_post.ftLastWriteTime.dwHighDateTime)
         send_file_back(filename);
+
+    exitCode = ERROR_SUCCESS;
+
+cleanup:
     DeleteFile(filename);
-    return 0;
+    RemoveDirectory(tempDir);
+    return exitCode;
 }
