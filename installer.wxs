@@ -48,7 +48,7 @@
               </Component>
               <Component Id='QrexecClientVM' Guid='1e74cee2-523b-4870-8e24-49d4945c4a5c'>
                 <File Id='qrexec_client_vm.exe' Name='qrexec-client-vm.exe' DiskId='1' Source='qrexec-client-vm\bin\$(var.ARCHDIR)\qrexec-client-vm.exe' KeyPath="no">
-                  <Shortcut Id='qopen_dvm_sendto_shortcut' Name='Edit in DispVM' Directory='SendToFolder' Arguments='$dispvm qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
+                  <Shortcut Id='qopen_dvm_sendto_shortcut' Name='Edit in DispVM' Directory='SendToFolder' Arguments='$dispvm qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no" Show="minimized"/>
                 </File>
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
                 <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-client-vm" Type="integer" Value="1" KeyPath="yes"/>
