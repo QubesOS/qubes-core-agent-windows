@@ -5,50 +5,64 @@
 #include <stdlib.h>
 #include <Strsafe.h>
 #include <Shellapi.h>
+#include <rpc.h>
 #include <ioall.h>
 #include "dvm2.h"
 #include "utf8-conv.h"
 #include "ioall.h"
-
-#define TMP_SUBDIR TEXT("Qubes-open\\")
 
 HANDLE hStdIn = INVALID_HANDLE_VALUE;
 HANDLE hStdOut = INVALID_HANDLE_VALUE;
 
 int get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
 {
-	int		size, size_all;
-	PTCHAR	pTmpBuf;
-	PTCHAR	pDstBuf;
+    int		size, size_all;
+    TCHAR	*pTmpBuf;
+    TCHAR	*pDstBuf;
+    UUID uuid;
+    TCHAR subdir[64] = {0};
 
-	size = GetTempPath(0, NULL);
-	if (!size)
-		return 0;
+    if (UuidCreate(&uuid) != RPC_S_OK)
+        return 0;
+    // there is no UuidToString version that operates on TCHARs
+    if (FAILED(StringCchPrintf(subdir, RTL_NUMBER_OF(subdir), TEXT("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\\"),
+        uuid.Data1, uuid.Data2, uuid.Data3,
+        uuid.Data4[0], uuid.Data4[1],
+        uuid.Data4[2], uuid.Data4[3], uuid.Data4[4], uuid.Data4[5], uuid.Data4[6], uuid.Data4[7])))
+        return 0;
 
-	size_all = size + _tcslen(TMP_SUBDIR);
-	pTmpBuf = malloc(size_all  * sizeof(TCHAR));
-	if (!pTmpBuf)
-		return 0;
+    size = GetTempPath(0, NULL);
+    if (!size)
+        return 0;
 
-	size = GetTempPath(size, pTmpBuf);
-	if (!size) {
-		free(pTmpBuf);
-		return 0;
-	}
+    size_all = size + _tcslen(subdir);
+    pTmpBuf = (TCHAR*) malloc(size_all * sizeof(TCHAR));
+    if (!pTmpBuf)
+        return 0;
 
-	if (FAILED(StringCchCat(pTmpBuf, size_all, TMP_SUBDIR))) {
-		free(pTmpBuf);
-		return 0;
-	}
-	if (!CreateDirectory(pTmpBuf, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
-		fprintf(stderr, "Failed to create tmp subdir: 0x%x\n", GetLastError());
-		free(pTmpBuf);
-		return 0;
-	}
+    size = GetTempPath(size, pTmpBuf);
+    if (!size) {
+        free(pTmpBuf);
+        return 0;
+    }
 
-	*pBuf = pTmpBuf;
-	*pcchBuf = size_all;
-	return size_all * sizeof(TCHAR);
+    if (FAILED(StringCchCat(pTmpBuf, size_all, subdir))) {
+        free(pTmpBuf);
+        return 0;
+    }
+
+    if (!CreateDirectory(pTmpBuf, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+        fprintf(stderr, "Failed to create tmp subdir: 0x%x\n", GetLastError());
+        free(pTmpBuf);
+        return 0;
+    }
+
+    // todo? check if directory already exists
+    // This is extremely unlikely, GUIDs v4 are totally PRNG-based.
+
+    *pBuf = pTmpBuf;
+    *pcchBuf = size_all;
+    return size_all * sizeof(TCHAR);
 }
 
 TCHAR *get_filename()
@@ -123,13 +137,16 @@ void send_file_back(PTCHAR filename)
 		exit(1);
 	}
 	if (hStdOut == INVALID_HANDLE_VALUE) {
-		exit(1);
+        fprintf(stderr, "Failed to open STDOUT: 0x%x\n", GetLastError());
+		goto cleanup;
 	}
 
 	if (!copy_fd_all(hStdOut, fd)) {
 		fprintf(stderr, "Failed read/write file: 0x%x\n", GetLastError());
-		exit(1);
+        goto cleanup;
 	}
+
+cleanup:
 	CloseHandle(fd);
 	CloseHandle(hStdOut);
 }
@@ -148,6 +165,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 	hStdIn = GetStdHandle(STD_INPUT_HANDLE);
 	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hStdIn == INVALID_HANDLE_VALUE || hStdOut == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "Failed to open STDIN/STDOUT: 0x%x\n", GetLastError());
 		exit(1);
 	}
 

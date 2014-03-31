@@ -23,5 +23,5 @@ TARGETLIBS=\
         $(SDK_LIB_PATH)\ole32.lib \
         ..\libs\*\filecopy-common.lib \
         ..\..\libs\*\qubes-utils.lib \
-        $(SDK_LIB_PATH)\Shell32.lib
-
+        $(SDK_LIB_PATH)\Shell32.lib \
+        $(SDK_LIB_PATH)\rpcrt4.lib
