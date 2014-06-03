@@ -61,6 +61,12 @@
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
                 <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-filecopy-wrapper-installed" Type="integer" Value="1" KeyPath="yes"/>
               </Component>
+              <Component Id='MoveProfiles' Guid='220A22F3-0B73-4A4C-B825-53132A88D1DF'>
+                <File Id='move_profiles.exe' Name='move-profiles.exe' DiskId='1' Source='move-profiles\bin\$(var.ARCHDIR)\move-profiles.exe' KeyPath="no" />
+              </Component>
+              <Component Id='MoveProfilesBootstrap' Guid='C4325378-B946-4C6C-A685-F3E39A10AF20'>
+                <File Id='move_profiles_bootstrap.exe' Name='move-profiles-bootstrap.exe' DiskId='1' Source='move-profiles-bootstrap\bin\$(var.ARCHDIR)\move-profiles-bootstrap.exe' KeyPath="no" />
+              </Component>
               <Component Id='networkSetup' Guid='7201739e-35fb-11e3-9760-00163e5e6c10'>
                 <File Id='qubes_network_setup.exe' DiskId='1' Source='network-setup\bin\$(var.ARCHDIR)\qubes-network-setup.exe' KeyPath="yes"/>
                 <ServiceInstall

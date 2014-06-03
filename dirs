@@ -1,1 +1,1 @@
-DIRS = utils qrexec qrexec-client-vm qrexec-services ask-vm-and-run network-setup
+DIRS = utils qrexec qrexec-client-vm qrexec-services ask-vm-and-run network-setup move-profiles move-profiles-bootstrap
