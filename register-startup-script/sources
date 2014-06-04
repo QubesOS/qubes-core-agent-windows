@@ -1,0 +1,19 @@
+TARGETNAME=register-startup-script
+TARGETTYPE=PROGRAM
+TARGETPATH=bin
+
+UMTYPE=console
+UMENTRY=wmain
+USE_MSVCRT=1
+
+C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
+
+SOURCES = register-startup-script.c
+
+INCLUDES=$(INCLUDES); \
+                    $(SDK_INC_PATH)\..\ddk; \
+                    $(QUBES_INCLUDES);
+
+TARGETLIBS = $(QUBES_LIBS)\windows-utils.lib \
+    $(SDK_LIB_PATH)\shlwapi.lib \
+    $(SDK_LIB_PATH)\shell32.lib \
