@@ -74,6 +74,9 @@ int wmain(int argc, WCHAR* argv[])
 	DWORD policySize;
 	PWCHAR str;
 
+    if (ReadRegistryConfig() != ERROR_SUCCESS)
+    	return -1;
+
 	if (S_OK != SHGetKnownFolderPath(&FOLDERID_System, 0, NULL, &systemPath))
 	{
 		perror("SHGetKnownFolderPath(FOLDERID_System)");
@@ -99,7 +102,7 @@ int wmain(int argc, WCHAR* argv[])
 
 	logf("gpt.ini: %s", gptPath);
 	logf("scripts.ini: %s", scriptsPath);
-	
+
 	// Write startup script information.
 	// TODO: check if there are any existing entries
 	if (!WritePrivateProfileString(L"Startup", L"0CmdLine", argv[1], scriptsPath))
@@ -112,7 +115,7 @@ int wmain(int argc, WCHAR* argv[])
 		perror("WritePrivateProfileString(0Parameters)");
 		return 4;
 	}
-	
+
 	// Get active policies.
 	GetPrivateProfileString(L"General", L"gPCMachineExtensionNames", NULL, buf, RTL_NUMBER_OF(buf), gptPath);
 	logf("policies: '%s'", buf);
