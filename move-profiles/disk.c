@@ -294,10 +294,13 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
 
 	logf("MBR signature: 0x%08x", layout->Mbr.Signature);
 
-	if (layout->Mbr.Signature == PRIVATE_IMG_SIGNATURE)
+	if (layout->Mbr.Signature != 0)
 	{
 		// Drive is already initialized. Check if everything is OK.
 		logf("Drive is already initialized with signature 0x%08x", PRIVATE_IMG_SIGNATURE);
+
+        // Don't change the signature if MBR is already there.
+        // This can cause Windows to change drive number.
 
 		// Check if the disk contains formatted volume.
 		if (DriveNumberToVolumeName(driveNumber, volumeName, RTL_NUMBER_OF(volumeName)))
