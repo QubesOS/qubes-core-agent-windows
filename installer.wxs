@@ -117,5 +117,16 @@
       </Directory>
       <Directory Id='SendToFolder'/>
     </Directory>
+
+    <Binary Id='RegisterScriptExe' SourceFile='register-startup-script\bin\$(var.ARCHDIR)\register-startup-script.exe' />
+
+    <CustomAction Id='RegisterScript' Return='check' Impersonate='no' Execute='deferred' BinaryKey='RegisterScriptExe' ExeCommand='"[BinDir]\move-profiles-bootstrap.exe" "\"\"[BinDir]\move-profiles.exe 51728\"\""' />
+
+    <InstallExecuteSequence>
+      <Custom Action='RegisterScript' After='InstallFiles'>
+        NOT Installed
+      </Custom>
+    </InstallExecuteSequence>
+
   </Module>
 </Wix>
