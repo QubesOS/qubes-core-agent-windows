@@ -10,57 +10,6 @@
 #include <Knownfolders.h>
 
 #define LOG_NAME L"move-profiles"
-#define REG_CONFIG_KEY L"Software\\Invisible Things Lab\\Qubes Tools"
-#define REG_CONFIG_LOG_VALUE L"LogDir"
-
-// TODO: move registry reading to windows-utils
-ULONG ReadRegistryConfig(void)
-{
-	HKEY key = NULL;
-	DWORD status = ERROR_SUCCESS;
-	DWORD type;
-	DWORD size;
-	WCHAR logPath[MAX_PATH];
-
-	// Read the log directory.
-	SetLastError(status = RegOpenKey(HKEY_LOCAL_MACHINE, REG_CONFIG_KEY, &key));
-	if (status != ERROR_SUCCESS)
-	{
-		// failed, use some safe default
-		// todo: use event log
-		log_init(L"c:\\", LOG_NAME);
-		logf("registry config: '%s'", REG_CONFIG_KEY);
-		return perror("RegOpenKey");
-	}
-
-	size = sizeof(logPath)-sizeof(TCHAR);
-	RtlZeroMemory(logPath, sizeof(logPath));
-	SetLastError(status = RegQueryValueEx(key, REG_CONFIG_LOG_VALUE, NULL, &type, (PBYTE)logPath, &size));
-	if (status != ERROR_SUCCESS)
-	{
-		log_init(L"c:\\", LOG_NAME);
-		errorf("Failed to read log path from '%s\\%s'", REG_CONFIG_KEY, REG_CONFIG_LOG_VALUE);
-		perror("RegQueryValueEx");
-		status = ERROR_SUCCESS; // don't fail
-		goto cleanup;
-	}
-
-	if (type != REG_SZ)
-	{
-		log_init(L"c:\\", LOG_NAME);
-		errorf("Invalid type of config value '%s', 0x%x instead of REG_SZ", REG_CONFIG_LOG_VALUE, type);
-		status = ERROR_SUCCESS; // don't fail
-		goto cleanup;
-	}
-
-	log_init(logPath, LOG_NAME);
-
-cleanup:
-	if (key)
-		RegCloseKey(key);
-
-	return status;
-}
 
 // Argument: xen/vbd device id that represents private.img
 int wmain(int argc, PWCHAR argv[])
@@ -73,8 +22,7 @@ int wmain(int argc, PWCHAR argv[])
 	WCHAR *fromPath;
 	WCHAR toPath[] = L"d:\\Users\0"; // template
 
-	if (ReadRegistryConfig() != ERROR_SUCCESS)
-		return -1;
+    log_init_default(LOG_NAME);
 
 	if (argc < 2)
 	{

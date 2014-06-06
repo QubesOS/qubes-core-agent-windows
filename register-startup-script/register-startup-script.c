@@ -7,61 +7,10 @@
 #include "log.h"
 
 #define LOG_NAME L"register-startup-script"
-#define REG_CONFIG_KEY L"Software\\Invisible Things Lab\\Qubes Tools"
-#define REG_CONFIG_LOG_VALUE L"LogDir"
 
 // TODO: does order matter?
 WCHAR scriptGuids[] = L"{42B5FAAE-6536-11D2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}";
 WCHAR scriptGuidsFull[] = L"[{42B5FAAE-6536-11D2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}]";
-
-// TODO: move registry reading to windows-utils
-ULONG ReadRegistryConfig(void)
-{
-	HKEY key = NULL;
-	DWORD status = ERROR_SUCCESS;
-	DWORD type;
-	DWORD size;
-	WCHAR logPath[MAX_PATH];
-
-	// Read the log directory.
-	SetLastError(status = RegOpenKey(HKEY_LOCAL_MACHINE, REG_CONFIG_KEY, &key));
-	if (status != ERROR_SUCCESS)
-	{
-		// failed, use some safe default
-		// todo: use event log
-		log_init(L"c:\\", LOG_NAME);
-		logf("registry config: '%s'", REG_CONFIG_KEY);
-		return perror("RegOpenKey");
-	}
-
-	size = sizeof(logPath)-sizeof(TCHAR);
-	RtlZeroMemory(logPath, sizeof(logPath));
-	SetLastError(status = RegQueryValueEx(key, REG_CONFIG_LOG_VALUE, NULL, &type, (PBYTE)logPath, &size));
-	if (status != ERROR_SUCCESS)
-	{
-		log_init(L"c:\\", LOG_NAME);
-		errorf("Failed to read log path from '%s\\%s'", REG_CONFIG_KEY, REG_CONFIG_LOG_VALUE);
-		perror("RegQueryValueEx");
-		status = ERROR_SUCCESS; // don't fail
-		goto cleanup;
-	}
-
-	if (type != REG_SZ)
-	{
-		log_init(L"c:\\", LOG_NAME);
-		errorf("Invalid type of config value '%s', 0x%x instead of REG_SZ", REG_CONFIG_LOG_VALUE, type);
-		status = ERROR_SUCCESS; // don't fail
-		goto cleanup;
-	}
-
-	log_init(logPath, LOG_NAME);
-
-cleanup:
-	if (key)
-		RegCloseKey(key);
-
-	return status;
-}
 
 int wmain(int argc, WCHAR* argv[])
 {
@@ -74,8 +23,7 @@ int wmain(int argc, WCHAR* argv[])
 	DWORD policySize;
 	PWCHAR str;
 
-    if (ReadRegistryConfig() != ERROR_SUCCESS)
-    	return -1;
+    log_init_default(LOG_NAME);
 
 	if (S_OK != SHGetKnownFolderPath(&FOLDERID_System, 0, NULL, &systemPath))
 	{
