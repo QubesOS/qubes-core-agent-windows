@@ -22,6 +22,7 @@ int wmain(int argc, WCHAR* argv[])
 	PWCHAR policyBuf;
 	DWORD policySize;
 	PWCHAR str;
+    DWORD status;
 
     log_init_default(LOG_NAME);
 
@@ -42,7 +43,26 @@ int wmain(int argc, WCHAR* argv[])
 		perror("StringCchPrintf(gptPath)");
 		return 3;
 	}
-	if (S_OK != StringCchPrintf(scriptsPath, RTL_NUMBER_OF(scriptsPath), L"%s\\GroupPolicy\\Machine\\Scripts\\scripts.ini", systemPath))
+
+    // Ensure that the path exists, it may not on a freshly installed system.
+    if (S_OK != StringCchPrintf(scriptsPath, RTL_NUMBER_OF(scriptsPath), L"%s\\GroupPolicy\\Machine\\Scripts", systemPath))
+    {
+        perror("StringCchPrintf(scriptsPath)");
+        return 3;
+    }
+
+    if (!PathIsDirectory(scriptsPath))
+    {
+        status = SHCreateDirectoryEx(NULL, scriptsPath, NULL);
+        if (ERROR_SUCCESS != status)
+        {
+            SetLastError(status);
+            perror("SHCreateDirectoryEx");
+            return 4;
+        }
+    }
+
+    if (S_OK != StringCchPrintf(scriptsPath, RTL_NUMBER_OF(scriptsPath), L"%s\\GroupPolicy\\Machine\\Scripts\\scripts.ini", systemPath))
 	{
 		perror("StringCchPrintf(scriptsPath)");
 		return 3;
@@ -56,12 +76,12 @@ int wmain(int argc, WCHAR* argv[])
 	if (!WritePrivateProfileString(L"Startup", L"0CmdLine", argv[1], scriptsPath))
 	{
 		perror("WritePrivateProfileString(0CmdLine)");
-		return 4;
+		return 5;
 	}
 	if (!WritePrivateProfileString(L"Startup", L"0Parameters", argv[2], scriptsPath))
 	{
 		perror("WritePrivateProfileString(0Parameters)");
-		return 4;
+		return 5;
 	}
 
 	// Get active policies.
@@ -77,7 +97,7 @@ int wmain(int argc, WCHAR* argv[])
 			if (!WritePrivateProfileString(L"General", L"gPCMachineExtensionNames", scriptGuidsFull, gptPath))
 			{
 				perror("WritePrivateProfileString(gPCMachineExtensionNames)");
-				return 4;
+				return 5;
 			}
 		}
 		else
@@ -88,7 +108,7 @@ int wmain(int argc, WCHAR* argv[])
 			if (!policyBuf)
 			{
 				errorf("No memory");
-				return 5;
+				return 6;
 			}
 			ZeroMemory(policyBuf, policySize);
 			StringCbCopy(policyBuf, policySize, buf);
@@ -99,7 +119,7 @@ int wmain(int argc, WCHAR* argv[])
 			if (!WritePrivateProfileString(L"General", L"gPCMachineExtensionNames", policyBuf, gptPath))
 			{
 				perror("WritePrivateProfileString(gPCMachineExtensionNames)");
-				return 4;
+				return 5;
 			}
 		}
 	}
@@ -113,7 +133,7 @@ int wmain(int argc, WCHAR* argv[])
 	if (!WritePrivateProfileString(L"General", L"Version", buf, gptPath))
 	{
 		perror("WritePrivateProfileString(Version)");
-		return 4;
+		return 5;
 	}
 
 	return 0;
