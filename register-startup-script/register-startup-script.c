@@ -2,6 +2,9 @@
 
 #include <Windows.h>
 #include <ShlObj.h>
+#include <Shlwapi.h>
+#include <initguid.h>
+#include <gpedit.h>
 #include <strsafe.h>
 
 #include "log.h"
@@ -11,6 +14,93 @@
 // TODO: does order matter?
 WCHAR scriptGuids[] = L"{42B5FAAE-6536-11D2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}";
 WCHAR scriptGuidsFull[] = L"[{42B5FAAE-6536-11D2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}]";
+
+/*
+ * Set GP startup script processing to synchronous.
+ * This can be switched on with a single registry value,
+ * but we use group policy COM interface to do that.
+ * That's because on a freshly-installed system simply
+ * setting the registry value doesn't work, probably
+ * some GP stuff isn't yet initialized.
+ */
+DWORD InitGPO(void)
+{
+    DWORD val;
+    DWORD status;
+    IGroupPolicyObject *gpo = NULL;
+    HKEY machineKey = NULL, valKey = NULL;
+    DWORD retval = ERROR_INVALID_FUNCTION;
+
+    GUID extGuid = REGISTRY_EXTENSION_GUID;
+    // Unique guid for our value.
+    // {A29AD8B4-9D44-42BB-9319-B4DE42C0A3BE}
+    GUID snapGuid = { 0xa29ad8b4, 0x9d44, 0x42bb, { 0x93, 0x19, 0xb4, 0xde, 0x42, 0xc0, 0xa3, 0xbe } };
+
+    status = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (status != S_OK)
+    {
+        errorf("CoInitializeEx failed: 0x%08x", status);
+        goto cleanup;
+    }
+
+    // Create the GPO instance.
+    status = CoCreateInstance(&CLSID_GroupPolicyObject, NULL, CLSCTX_INPROC_SERVER, &IID_IGroupPolicyObject, &gpo);
+    if (status != S_OK)
+    {
+        errorf("CoCreateInstance(CLSID_GroupPolicyObject) failed: 0x%08x", status);
+        goto cleanup;
+    }
+
+    status = gpo->lpVtbl->OpenLocalMachineGPO(gpo, GPO_OPEN_LOAD_REGISTRY);
+    if (status != S_OK)
+    {
+        errorf("OpenLocalMachineGPO failed: 0x%08x", status);
+        goto cleanup;
+    }
+
+    status = gpo->lpVtbl->GetRegistryKey(gpo, GPO_SECTION_MACHINE, &machineKey);
+    if (status != S_OK)
+    {
+        errorf("GetRegistryKey failed: 0x%08x", status);
+        goto cleanup;
+    }
+
+    // Create/open the key and set the value.
+    SetLastError(status = RegCreateKeyEx(machineKey, L"Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+        0, NULL, 0, KEY_SET_VALUE | KEY_QUERY_VALUE, NULL, &valKey, NULL));
+    if (status != ERROR_SUCCESS)
+    {
+        perror("RegCreateKeyEx");
+        goto cleanup;
+    }
+
+    val = 1;
+    SetLastError(status = RegSetKeyValue(valKey, NULL, L"RunStartupScriptSync", REG_DWORD, &val, sizeof(val)));
+    if (status != ERROR_SUCCESS)
+    {
+        perror("RegSetKeyValue");
+        goto cleanup;
+    }
+
+    // Apply policy and free resources.
+    status = gpo->lpVtbl->Save(gpo, TRUE, TRUE, &extGuid, &snapGuid);
+    if (status != S_OK)
+    {
+        errorf("Save failed: 0x%08x", status);
+        goto cleanup;
+    }
+
+    status = ERROR_SUCCESS;
+
+cleanup:
+    if (gpo)
+        gpo->lpVtbl->Release(gpo);
+    if (valKey)
+        RegCloseKey(valKey);
+    if (machineKey)
+        RegCloseKey(machineKey);
+    return status;
+}
 
 int wmain(int argc, WCHAR* argv[])
 {
@@ -103,7 +193,7 @@ int wmain(int argc, WCHAR* argv[])
         else
         {
             // Append script guids.
-            policySize = sizeof(WCHAR) * (wcslen(buf) + wcslen(scriptGuids) + 1);
+            policySize = (DWORD)(sizeof(WCHAR)* (wcslen(buf) + wcslen(scriptGuids) + 1));
             policyBuf = malloc(policySize);
             if (!policyBuf)
             {
@@ -136,5 +226,5 @@ int wmain(int argc, WCHAR* argv[])
         return 5;
     }
 
-    return 0;
+    return InitGPO();
 }

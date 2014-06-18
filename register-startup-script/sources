@@ -17,3 +17,4 @@ INCLUDES=$(INCLUDES); \
 TARGETLIBS = $(QUBES_LIBS)\windows-utils.lib \
     $(SDK_LIB_PATH)\shlwapi.lib \
     $(SDK_LIB_PATH)\shell32.lib \
+    $(SDK_LIB_PATH)\ole32.lib
