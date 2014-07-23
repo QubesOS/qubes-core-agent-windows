@@ -6,7 +6,7 @@
 SERVICE_STATUS ServiceStatus;
 SERVICE_STATUS_HANDLE hStatus;
 
-void  ServiceMain(int argc, char** argv);
+void  ServiceMain(int argc, wchar_t** argv);
 void  ControlHandler(DWORD request);
 
 // from qubes-network-setup.c
@@ -23,7 +23,7 @@ void service_main()
 	StartServiceCtrlDispatcher(ServiceTable);
 }
 
-void ServiceMain(int argc, char** argv)
+void ServiceMain(int argc, wchar_t** argv)
 {
 	int error;
 	ServiceStatus.dwServiceType        = SERVICE_WIN32;

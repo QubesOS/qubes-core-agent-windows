@@ -5,6 +5,8 @@
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 
+#include "log.h"
+
 // from service.c
 int service_main(void);
 
@@ -27,19 +29,21 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
 
     ulOutBufLen = 0;
     /* wait for adapters to initialize */
-    while ((dwRetVal=GetAdaptersInfo( NULL, &ulOutBufLen)) == ERROR_NO_DATA) {
-        fprintf(stderr, "GetAdaptersInfo call failed with %d, retrying\n", dwRetVal);
+    while ((dwRetVal=GetAdaptersInfo(NULL, &ulOutBufLen)) == ERROR_NO_DATA) {
+        errorf("GetAdaptersInfo call failed with %d, retrying\n", dwRetVal);
         Sleep(200);
     }
 
+    SetLastError(dwRetVal);
     if (dwRetVal != ERROR_BUFFER_OVERFLOW) {
-        fprintf(stderr, "GetAdaptersInfo call failed with %d\n", dwRetVal);
+        perror("GetAdaptersInfo");
         goto cleanup;
     }
     pAdapterInfo = (IP_ADAPTER_INFO *)malloc (ulOutBufLen);
 
     if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) != ERROR_SUCCESS) {
-        printf("GetAdaptersInfo call(2) failed with %d\n", dwRetVal);
+        SetLastError(dwRetVal);
+        perror("GetAdaptersInfo 2");
         goto cleanup;
     }
 
@@ -49,12 +53,17 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
         if (pAdapterInfoCurrent->Type == MIB_IF_TYPE_ETHERNET) {
             pAddrCurrent = &pAdapterInfoCurrent->IpAddressList;
             while (pAddrCurrent) {
-                DeleteIPAddress(pAddrCurrent->Context);
+                logf("Deleting IP %S", pAddrCurrent->IpAddress.String);
+                SetLastError(dwRetVal = DeleteIPAddress(pAddrCurrent->Context));
+                if (dwRetVal != ERROR_SUCCESS) {
+                    perror("DeleteIPAddress");
+                    goto cleanup;
+                }
                 pAddrCurrent = pAddrCurrent->Next;
             }
-            dwRetVal = AddIPAddress(ip, netmask, pAdapterInfoCurrent->Index, &NTEContext, &NTEInstance);
+            SetLastError(dwRetVal = AddIPAddress(ip, netmask, pAdapterInfoCurrent->Index, &NTEContext, &NTEInstance));
             if (dwRetVal != ERROR_SUCCESS) {
-                fprintf(stderr, "AddIPAddress failed with %d\n", dwRetVal);
+                perror("AddIPAddress");
                 goto cleanup;
             }
             ipfRow.dwForwardIfIndex = pAdapterInfoCurrent->Index;
@@ -70,15 +79,15 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
         // Allocate the memory for the table
         pIpForwardTable = (PMIB_IPFORWARDTABLE) malloc(dwSize);
         if (pIpForwardTable == NULL) {
-            printf("Unable to allocate memory for the IPFORWARDTALE\n");
+            errorf("Unable to allocate memory for the IPFORWARDTALE\n");
             goto cleanup;
         }
         // Now get the table.
-        dwRetVal = GetIpForwardTable(pIpForwardTable, &dwSize, FALSE);
+        SetLastError(dwRetVal = GetIpForwardTable(pIpForwardTable, &dwSize, FALSE));
     }
 
     if (dwRetVal != ERROR_SUCCESS) {
-        fprintf(stderr, "getIpForwardTable failed with %d.\n", dwRetVal);
+        perror("GetIpForwardTable");
         goto cleanup;
     }
 
@@ -89,10 +98,10 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     for (i = 0; i < pIpForwardTable->dwNumEntries; i++) {
         if (pIpForwardTable->table[i].dwForwardDest == 0) {
             // Delete the old default gateway entry.
-            dwRetVal = DeleteIpForwardEntry(&(pIpForwardTable->table[i]));
+            SetLastError(dwRetVal = DeleteIpForwardEntry(&(pIpForwardTable->table[i])));
 
             if (dwRetVal != ERROR_SUCCESS) {
-                printf("Could not delete old gateway\n");
+                perror("DeleteIpForwardEntry");
                 goto cleanup;
             }
         }
@@ -101,9 +110,9 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     /* dwForwardIfIndex filled earlier */
     ipInterfaceRow.Family = AF_INET;
     ipInterfaceRow.InterfaceIndex = ipfRow.dwForwardIfIndex;
-    dwRetVal = GetIpInterfaceEntry(&ipInterfaceRow);
+    SetLastError(dwRetVal = GetIpInterfaceEntry(&ipInterfaceRow));
     if (dwRetVal != NO_ERROR) {
-        fprintf(stderr, "GetIpInterfaceEntry failed with error %d\n", dwRetVal);
+        perror("GetIpInterfaceEntry");
         goto cleanup;
     }
 
@@ -115,10 +124,10 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     ipfRow.dwForwardMetric1 = ipInterfaceRow.Metric;
 
     // Create a new route entry for the default gateway.
-    dwRetVal = CreateIpForwardEntry(&ipfRow);
+    SetLastError(dwRetVal = CreateIpForwardEntry(&ipfRow));
 
     if (dwRetVal != NO_ERROR)
-        fprintf(stderr, "CreateIpForwardEntry failed with %d\n", dwRetVal);
+        perror("CreateIpForwardEntry");
 
     dwRetVal = ERROR_SUCCESS;
 
@@ -131,8 +140,6 @@ cleanup:
     return dwRetVal;
 }
 
-
-
 int qubes_setup_network() {
     struct xs_handle *xs;
     int interface_index;
@@ -144,25 +151,27 @@ int qubes_setup_network() {
 
     xs = xs_domain_open();
     if (!xs) {
-        fprintf(stderr, "Failed to open xenstore connection\n");
+        errorf("Failed to open xenstore connection\n");
         goto cleanup;
     }
 
     qubes_ip = xs_read(xs, XBT_NULL, "qubes-ip", NULL);
     if (!qubes_ip) {
-        fprintf(stderr, "Failed to get qubes_ip\n");
+        errorf("Failed to get qubes_ip\n");
         goto cleanup;
     }
     qubes_netmask = xs_read(xs, XBT_NULL, "qubes-netmask", NULL);
     if (!qubes_netmask) {
-        fprintf(stderr, "Failed to get qubes_netmask\n");
+        errorf("Failed to get qubes_netmask\n");
         goto cleanup;
     }
     qubes_gateway = xs_read(xs, XBT_NULL, "qubes-gateway", NULL);
     if (!qubes_gateway) {
-        fprintf(stderr, "Failed to get qubes_gateway\n");
+        errorf("Failed to get qubes_gateway\n");
         goto cleanup;
     }
+
+    logf("ip: %S, netmask: %S, gateway: %S", qubes_ip, qubes_netmask, qubes_gateway);
 
     if (set_network_parameters(inet_addr(qubes_ip),
                 inet_addr(qubes_netmask),
@@ -174,10 +183,10 @@ int qubes_setup_network() {
 
     /* don't know how to programatically (and easily) set DNS address, so stay
      * with netsh... */
-    _snprintf(cmdline, sizeof(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
+    _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
             interface_index, qubes_gateway);
     if (system(cmdline)!=0) {
-        fprintf(stderr, "Failed to set DNS address by calling: %s\n", cmdline);
+        errorf("Failed to set DNS address by calling: %S\n", cmdline);
         goto cleanup;
     }
 
@@ -197,8 +206,10 @@ cleanup:
     return ret;
 }
 
-int __cdecl main(int argc, char **argv) {
-    if (argc >= 2 && 0==strcmp(argv[1], "-service")) {
+int __cdecl wmain(int argc, wchar_t **argv) {
+    log_init_default(L"network-setup");
+
+    if (argc >= 2 && 0==wcscmp(argv[1], L"-service")) {
         return service_main();
     } else {
         return qubes_setup_network();
