@@ -53,6 +53,11 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
         if (pAdapterInfoCurrent->Type == MIB_IF_TYPE_ETHERNET) {
             pAddrCurrent = &pAdapterInfoCurrent->IpAddressList;
             while (pAddrCurrent) {
+                if (0 == strcmp("0.0.0.0", pAddrCurrent->IpAddress.String))
+                {
+                    pAddrCurrent = pAddrCurrent->Next;
+                    continue;
+                }
                 logf("Deleting IP %S", pAddrCurrent->IpAddress.String);
                 SetLastError(dwRetVal = DeleteIPAddress(pAddrCurrent->Context));
                 if (dwRetVal != ERROR_SUCCESS) {
