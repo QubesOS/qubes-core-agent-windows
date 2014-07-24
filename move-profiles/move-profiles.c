@@ -56,6 +56,7 @@ typedef struct _REPARSE_DATA_BUFFER
 
 #define MAX_PATH_LONG 32768
 #define LONG_PATH_PREFIX L"\\\\?\\"
+#define LONG_PATH_PREFIX_LENGTH 4
 
 DWORD EnablePrivilege(HANDLE token, const PWCHAR privilegeName)
 {
@@ -87,6 +88,53 @@ DWORD EnablePrivilege(HANDLE token, const PWCHAR privilegeName)
     logf("Privilege %s enabled", privilegeName);
 
     return ERROR_SUCCESS;
+}
+
+// sourcePath must be an existing and empty directory.
+DWORD SetReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath)
+{
+    BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
+    PREPARSE_DATA_BUFFER rdb = (PREPARSE_DATA_BUFFER)buffer;
+    DWORD size, targetSize;
+    WCHAR dest[MAX_PATH_LONG];
+    DWORD status = ERROR_SUCCESS;
+    HANDLE file = CreateFile(sourcePath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+
+    logf("Creating reparse point: '%s' -> '%s'", sourcePath, targetPath);
+
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        status = perror("CreateFile");
+        goto cleanup;
+    }
+
+    targetSize = wcslen(targetPath) * sizeof(WCHAR);
+
+    rdb->ReparseTag = IO_REPARSE_TAG_SYMLINK;
+    // 12 = SymbolicLinkReparseBuffer fields without PathBuffer
+    // sizeof(PathBuffer) = 2*targetSize + sizeof(L"\\??\\")
+    rdb->ReparseDataLength = 12 + targetSize * 2 + 8;
+    rdb->SymbolicLinkReparseBuffer.Flags = 0; // absolute link
+    StringCchPrintf(rdb->SymbolicLinkReparseBuffer.PathBuffer, sizeof(buffer) - sizeof(REPARSE_DATA_BUFFER),
+        L"%s\\??\\%s", targetPath, targetPath);
+    rdb->SymbolicLinkReparseBuffer.PrintNameOffset = 0;
+    rdb->SymbolicLinkReparseBuffer.PrintNameLength = targetSize;
+    rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset = rdb->SymbolicLinkReparseBuffer.PrintNameLength;
+    rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = targetSize + 8;
+
+    debugf("PrintName: %.*s", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
+    debugf("SubstituteName: %.*s", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
+
+    // 8 = fields before the union
+    if (!DeviceIoControl(file, FSCTL_SET_REPARSE_POINT, buffer, rdb->ReparseDataLength + 8, NULL, 0, &size, NULL))
+    {
+        status = perror("FSCTL_SET_REPARSE_POINT");
+        goto cleanup;
+    }
+
+cleanup:
+    CloseHandle(file);
+    return status;
 }
 
 DWORD CopyReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL isDirectory)
@@ -396,7 +444,7 @@ int wmain(int argc, PWCHAR argv[])
     }
 
     // This will replace drive letter in toPath.
-    if (!PreparePrivateVolume(driveNumber, &toPath[4]))
+    if (!PreparePrivateVolume(driveNumber, &toPath[LONG_PATH_PREFIX_LENGTH]))
     {
         errorf("Failed to initialize private.img");
         return 4;
@@ -420,7 +468,7 @@ int wmain(int argc, PWCHAR argv[])
 
     // Add long path prefix to profiles directory if not present.
     // This allows us to process paths longer than MAX_PATH up to NTFS' limit (32k).
-    if (0 != wcsncmp(LONG_PATH_PREFIX, usersPath, wcslen(LONG_PATH_PREFIX)))
+    if (0 != wcsncmp(LONG_PATH_PREFIX, usersPath, LONG_PATH_PREFIX_LENGTH))
         StringCchPrintf(fromPath, MAX_PATH_LONG, LONG_PATH_PREFIX L"%s", usersPath);
     else
         StringCchCopy(fromPath, MAX_PATH_LONG, usersPath);
@@ -441,17 +489,32 @@ int wmain(int argc, PWCHAR argv[])
 
     status = DeleteDirectory(fromPath);
 
-    if (status != 0 || PathFileExists(fromPath))
+    if (status != ERROR_SUCCESS || PathFileExists(fromPath))
     {
         errorf("Delete failed: %d", status);
 
-        // Try to copy old Users back.
-        CopyDirectory(toPath, fromPath, TRUE);
+        // This can happen for some reason even if deletion of everything inside c:\users succeeds.
+        // RemoveDirectory fails with ACCESS_DENIED, (NTSTATUS) 0xc0000121 - An attempt has been made to remove a file or directory that cannot be deleted.
+        // The dir has no special ACLs or anything... I've tried to debug the reason but ultimately stopped
+        // since we can set a reparse point on an empty directory anyway.
 
-        return 9;
+        // If old Users dir is empty, create a reparse point to the copied directory.
+        // TODO: check if old Users is empty.
+        // Reparse paths can't contain long path prefix.
+        if (ERROR_SUCCESS != SetReparsePoint(fromPath + LONG_PATH_PREFIX_LENGTH, toPath + LONG_PATH_PREFIX_LENGTH))
+        {
+            // Everything failed, try to copy old Users back.
+            CopyDirectory(toPath, fromPath, TRUE);
+            return 9;
+        }
+
+        // We should have a working junction here.
+        logf("Junction created, '%s'->'%s'", fromPath, toPath);
+        return ERROR_SUCCESS;
     }
 
     logf("Delete OK, creating junction point");
+    // This call requires that fromPath directory doesn't exist.
     if (!CreateSymbolicLink(fromPath, toPath, SYMBOLIC_LINK_FLAG_DIRECTORY))
     {
         return perror("CreateSymbolicLink");
