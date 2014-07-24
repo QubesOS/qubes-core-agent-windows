@@ -29,7 +29,7 @@ BOOL get_current_user(PCHAR *ppUserName) {
 				goto cleanup;
 			}
 #ifdef DBG
-			fprintf(stderr, "Found session: %s\n", *ppszUserName);
+			fprintf(stderr, "Found session: %s\n", *ppUserName);
 #endif
 			bFound = TRUE;
 		}
