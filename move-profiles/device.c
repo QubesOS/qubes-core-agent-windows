@@ -64,7 +64,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
 			continue;
 		}
 
-		logf("DEVID: %s", deviceId);
+		LogDebug("DEVID: %s", deviceId);
 
 		// Get device's parent.
 		ZeroMemory(parentString, sizeof(parentString));
@@ -78,7 +78,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
 		if (!IsPrivateDisk(parentString, xenVbdId))
 			continue;
 
-		logf("Xen VBD match");
+        LogDebug("Xen VBD match");
 
 		// Get the user mode device name.
 		StringCchPrintf(deviceName, RTL_NUMBER_OF(deviceName), L"\\\\?\\%s\\" DISK_INTERFACE_GUID, deviceId);
@@ -86,7 +86,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
 		for (s = deviceName + 4; *s; s++)
 		if (*s == L'\\')
 			*s = '#';
-		logf("Device name: %s", deviceName);
+        LogDebug("Device name: %s", deviceName);
 
 		// Get physical drive number.
 		return GetPhysicalDriveNumber(deviceName, driveNumber);

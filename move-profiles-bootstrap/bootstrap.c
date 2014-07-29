@@ -12,8 +12,6 @@
 
 #include "log.h"
 
-#define LOG_NAME L"bootstrap"
-
 // Process from which we "borrow" a LocalSystem token with full privileges.
 // TODO: get the first process with all required privileges
 #define SMSS_NAME L"smss.exe"
@@ -50,11 +48,11 @@ BOOL EnablePrivilege(HANDLE token, PWCHAR privilegeName)
 	if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
 
 	{
-		errorf("The token does not have the specified privilege.");
+        LogError("The token does not have the specified privilege '%s'", privilegeName);
 		return FALSE;
 	}
 
-	logf("Privilege %s enabled", privilegeName);
+	LogDebug("Privilege '%s' enabled", privilegeName);
 
 	return TRUE;
 }
@@ -97,12 +95,12 @@ BOOL CheckTokenPrivilege(HANDLE token, PWCHAR privilegeName)
 	}
 
 	GetTokenInformation(token, TokenPrivileges, info, sizeof(info), &size);
-	logf("Privs: %d", privs->PrivilegeCount);
+	LogDebug("Privs: %d", privs->PrivilegeCount);
 	for (i = 0; i<privs->PrivilegeCount; i++)
 	{
 		returned = RTL_NUMBER_OF(privName);
 		LookupPrivilegeName(NULL, &privs->Privileges[i].Luid, privName, &returned);
-		logf("%d: %s (%x.%x) %x %s", i, privName,
+        LogDebug("%d: %s (%x.%x) %x %s", i, privName,
 			privs->Privileges[i].Luid.HighPart, privs->Privileges[i].Luid.LowPart,
 			privs->Privileges[i].Attributes, AttrToStr(privs->Privileges[i].Attributes));
 
@@ -128,13 +126,13 @@ HANDLE GetLocalSystemToken(void)
 		process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_DUP_HANDLE, FALSE, pidArray[i]);
 		if (!process)
 		{
-			errorf("%d: OpenProcess failed, %d", pidArray[i], GetLastError());
+			LogError("%d: OpenProcess failed, %d", pidArray[i], GetLastError());
 			continue;
 		}
 		// Look for smss.exe
 		if (GetProcessImageFileName(process, path, RTL_NUMBER_OF(path)))
 		{
-			logf("%d: %s", pidArray[i], path);
+            LogDebug("%d: %s", pidArray[i], path);
 			if (wcslen(path) >= wcslen(SMSS_NAME))
 			{
 				if (0 == _wcsnicmp(SMSS_NAME, path + wcslen(path) - wcslen(SMSS_NAME), wcslen(SMSS_NAME))) // match
@@ -172,16 +170,14 @@ int wmain(int argc, PWCHAR argv[])
 	PROCESS_INFORMATION pi = { 0 };
 	PWCHAR cmdline = argv[1];
 
-    log_init_default(LOG_NAME);
-
 	if (argc < 2)
 	{
-		errorf("No command line to execute given");
+        LogError("No command line to execute given");
 		return 1;
 	}
 
-	logf("Command line to run: %s", cmdline);
-	logf("Current process token:");
+	LogInfo("Command line to run: %s", cmdline);
+    LogDebug("Current process token:");
 	OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &token);
 	
 	if (!CheckTokenPrivilege(token, symlinkPrivilege))
@@ -192,7 +188,7 @@ int wmain(int argc, PWCHAR argv[])
 		token = GetLocalSystemToken();
 		if (!token)
 		{
-			errorf("Failed to get system token");
+            LogError("Failed to get system token");
 			return 2;
 		}
 	}
@@ -204,7 +200,7 @@ int wmain(int argc, PWCHAR argv[])
 	}
 	CloseHandle(token);
 
-	logf("System token duplicated");
+	LogInfo("System token duplicated");
 
 	si.cb = sizeof(si);
 	if (!CreateProcessWithTokenW(newToken, 0, NULL, cmdline, 0, NULL, NULL, &si, &pi))
@@ -213,7 +209,7 @@ int wmain(int argc, PWCHAR argv[])
 		return 4;
 	}
 
-	logf("Process created, waiting for exit");
+	LogInfo("Process created, waiting for exit");
 
 	if (WaitForSingleObject(pi.hProcess, INFINITE) != WAIT_OBJECT_0)
 	{
@@ -221,7 +217,7 @@ int wmain(int argc, PWCHAR argv[])
 		return 5;
 	}
 
-	logf("done");
+	LogInfo("done");
 
 	return 0;
 }

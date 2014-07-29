@@ -30,7 +30,7 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     ulOutBufLen = 0;
     /* wait for adapters to initialize */
     while ((dwRetVal=GetAdaptersInfo(NULL, &ulOutBufLen)) == ERROR_NO_DATA) {
-        errorf("GetAdaptersInfo call failed with %d, retrying\n", dwRetVal);
+        LogWarning("GetAdaptersInfo call failed with %d, retrying\n", dwRetVal);
         Sleep(200);
     }
 
@@ -58,7 +58,7 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
                     pAddrCurrent = pAddrCurrent->Next;
                     continue;
                 }
-                logf("Deleting IP %S", pAddrCurrent->IpAddress.String);
+                LogInfo("Deleting IP %S", pAddrCurrent->IpAddress.String);
                 SetLastError(dwRetVal = DeleteIPAddress(pAddrCurrent->Context));
                 if (dwRetVal != ERROR_SUCCESS) {
                     perror("DeleteIPAddress");
@@ -84,7 +84,7 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
         // Allocate the memory for the table
         pIpForwardTable = (PMIB_IPFORWARDTABLE) malloc(dwSize);
         if (pIpForwardTable == NULL) {
-            errorf("Unable to allocate memory for the IPFORWARDTALE\n");
+            LogError("Unable to allocate memory for the IPFORWARDTALE\n");
             goto cleanup;
         }
         // Now get the table.
@@ -156,27 +156,27 @@ int qubes_setup_network() {
 
     xs = xs_domain_open();
     if (!xs) {
-        errorf("Failed to open xenstore connection\n");
+        LogError("Failed to open xenstore connection\n");
         goto cleanup;
     }
 
     qubes_ip = xs_read(xs, XBT_NULL, "qubes-ip", NULL);
     if (!qubes_ip) {
-        errorf("Failed to get qubes_ip\n");
+        LogError("Failed to get qubes_ip\n");
         goto cleanup;
     }
     qubes_netmask = xs_read(xs, XBT_NULL, "qubes-netmask", NULL);
     if (!qubes_netmask) {
-        errorf("Failed to get qubes_netmask\n");
+        LogError("Failed to get qubes_netmask\n");
         goto cleanup;
     }
     qubes_gateway = xs_read(xs, XBT_NULL, "qubes-gateway", NULL);
     if (!qubes_gateway) {
-        errorf("Failed to get qubes_gateway\n");
+        LogError("Failed to get qubes_gateway\n");
         goto cleanup;
     }
 
-    logf("ip: %S, netmask: %S, gateway: %S", qubes_ip, qubes_netmask, qubes_gateway);
+    LogInfo("ip: %S, netmask: %S, gateway: %S", qubes_ip, qubes_netmask, qubes_gateway);
 
     if (set_network_parameters(inet_addr(qubes_ip),
                 inet_addr(qubes_netmask),
@@ -191,7 +191,7 @@ int qubes_setup_network() {
     _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
             interface_index, qubes_gateway);
     if (system(cmdline)!=0) {
-        errorf("Failed to set DNS address by calling: %S\n", cmdline);
+        LogError("Failed to set DNS address by calling: %S\n", cmdline);
         goto cleanup;
     }
 
@@ -212,7 +212,6 @@ cleanup:
 }
 
 int __cdecl wmain(int argc, wchar_t **argv) {
-    log_init_default(L"network-setup");
 
     if (argc >= 2 && 0==wcscmp(argv[1], L"-service")) {
         return service_main();

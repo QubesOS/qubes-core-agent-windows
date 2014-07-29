@@ -42,7 +42,7 @@ BOOL GetPhysicalDriveNumber(IN WCHAR *deviceName, OUT PULONG driveNumber)
 		goto cleanup;
 	}
 
-	logf("device: %d, partition: %d", deviceNumber.DeviceNumber, deviceNumber.PartitionNumber);
+    LogDebug("device: %d, partition: %d", deviceNumber.DeviceNumber, deviceNumber.PartitionNumber);
 	retval = TRUE;
 	*driveNumber = deviceNumber.DeviceNumber;
 
@@ -73,7 +73,7 @@ static BOOL VolumeNameToDiskLetter(IN WCHAR *volumeName, OUT PWCHAR diskLetter)
 
 	if (!mountPoints)
 	{
-		errorf("No memory");
+		LogError("No memory");
 		return FALSE;
 	}
 
@@ -87,7 +87,7 @@ static BOOL VolumeNameToDiskLetter(IN WCHAR *volumeName, OUT PWCHAR diskLetter)
 
 	for (mountPoint = mountPoints; *mountPoint; mountPoint += wcslen(mountPoint) + 1)
 	{
-		logf("Mount point: %s", mountPoint);
+		LogDebug("Mount point: %s", mountPoint);
 		// Check if it's a disk letter.
 		if (mountPoint[1] == L':' && mountPoint[2] == L'\\')
 		{
@@ -121,7 +121,7 @@ BOOL DriveNumberToVolumeName(IN DWORD driveNumber, OUT WCHAR *volumeName, IN DWO
 	do
 	{
 		volumeName[wcslen(volumeName) - 1] = 0; // Remove trailing backslash.
-		debugf("Volume: %s", volumeName);
+        LogDebug("Volume: %s", volumeName);
 
 		// Open device handle.
 		volume = CreateFile(volumeName, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
@@ -146,7 +146,7 @@ BOOL DriveNumberToVolumeName(IN DWORD driveNumber, OUT WCHAR *volumeName, IN DWO
 			CloseHandle(volume);
 			retval = TRUE;
 			volumeName[wcslen(volumeName)] = L'\\'; // Re-add trailing backslash.
-			logf("Found volume '%s' for disk %d", volumeName, driveNumber);
+			LogInfo("Found volume '%s' for disk %d", volumeName, driveNumber);
 			break;
 		}
 
@@ -199,7 +199,7 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT PWCH
 		return FALSE;
 	}
 
-	logf("Disk initialized OK, signature: 0x%08x", PRIVATE_IMG_SIGNATURE);
+	LogInfo("Disk initialized OK, signature: 0x%08x", PRIVATE_IMG_SIGNATURE);
 
 	if (!DeviceIoControl(device, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &requiredSize, NULL))
 	{
@@ -243,11 +243,11 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT PWCH
 	*diskLetter = WaitForVolumeArrival();
 	if (*diskLetter == L'\0')
 	{
-		errorf("WaitForVolumeArrival failed");
+		LogError("WaitForVolumeArrival failed");
 		return FALSE;
 	}
 
-	logf("New volume letter: %c", *diskLetter);
+    LogInfo("New volume letter: %c", *diskLetter);
 
 	return TRUE;
 }
@@ -269,7 +269,7 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
 
 	// Open the device.
 	StringCchPrintf(driveName, RTL_NUMBER_OF(driveName), L"\\\\.\\PhysicalDrive%d", driveNumber);
-	logf("Opening %s", driveName);
+	LogDebug("Opening %s", driveName);
 
 	device = CreateFile(driveName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 	if (device == INVALID_HANDLE_VALUE)
@@ -285,19 +285,19 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
 		goto cleanup;
 	}
 
-	logf("Partition type: %d, count: %d", layout->PartitionStyle, layout->PartitionCount);
+    LogDebug("Partition type: %d, count: %d", layout->PartitionStyle, layout->PartitionCount);
 	if (layout->PartitionStyle != PARTITION_STYLE_MBR)
 	{
-		errorf("Not a MBR disk");
+        LogError("Not a MBR disk");
 		goto cleanup;
 	}
 
-	logf("MBR signature: 0x%08x", layout->Mbr.Signature);
+	LogDebug("MBR signature: 0x%08x", layout->Mbr.Signature);
 
 	if (layout->Mbr.Signature != 0)
 	{
 		// Drive is already initialized. Check if everything is OK.
-		logf("Drive is already initialized with signature 0x%08x", layout->Mbr.Signature);
+		LogInfo("Drive is already initialized with signature 0x%08x", layout->Mbr.Signature);
 
         // Don't change the signature if MBR is already there.
         // This can cause Windows to change drive number.
@@ -305,11 +305,11 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
 		// Check if the disk contains formatted volume.
 		if (DriveNumberToVolumeName(driveNumber, volumeName, RTL_NUMBER_OF(volumeName)))
 		{
-			logf("Drive contains volume: %s", volumeName);
+            LogInfo("Drive contains volume: %s", volumeName);
 			// Check if the volume is mounted.
 			if (VolumeNameToDiskLetter(volumeName, diskLetter))
 			{
-				logf("Volume is mounted as disk '%c:'", *diskLetter);
+                LogInfo("Volume is mounted as disk '%c:'", *diskLetter);
 
 				// Check the filesystem.
 				if (!GetVolumeInformation(volumeName, NULL, 0, NULL, NULL, NULL, filesystemName, RTL_NUMBER_OF(filesystemName)))
@@ -319,31 +319,31 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
 				}
 				else
 				{
-					logf("Volume '%s' filesystem: %s", volumeName, filesystemName);
+                    LogInfo("Volume '%s' filesystem: %s", volumeName, filesystemName);
 
 					if (0 != wcsncmp(L"NTFS", filesystemName, 4))
 					{
-						errorf("Volume is formatted with a wrong filesystem, reformatting");
+						LogWarning("Volume is formatted with a wrong filesystem, reformatting");
 						reinitialize = TRUE;
 					}
 					else
 					{
 						// Volume is ready.
 						CloseHandle(device);
-						logf("Volume is ready");
+                        LogInfo("Volume is ready");
 						return TRUE;
 					}
 				}
 			}
 			else
 			{
-				logf("Volume doesn't seem to be mounted, reinitializing");
+                LogInfo("Volume doesn't seem to be mounted, reinitializing");
 				reinitialize = TRUE;
 			}
 		}
 		else
 		{
-			logf("Drive doesn't contain a proper volume, proceeding with initialization");
+            LogInfo("Drive doesn't contain a proper volume, proceeding with initialization");
 			reinitialize = TRUE;
 		}
 	}
@@ -357,50 +357,50 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
 			goto cleanup;
 		}
 
-		logf("Disk size: %I64d", lengthInfo.Length.QuadPart);
+        LogInfo("Disk size: %I64d", lengthInfo.Length.QuadPart);
 
-		logf("Initializing disk %d", driveNumber);
+		LogDebug("Initializing disk %d", driveNumber);
 		if (!InitializeDisk(device, lengthInfo.Length, &newDiskLetter))
 		{
-			errorf("Failed to initialize disk");
+			LogError("Failed to initialize disk");
 			goto cleanup;
 		}
 		else
 		{
-			logf("New volume letter reported by device notification: %c", newDiskLetter);
+			LogDebug("New volume letter reported by device notification: %c", newDiskLetter);
 			// Format disk.
 			CloseHandle(device);
 			if (!FormatVolume(driveNumber))
 			{
-				errorf("Failed to format volume");
+				LogError("Failed to format volume");
 				return FALSE;
 			}
 
 			// Get the new volume name.
 			if (DriveNumberToVolumeName(driveNumber, volumeName, RTL_NUMBER_OF(volumeName)))
 			{
-				logf("New volume: %s", volumeName);
+                LogInfo("New volume: %s", volumeName);
 				// Get the disk letter to double-check.
 				if (VolumeNameToDiskLetter(volumeName, diskLetter))
 				{
 					if (*diskLetter != newDiskLetter)
 					{
-						errorf("Volume disk letter mismatch: device notification returned '%c' but actual letter is '%c'", newDiskLetter, diskLetter);
+						LogError("Volume disk letter mismatch: device notification returned '%c' but actual letter is '%c'", newDiskLetter, diskLetter);
 						return FALSE;
 					}
 
-					logf("New volume is mounted as disk '%c:'", *diskLetter);
+                    LogInfo("New volume is mounted as disk '%c:'", *diskLetter);
 					return TRUE;
 				}
 				else
 				{
-					errorf("Volume doesn't seem to be mounted");
+                    LogError("Volume doesn't seem to be mounted");
 					return FALSE;
 				}
 			}
 			else
 			{
-				errorf("Failed to format volume");
+                LogError("Failed to format volume");
 				return FALSE;
 			}
 		}

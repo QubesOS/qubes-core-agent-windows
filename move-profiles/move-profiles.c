@@ -14,8 +14,6 @@
 #include "log.h"
 
 
-#define LOG_NAME L"move-profiles"
-
 // from ntifs.h
 typedef struct _REPARSE_DATA_BUFFER
 {
@@ -81,11 +79,11 @@ DWORD EnablePrivilege(HANDLE token, const PWCHAR privilegeName)
 
     if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
     {
-        errorf("The token does not have the specified privilege");
+        LogError("The token does not have the specified privilege '%s'", privilegeName);
         return ERROR_PRIVILEGE_NOT_HELD;
     }
 
-    logf("Privilege %s enabled", privilegeName);
+    LogDebug("Privilege %s enabled", privilegeName);
 
     return ERROR_SUCCESS;
 }
@@ -100,7 +98,7 @@ DWORD SetReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath)
     DWORD status = ERROR_SUCCESS;
     HANDLE file = CreateFile(sourcePath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
 
-    logf("Creating reparse point: '%s' -> '%s'", sourcePath, targetPath);
+    LogInfo("Creating reparse point: '%s' -> '%s'", sourcePath, targetPath);
 
     if (file == INVALID_HANDLE_VALUE)
     {
@@ -113,17 +111,17 @@ DWORD SetReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath)
     rdb->ReparseTag = IO_REPARSE_TAG_SYMLINK;
     // 12 = SymbolicLinkReparseBuffer fields without PathBuffer
     // sizeof(PathBuffer) = 2*targetSize + sizeof(L"\\??\\")
-    rdb->ReparseDataLength = 12 + targetSize * 2 + 8;
+    rdb->ReparseDataLength = (USHORT)(12 + targetSize * 2 + 8);
     rdb->SymbolicLinkReparseBuffer.Flags = 0; // absolute link
     StringCchPrintf(rdb->SymbolicLinkReparseBuffer.PathBuffer, sizeof(buffer) - sizeof(REPARSE_DATA_BUFFER),
         L"%s\\??\\%s", targetPath, targetPath);
     rdb->SymbolicLinkReparseBuffer.PrintNameOffset = 0;
-    rdb->SymbolicLinkReparseBuffer.PrintNameLength = targetSize;
+    rdb->SymbolicLinkReparseBuffer.PrintNameLength = (USHORT)targetSize;
     rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset = rdb->SymbolicLinkReparseBuffer.PrintNameLength;
-    rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = targetSize + 8;
+    rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = (USHORT)(targetSize + 8);
 
-    debugf("PrintName: %.*s", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
-    debugf("SubstituteName: %.*s", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
+    LogDebug("PrintName: %.*s", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
+    LogDebug("SubstituteName: %.*s", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
 
     // 8 = fields before the union
     if (!DeviceIoControl(file, FSCTL_SET_REPARSE_POINT, buffer, rdb->ReparseDataLength + 8, NULL, 0, &size, NULL))
@@ -164,7 +162,7 @@ DWORD CopyReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL is
             rdb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(WCHAR),
             rdb->SymbolicLinkReparseBuffer.PrintNameLength);
         dest[rdb->SymbolicLinkReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
-        debugf("Symlink: '%s' -> '%s'", sourcePath, dest);
+        LogDebug("Symlink: '%s' -> '%s'", sourcePath, dest);
 
         if (!CreateSymbolicLink(targetPath, dest, isDirectory ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0))
         {
@@ -178,7 +176,7 @@ DWORD CopyReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL is
             rdb->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR),
             rdb->MountPointReparseBuffer.PrintNameLength);
         dest[rdb->MountPointReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
-        debugf("Mount point: '%s' -> '%s'", sourcePath, dest);
+        LogDebug("Mount point: '%s' -> '%s'", sourcePath, dest);
 
         if (!CreateSymbolicLink(targetPath, dest, isDirectory ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0))
         {
@@ -187,7 +185,7 @@ DWORD CopyReparsePoint(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL is
         }
     }
     else
-        logf("Unknown reparse tag 0x%x in '%s'", rdb->ReparseTag, sourcePath);
+        LogWarning("Unknown reparse tag 0x%x in '%s'", rdb->ReparseTag, sourcePath);
 
 cleanup:
     CloseHandle(file);
@@ -207,7 +205,7 @@ DWORD CopyDirectory(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL conti
     PSID owner, group;
     PACL dacl, sacl;
 
-    debugf("'%s' -> '%s'", sourcePath, targetPath);
+    LogVerbose("'%s' -> '%s'", sourcePath, targetPath);
 
     current[0] = 0; // for error reporting at the end
 
@@ -258,7 +256,7 @@ DWORD CopyDirectory(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL conti
 
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         {
-            debugf("DIR: %s", current);
+            LogVerbose("DIR: %s", current);
             // Recursively copy unless it's a reparse point.
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
             {
@@ -275,7 +273,7 @@ DWORD CopyDirectory(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL conti
         }
         else
         {
-            debugf("FILE: %s", current);
+            LogVerbose("FILE: %s", current);
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
             {
                 status = CopyReparsePoint(current, target, FALSE);
@@ -302,9 +300,9 @@ DWORD CopyDirectory(const PWCHAR sourcePath, const PWCHAR targetPath, BOOL conti
 cleanup:
     if (ERROR_SUCCESS != status)
     {
-        errorf("Failed to copy '%s' to '%s'", sourcePath, targetPath);
+        LogError("Failed to copy '%s' to '%s'", sourcePath, targetPath);
         if (*current)
-            errorf("Current file: '%s', target: '%s'", current, target);
+            LogError("Current file: '%s', target: '%s'", current, target);
     }
     if (sd)
         LocalFree(sd);
@@ -323,7 +321,7 @@ DWORD DeleteDirectory(const PWCHAR sourcePath)
     BOOL loop;
     DWORD status = ERROR_SUCCESS, i;
 
-    debugf("+'%s'", sourcePath);
+    LogVerbose("+'%s'", sourcePath);
 
     current[0] = 0; // for error reporting at the end
 
@@ -350,7 +348,7 @@ DWORD DeleteDirectory(const PWCHAR sourcePath)
 
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         {
-            debugf("DIR: %s", current);
+            LogVerbose("DIR: %s", current);
             // Recursively delete unless it's a reparse point.
             if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
             {
@@ -369,7 +367,7 @@ DWORD DeleteDirectory(const PWCHAR sourcePath)
         }
         else
         {
-            debugf("FILE: %s", current);
+            LogVerbose("FILE: %s", current);
             // Reparse points don't matter for file deletion, it only deletes the source.
             if (!DeleteFile(current))
             {
@@ -385,16 +383,16 @@ DWORD DeleteDirectory(const PWCHAR sourcePath)
 
     FindClose(findObject);
 
-    debugf("-'%s'", sourcePath);
+    LogVerbose("-'%s'", sourcePath);
     if (!RemoveDirectory(sourcePath))
         status = perror("RemoveDirectory");
 
 cleanup:
     if (ERROR_SUCCESS != status)
     {
-        errorf("Failed to delete '%s'", sourcePath);
+        LogError("Failed to delete '%s'", sourcePath);
         if (*current)
-            errorf("Current file: '%s'", current);
+            LogError("Current file: '%s'", current);
     }
     LocalFree(sourceMask);
     LocalFree(current);
@@ -413,22 +411,20 @@ int wmain(int argc, PWCHAR argv[])
     WCHAR toPath[] = L"\\\\?\\d:\\Users"; // template
     HANDLE token;
 
-    log_init_default(LOG_NAME);
-
     if (argc < 2)
     {
-        errorf("Usage: %s <xen/vbd device ID that represents private.img>", argv[0]);
+        LogError("Usage: %s <xen/vbd device ID that represents private.img>", argv[0]);
         return 1;
     }
 
     xenVbdId = wcstoul(argv[1], NULL, 10);
     if (xenVbdId == 0 || xenVbdId == ULONG_MAX)
     {
-        errorf("Invalid xen/vbd device ID: %s", argv[1]);
+        LogError("Invalid xen/vbd device ID: %s", argv[1]);
         return 2;
     }
 
-    logf("xen/vbd device ID: %lu", xenVbdId);
+    LogInfo("xen/vbd device ID: %lu", xenVbdId);
 
     // Enable privileges needed for bypassing file security & for ACL manipulation.
     OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &token);
@@ -439,14 +435,14 @@ int wmain(int argc, PWCHAR argv[])
 
     if (!GetPrivateImgDriveNumber(xenVbdId, &driveNumber))
     {
-        errorf("Failed to get drive number for private.img");
+        LogError("Failed to get drive number for private.img");
         return 3;
     }
 
     // This will replace drive letter in toPath.
     if (!PreparePrivateVolume(driveNumber, &toPath[LONG_PATH_PREFIX_LENGTH]))
     {
-        errorf("Failed to initialize private.img");
+        LogError("Failed to initialize private.img");
         return 4;
     }
 
@@ -461,7 +457,7 @@ int wmain(int argc, PWCHAR argv[])
 
     if (GetFileAttributes(usersPath) & FILE_ATTRIBUTE_REPARSE_POINT)
     {
-        logf("Users directory (%s) is already a reparse point, exiting", usersPath);
+        LogInfo("Users directory (%s) is already a reparse point, exiting", usersPath);
         // TODO: make sure it points to private.img?
         return 0;
     }
@@ -476,22 +472,22 @@ int wmain(int argc, PWCHAR argv[])
     CoTaskMemFree(usersPath);
 
     // Copy users directory to the private volume.
-    logf("Copying '%s' to '%s'", fromPath, toPath);
+    LogInfo("Copying '%s' to '%s'", fromPath, toPath);
     status = CopyDirectory(fromPath, toPath, FALSE);
 
     if (ERROR_SUCCESS != status)
     {
-        errorf("Copy failed: %d", status);
+        LogError("Copy failed: %d", status);
         return 8;
     }
 
-    logf("Copy OK, deleting old Users directory");
+    LogInfo("Copy OK, deleting old Users directory");
 
     status = DeleteDirectory(fromPath);
 
     if (status != ERROR_SUCCESS || PathFileExists(fromPath))
     {
-        errorf("Delete failed: %d", status);
+        LogWarning("Delete failed: %d", status);
 
         // This can happen for some reason even if deletion of everything inside c:\users succeeds.
         // RemoveDirectory fails with ACCESS_DENIED, (NTSTATUS) 0xc0000121 - An attempt has been made to remove a file or directory that cannot be deleted.
@@ -504,23 +500,24 @@ int wmain(int argc, PWCHAR argv[])
         if (ERROR_SUCCESS != SetReparsePoint(fromPath + LONG_PATH_PREFIX_LENGTH, toPath + LONG_PATH_PREFIX_LENGTH))
         {
             // Everything failed, try to copy old Users back.
+            LogError("SetReparsePoint failed, giving up");
             CopyDirectory(toPath, fromPath, TRUE);
             return 9;
         }
 
         // We should have a working junction here.
-        logf("Junction created, '%s'->'%s'", fromPath, toPath);
+        LogInfo("Junction created, '%s'->'%s'", fromPath, toPath);
         return ERROR_SUCCESS;
     }
 
-    logf("Delete OK, creating junction point");
+    LogInfo("Delete OK, creating junction point");
     // This call requires that fromPath directory doesn't exist.
     if (!CreateSymbolicLink(fromPath, toPath, SYMBOLIC_LINK_FLAG_DIRECTORY))
     {
         return perror("CreateSymbolicLink");
     }
 
-    logf("Junction created, '%s'->'%s'", fromPath, toPath);
+    LogInfo("Junction created, '%s'->'%s'", fromPath, toPath);
 
     return ERROR_SUCCESS;
 }

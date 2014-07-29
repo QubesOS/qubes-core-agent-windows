@@ -9,8 +9,6 @@
 
 #include "log.h"
 
-#define LOG_NAME L"register-startup-script"
-
 // TODO: does order matter?
 WCHAR scriptGuids[] = L"{42B5FAAE-6536-11D2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}";
 WCHAR scriptGuidsFull[] = L"[{42B5FAAE-6536-11D2-AE5A-0000F87571E3}{40B6664F-4972-11D1-A7CA-0000F87571E3}]";
@@ -39,7 +37,7 @@ DWORD InitGPO(void)
     status = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (status != S_OK)
     {
-        errorf("CoInitializeEx failed: 0x%08x", status);
+        LogError("CoInitializeEx failed: 0x%08x", status);
         goto cleanup;
     }
 
@@ -47,21 +45,21 @@ DWORD InitGPO(void)
     status = CoCreateInstance(&CLSID_GroupPolicyObject, NULL, CLSCTX_INPROC_SERVER, &IID_IGroupPolicyObject, &gpo);
     if (status != S_OK)
     {
-        errorf("CoCreateInstance(CLSID_GroupPolicyObject) failed: 0x%08x", status);
+        LogError("CoCreateInstance(CLSID_GroupPolicyObject) failed: 0x%08x", status);
         goto cleanup;
     }
 
     status = gpo->lpVtbl->OpenLocalMachineGPO(gpo, GPO_OPEN_LOAD_REGISTRY);
     if (status != S_OK)
     {
-        errorf("OpenLocalMachineGPO failed: 0x%08x", status);
+        LogError("OpenLocalMachineGPO failed: 0x%08x", status);
         goto cleanup;
     }
 
     status = gpo->lpVtbl->GetRegistryKey(gpo, GPO_SECTION_MACHINE, &machineKey);
     if (status != S_OK)
     {
-        errorf("GetRegistryKey failed: 0x%08x", status);
+        LogError("GetRegistryKey failed: 0x%08x", status);
         goto cleanup;
     }
 
@@ -86,7 +84,7 @@ DWORD InitGPO(void)
     status = gpo->lpVtbl->Save(gpo, TRUE, TRUE, &extGuid, &snapGuid);
     if (status != S_OK)
     {
-        errorf("Save failed: 0x%08x", status);
+        LogError("Save failed: 0x%08x", status);
         goto cleanup;
     }
 
@@ -114,8 +112,6 @@ int wmain(int argc, WCHAR* argv[])
     PWCHAR str;
     DWORD status;
 
-    log_init_default(LOG_NAME);
-
     if (S_OK != SHGetKnownFolderPath(&FOLDERID_System, 0, NULL, &systemPath))
     {
         perror("SHGetKnownFolderPath(FOLDERID_System)");
@@ -124,7 +120,7 @@ int wmain(int argc, WCHAR* argv[])
 
     if (argc < 3)
     {
-        errorf("usage: %s <startup script path> <script arguments>", argv[0]);
+        LogError("usage: %s <startup script path> <script arguments>", argv[0]);
         return 2;
     }
 
@@ -158,8 +154,8 @@ int wmain(int argc, WCHAR* argv[])
         return 3;
     }
 
-    logf("gpt.ini: %s", gptPath);
-    logf("scripts.ini: %s", scriptsPath);
+    LogDebug("gpt.ini: %s", gptPath);
+    LogDebug("scripts.ini: %s", scriptsPath);
 
     // Write startup script information.
     // TODO: check if there are any existing entries
@@ -176,7 +172,7 @@ int wmain(int argc, WCHAR* argv[])
 
     // Get active policies.
     GetPrivateProfileString(L"General", L"gPCMachineExtensionNames", NULL, buf, RTL_NUMBER_OF(buf), gptPath);
-    logf("policies: '%s'", buf);
+    LogDebug("policies: '%s'", buf);
     // Append script guids if not there.
     if (0 == wcsstr(buf, scriptGuids))
     {
@@ -197,7 +193,7 @@ int wmain(int argc, WCHAR* argv[])
             policyBuf = malloc(policySize);
             if (!policyBuf)
             {
-                errorf("No memory");
+                LogError("No memory");
                 return 6;
             }
             ZeroMemory(policyBuf, policySize);
@@ -205,7 +201,8 @@ int wmain(int argc, WCHAR* argv[])
             str = wcsrchr(policyBuf, L']'); // rescan in the new buffer
             memcpy(str, scriptGuids, sizeof(scriptGuids)); // add script guids
             policyBuf[wcslen(policyBuf)] = L']'; // add trailing bracket
-            logf("gPCMachineExtensionNames=%s", policyBuf);
+            
+            LogDebug("gPCMachineExtensionNames=%s", policyBuf);
             if (!WritePrivateProfileString(L"General", L"gPCMachineExtensionNames", policyBuf, gptPath))
             {
                 perror("WritePrivateProfileString(gPCMachineExtensionNames)");
@@ -219,7 +216,7 @@ int wmain(int argc, WCHAR* argv[])
     // if the key is not present this will be 0
     gptVersion++;
     StringCchPrintf(buf, RTL_NUMBER_OF(buf), L"%lu", gptVersion);
-    logf("Version: %lu", gptVersion);
+    LogDebug("Version: %lu", gptVersion);
     if (!WritePrivateProfileString(L"General", L"Version", buf, gptPath))
     {
         perror("WritePrivateProfileString(Version)");

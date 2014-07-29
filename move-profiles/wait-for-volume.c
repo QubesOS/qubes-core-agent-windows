@@ -91,25 +91,25 @@ static INT_PTR WINAPI DevNotifyWndProc(
 							{
 							case DBT_DEVICEARRIVAL:
 								arrival = (PDEV_BROADCAST_HDR)lParam;
-								logf("DBT_DEVICEARRIVAL: type %d", arrival->dbch_devicetype);
+								LogDebug("DBT_DEVICEARRIVAL: type %d", arrival->dbch_devicetype);
 								if (arrival->dbch_devicetype == DBT_DEVTYP_VOLUME)
 								{
 									// New volume mounted.
 									volume = (PDEV_BROADCAST_VOLUME)lParam;
-									logf("mask: 0x%x", volume->dbcv_unitmask);
+                                    LogDebug("mask: 0x%x", volume->dbcv_unitmask);
 									// Each bit corresponds to disk letter for the newly mounted volume.
 									g_NewVolumeBitmask = volume->dbcv_unitmask;
 									goto close;
 								}
 								break;
 							case DBT_DEVICEREMOVECOMPLETE:
-								logf("DBT_DEVICEREMOVECOMPLETE");
+                                LogDebug("DBT_DEVICEREMOVECOMPLETE");
 								break;
 							case DBT_DEVNODES_CHANGED:
-								logf("DBT_DEVNODES_CHANGED");
+                                LogDebug("DBT_DEVNODES_CHANGED");
 								break;
 							default:
-								logf("Unknown device change: %d", wParam);
+								LogWarning("Unknown device change: %d", wParam);
 								break;
 							}
 	}
@@ -223,7 +223,7 @@ WCHAR WaitForVolumeArrival(void)
 	// 60 seconds should be more than enough to initialize a volume (without format).
 	if (WaitForSingleObject(notifyThread, 60000) != WAIT_OBJECT_0)
 	{
-		errorf("wait for the notify thread failed or timed out");
+        LogError("wait for the notify thread failed or timed out");
 		TerminateThread(notifyThread, 0);
 		return 0;
 	}
@@ -235,10 +235,10 @@ WCHAR WaitForVolumeArrival(void)
 		return 0;
 	}
 
-	logf("Notify thread exit code: %d", exitCode);
+	LogDebug("Notify thread exit code: %d", exitCode);
 	if (exitCode != 0)
 	{
-		errorf("Notify thread failed");
+        LogError("Notify thread failed");
 		return 0;
 	}
 

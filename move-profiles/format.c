@@ -12,69 +12,69 @@ static BOOLEAN WINAPI FormatExCallback(FILE_SYSTEM_CALLBACK_COMMAND Command, DWO
 	case FCC_DONE:
 		if (*(BOOLEAN*)pData == FALSE)
 		{
-			errorf("Error while formatting");
+			LogError("Error while formatting");
 			g_FormatStatus = 1;
 		}
 		else
 		{
-			logf("format done");
+			LogInfo("format done");
 			g_FormatStatus = 0;
 		}
 		break;
 
 	case FCC_STRUCTURE_PROGRESS:
-		logf("FCC_STRUCTURE_PROGRESS");
+		LogDebug("FCC_STRUCTURE_PROGRESS");
 		break;
 
 	case FCC_DONE_WITH_STRUCTURE:
-		logf("FCC_DONE_WITH_STRUCTURE");
+        LogDebug("FCC_DONE_WITH_STRUCTURE");
 		break;
 
 	case FCC_INCOMPATIBLE_FILE_SYSTEM:
-		errorf("Incompatible File System");
+        LogError("Incompatible File System");
 		g_FormatStatus = 1;
 		break;
 	case FCC_ACCESS_DENIED:
-		errorf("Access denied");
+        LogError("Access denied");
 		g_FormatStatus = ERROR_ACCESS_DENIED;
 		break;
 	case FCC_MEDIA_WRITE_PROTECTED:
-		errorf("Media is write protected");
+        LogError("Media is write protected");
 		g_FormatStatus = ERROR_WRITE_PROTECT;
 		break;
 	case FCC_VOLUME_IN_USE:
-		errorf("Volume is in use");
+        LogError("Volume is in use");
 		g_FormatStatus = ERROR_DEVICE_IN_USE;
 		break;
 	case FCC_DEVICE_NOT_READY:
-		errorf("The device is not ready");
+        LogError("The device is not ready");
 		g_FormatStatus = ERROR_NOT_READY;
 		break;
 	case FCC_CANT_QUICK_FORMAT:
-		errorf("Cannot quick format this volume");
+        LogError("Cannot quick format this volume");
 		g_FormatStatus = 1;
 		break;
 	case FCC_BAD_LABEL:
-		errorf("Bad label");
+        LogError("Bad label");
 		g_FormatStatus = ERROR_LABEL_TOO_LONG;
 		break;
 		break;
 	case FCC_CLUSTER_SIZE_TOO_BIG:
 	case FCC_CLUSTER_SIZE_TOO_SMALL:
-		errorf("Unsupported cluster size");
+        LogError("Unsupported cluster size");
 		g_FormatStatus = 1;
 		break;
 	case FCC_VOLUME_TOO_BIG:
 	case FCC_VOLUME_TOO_SMALL:
-		errorf("Volume is too %s", (Command == FCC_VOLUME_TOO_BIG) ? "big" : "small");
+        LogError("Volume is too %s", (Command == FCC_VOLUME_TOO_BIG) ? "big" : "small");
 		g_FormatStatus = 1;
 		break;
 	case FCC_NO_MEDIA_IN_DRIVE:
-		errorf("No media in drive");
+        LogError("No media in drive");
 		g_FormatStatus = ERROR_NO_MEDIA_IN_DRIVE;
 		break;
 	default:
-		errorf("Received unhandled command 0x02%X", Command);
+        LogWarning("Received unhandled command 0x02%X", Command);
 		break;
 	}
 	return (!IS_ERROR(g_FormatStatus));
@@ -90,7 +90,7 @@ BOOL FormatVolume(IN DWORD diskNumber)
 	{
 		// Remove trailing backslash, FormatEx fails with it. Hurrah for consistency...
 		volumeName[wcslen(volumeName) - 1] = 0;
-		logf("Formatting volume: %s", volumeName);
+        LogInfo("Formatting volume: %s", volumeName);
 
 		// Proceed with format.
 
