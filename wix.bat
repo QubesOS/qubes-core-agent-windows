@@ -18,4 +18,9 @@ SET MSINAME=core-agent-windows-%MSIOS%%MSIARCH%%MSIBUILD%.msm
 "%WIX%\bin\candle" installer.wxs -arch %MSIARCH% -ext "%WIX%\bin\WixUIExtension.dll" -ext "%WIX%\bin\WixDifxAppExtension.dll" -ext "%WIX%\bin\WixIIsExtension.dll"
 "%WIX%\bin\light.exe" -o %MSINAME% installer.wixobj %DIFXLIB% -ext "%WIX%\bin\WixUIExtension.dll" -ext "%WIX%\bin\WixDifxAppExtension.dll" -ext "%WIX%\bin\WixIIsExtension.dll"
 
+SET MSINAME=move-profiles-%MSIOS%%MSIARCH%%MSIBUILD%.msm
+
+"%WIX%\bin\candle" move-profiles.wxs -arch %MSIARCH% -ext "%WIX%\bin\WixUIExtension.dll" -ext "%WIX%\bin\WixDifxAppExtension.dll" -ext "%WIX%\bin\WixIIsExtension.dll"
+"%WIX%\bin\light.exe" -o %MSINAME% move-profiles.wixobj %DIFXLIB% -ext "%WIX%\bin\WixUIExtension.dll" -ext "%WIX%\bin\WixDifxAppExtension.dll" -ext "%WIX%\bin\WixIIsExtension.dll"
+
 rem %SIGNTOOL% sign /v /f %CERT_FILENAME% %CERT_PASSWORD_FLAG% /t http://timestamp.verisign.com/scripts/timestamp.dll %MSINAME%

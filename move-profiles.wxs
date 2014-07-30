@@ -1,0 +1,53 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+  <?if $(env._BUILDARCH) = x86 ?>
+    <?define ARCHDIR = i386 ?>
+    <?define PFILESDIR = ProgramFilesFolder ?>
+  <?elseif $(env._BUILDARCH) = AMD64 ?>
+    <?define ARCHDIR = amd64 ?>
+    <?define PFILESDIR = ProgramFiles64Folder ?>
+  <?endif ?>
+
+  <Module  Id='moveProfiles'
+    Language='1033' Codepage='1252' Version='$(env.VERSION)'>
+
+    <Package Id='{8BA696C6-3769-441A-A54D-B40CF7CC271F}' Keywords='Installer' Description="Qubes Agent for Windows"
+      Comments='no comment' Manufacturer='Invisible Things Lab' InstallScope='perMachine'
+      InstallerVersion='200' Languages='1033' SummaryCodepage='1252'
+      InstallPrivileges="elevated" />
+
+    <Configuration Name="ProductFolder" Format="Key" Type="Identifier" DefaultValue="QubesProgramFilesDir"
+      Description="Installation directory" DisplayName="Installation directory"/>
+    <Substitution Table="Directory" Column="Directory_Parent"
+      Row="BinDir" Value="[=ProductFolder]"/>
+
+    <Directory Id='TARGETDIR' Name='SourceDir'>
+      <Directory Id='$(var.PFILESDIR)'>
+        <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
+          <Directory Id='QubesProgramFilesDir' Name='Qubes'>
+            <Directory Id='BinDir' Name='bin'>
+              <Component Id='MoveProfiles' Guid='220A22F3-0B73-4A4C-B825-53132A88D1DF'>
+                <File Id='move_profiles.exe' Name='move-profiles.exe' DiskId='1' Source='move-profiles\bin\$(var.ARCHDIR)\move-profiles.exe' KeyPath="no" />
+              </Component>
+              <Component Id='MoveProfilesBootstrap' Guid='C4325378-B946-4C6C-A685-F3E39A10AF20'>
+                <File Id='move_profiles_bootstrap.exe' Name='move-profiles-bootstrap.exe' DiskId='1' Source='move-profiles-bootstrap\bin\$(var.ARCHDIR)\move-profiles-bootstrap.exe' KeyPath="no" />
+              </Component>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id='SendToFolder'/>
+    </Directory>
+
+    <Binary Id='RegisterScriptExe' SourceFile='register-startup-script\bin\$(var.ARCHDIR)\register-startup-script.exe' />
+
+    <CustomAction Id='RegisterScript' Return='check' Impersonate='no' Execute='deferred' BinaryKey='RegisterScriptExe' ExeCommand='"[BinDir]\move-profiles-bootstrap.exe" "\"\"[BinDir]\move-profiles.exe 51728\"\""' />
+
+    <InstallExecuteSequence>
+      <Custom Action='RegisterScript' After='InstallFiles'>
+        NOT Installed
+      </Custom>
+    </InstallExecuteSequence>
+
+  </Module>
+</Wix>
