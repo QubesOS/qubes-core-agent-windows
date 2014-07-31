@@ -18,4 +18,4 @@ SOURCES=set-gui-mode.c
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \
         $(SDK_LIB_PATH)\user32.lib \
-        ..\..\libs\*\qubes-utils.lib \
+        $(QUBES_LIBS)\windows-utils.lib \

@@ -12,14 +12,13 @@ INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
                     ..\include; \
                     ..\..\include; \
+                    $(QUBES_INCLUDES);
 
 SOURCES=clipboard-paste.c
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \
         $(SDK_LIB_PATH)\user32.lib \
-        ..\..\libs\*\qubes-utils.lib \
+        $(SDK_LIB_PATH)\shlwapi.lib \
+        $(QUBES_LIBS)\windows-utils.lib \
         $(SDK_LIB_PATH)\userenv.lib
-
-
-

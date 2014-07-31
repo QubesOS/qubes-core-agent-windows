@@ -15,7 +15,7 @@ BOOL get_current_user(PCHAR *ppUserName) {
 	BOOL				bFound;
 
 	if (FAILED(WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dSessionCount))) {
-		fprintf(stderr, "Failed to enumerate sessions: 0x%x\n", GetLastError());
+        perror("WTSEnumerateSessionsA");
 		return FALSE;
 	}
 	bFound = FALSE;
@@ -25,12 +25,10 @@ BOOL get_current_user(PCHAR *ppUserName) {
 							pSessionInfo[i].SessionId, WTSUserName,
 							ppUserName,
 							&cbUserName))) {
-				fprintf(stderr, "WTSQuerySessionInformation failed: 0x%x\n", GetLastError());
-				goto cleanup;
+                perror("WTSQuerySessionInformationA");
+                goto cleanup;
 			}
-#ifdef DBG
-			fprintf(stderr, "Found session: %s\n", *ppUserName);
-#endif
+			LogDebug("Found session: %S\n", *ppUserName);
 			bFound = TRUE;
 		}
 	}
@@ -47,13 +45,13 @@ BOOL prepare_exe_path(PTCHAR buffer, PTCHAR exe_name) {
 
 	memset(buffer, 0, sizeof(buffer));
 	if (!GetModuleFileName(NULL, buffer, MAX_PATH)) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): GetModuleFileName()");
+		perror("GetModuleFileName");
 		return FALSE;
 	}
 	// cut off file name (qrexec_agent.exe)
 	ptSeparator = _tcsrchr(buffer, L'\\');
 	if (!ptSeparator) {
-		lprintf(__FUNCTION__ "(): Cannot find dir containing qrexec_agent.exe\n");
+		LogError("Cannot find dir containing qrexec_agent.exe\n");
 		return FALSE;
 	}
 	// Leave trailing backslash 
@@ -99,7 +97,7 @@ BOOL notify_dom0() {
 			NULL,
 			&si,
 			&pi)) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): Failed to start qrexec-client-vm.exe");
+        perror("CreateProcess(qrexec-client-vm.exe)");
 		return FALSE;
 	}
 
@@ -124,29 +122,29 @@ LONG advertise_tools() {
 
 	/* for now mostly hardcoded values, but this can change in the future */
 	if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "version", "1", 1)) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'version' entry");
+		perror("write 'version' entry");
 		goto cleanup;
 	}
 	if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "os", "Windows", strlen("Windows"))) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'os' entry");
-		goto cleanup;
+        perror("write 'os' entry");
+        goto cleanup;
 	}
 	if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "qrexec", "1", 1)) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'qrexec' entry");
-		goto cleanup;
+        perror("write 'qrexec' entry");
+        goto cleanup;
 	}
 
 	gui_present = check_gui_presence();
 
 	if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "gui", gui_present ? "1" : "0", 1)) {
-		lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'gui' entry");
-		goto cleanup;
+        perror("write 'gui' entry");
+        goto cleanup;
 	}
 
 	if (get_current_user(&pszUserName)) {
 		if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "default-user", pszUserName, strlen(pszUserName))) {
-			lprintf_err(GetLastError(), __FUNCTION__ "(): failed to write 'default-user' entry");
-			WTSFreeMemory(pszUserName);
+            perror("write 'default-user' entry");
+            WTSFreeMemory(pszUserName);
 			goto cleanup;
 		}
 		WTSFreeMemory(pszUserName);

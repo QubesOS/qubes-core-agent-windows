@@ -21,7 +21,6 @@
 
 #include <windows.h>
 #include "libvchan.h"
-#include <stdio.h>
 #include <stdlib.h>
 
 struct libvchan *ctrl;

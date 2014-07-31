@@ -12,10 +12,11 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
                     ..\include; \
+                    $(QUBES_INCLUDES);
 
-SOURCES=qrexec-client-vm.c log.c
+SOURCES=qrexec-client-vm.c
 
 TARGETLIBS=\
-           $(SDK_LIB_PATH)\kernel32.lib \
-           ..\libs\*\qubes-utils.lib
-
+            $(SDK_LIB_PATH)\kernel32.lib \
+            $(SDK_LIB_PATH)\shlwapi.lib \
+            $(QUBES_LIBS)\windows-utils.lib

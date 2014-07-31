@@ -14,7 +14,7 @@ INCLUDES=$(INCLUDES); \
                     ..\include; \
                     $(QUBES_INCLUDES);
 
-SOURCES=qrexec-agent.c txrx-vchan.c service.c getopt.c log.c errors.mc errors.rc exec.c pipe-server.c advertise-tools.c
+SOURCES=qrexec-agent.c txrx-vchan.c service.c pipe-server.c advertise-tools.c
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \
@@ -28,7 +28,5 @@ TARGETLIBS=\
 	    $(QUBES_LIBS)\gntmem.lib \
 	    $(QUBES_LIBS)\evtchn.lib \
 	    $(QUBES_LIBS)\libxs.lib \
-	..\libs\*\qubes-utils.lib \
-    $(QUBES_LIBS)\libvchan.lib
-
-
+        $(QUBES_LIBS)\libvchan.lib \
+        $(QUBES_LIBS)\windows-utils.lib

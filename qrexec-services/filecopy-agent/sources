@@ -11,7 +11,8 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
                     ..\filecopy-common; \
-                    ..\..\include;
+                    ..\..\include; \
+                    $(QUBES_INCLUDES);
     
 SOURCES=qfile-agent.c gui-progress.c qfile-agent.rc
 
@@ -22,7 +23,7 @@ TARGETLIBS=\
         $(SDK_LIB_PATH)\Shlwapi.lib \
         $(SDK_LIB_PATH)\User32.lib \
         ..\libs\*\filecopy-common.lib \
-        ..\..\libs\*\qubes-utils.lib \
+        $(QUBES_LIBS)\windows-utils.lib \
         $(SDK_LIB_PATH)\Shell32.lib \
         $(SDK_LIB_PATH)\Comctl32.lib
 

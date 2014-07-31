@@ -1,9 +1,7 @@
 #pragma once
 #include <windows.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <tchar.h>
-#include <strsafe.h>
 #include <lmcons.h>
 #include "common.h"
 #include "qrexec.h"
@@ -11,9 +9,9 @@
 #include "glue.h"
 #include "service.h"
 #include "getopt.h"
-#include "errors.h"
 #include "exec.h"
 #include "pipe-server.h"
+#include <strsafe.h>
 
 
 typedef enum {

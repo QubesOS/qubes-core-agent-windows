@@ -11,7 +11,8 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
                     ..\filecopy-common; \
-                    ..\..\include;
+                    ..\..\include; \
+                    $(QUBES_INCLUDES);
 
 SOURCES=wait-for-logon.c
 
@@ -23,6 +24,6 @@ TARGETLIBS=\
         $(SDK_LIB_PATH)\Wtsapi32.lib \
         $(SDK_LIB_PATH)\ole32.lib \
         ..\libs\*\filecopy-common.lib \
-        ..\..\libs\*\qubes-utils.lib \
+        $(QUBES_LIBS)\windows-utils.lib \
         $(SDK_LIB_PATH)\Shell32.lib
 

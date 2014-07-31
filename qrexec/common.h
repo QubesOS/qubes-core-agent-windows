@@ -1,6 +1,5 @@
 #pragma once
 
-
 #ifndef _PREFAST_
 #pragma warning(disable:4068)
 #endif
@@ -10,16 +9,11 @@
 #define SERVICE_NAME	TEXT("qrexec_agent")
 #define DEFAULT_USER_PASSWORD_UNICODE	L"userpass"
 
-#ifdef DBG
-#define LOG_FILE		TEXT("c:\\qrexec_agent.log")
-#endif
-
 #define	TRIGGER_PIPE_NAME	TEXT("\\\\.\\pipe\\qrexec_trigger")
 
 //#define DISPLAY_CONSOLE_OUTPUT
 
 //#define START_SERVICE_AFTER_INSTALLATION
-
 
 // wr_ring_size[=1024] - sizeof(hdr)[=12]
 #define READ_BUFFER_SIZE	1012
