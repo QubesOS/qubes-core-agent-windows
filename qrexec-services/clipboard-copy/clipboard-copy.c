@@ -4,6 +4,7 @@
 #include <strsafe.h>
 #include <stdlib.h>
 #include "utf8-conv.h"
+#include "log.h"
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -13,7 +14,7 @@ int write_all(HANDLE fd, void *buf, int size)
     int ret;
     while (written < size) {
         if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
-            // some error handler?
+            perror("WriteFile");
             return 0;
         }
         written += ret;
@@ -33,28 +34,34 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
 		return FALSE;
 
 	if (!OpenClipboard(hWin))
+	{
+		perror("OpenClipboard");
 		return FALSE;
+	}
 
 	hglb = GetClipboardData(CLIPBOARD_FORMAT);
 	if (!hglb) {
+		perror("GetClipboardData");
 		CloseClipboard();
 		return FALSE;
 	}
 
 	lpwstr = GlobalLock(hglb);
 	if (!lpwstr) {
+		perror("GlobalLock");
 		CloseClipboard();
 		return FALSE;
 	}
 
 	if (FAILED(ConvertUTF16ToUTF8(lpwstr, &lpstr, &cbStr))) {
+		perror("ConvertUTF16ToUTF8");
 		GlobalUnlock(hglb);
 		CloseClipboard();
 		return FALSE;
 	}
 
 	if (!write_all(hOutput, lpstr, cbStr)) {
-		// some error handler?
+		LogError("write failed");
 		GlobalUnlock(hglb); 
 		CloseClipboard();
 		return FALSE;
@@ -71,13 +78,13 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 
 	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	if (hStdOut == INVALID_HANDLE_VALUE) {
-		// some error handler?
+		perror("GetStdHandle");
 		return 1;
 	}
 	if (!getClipboard(NULL, hStdOut)) {
-		// some error handler?
 		return 1;
 	}
 
+	LogDebug("all ok");
 	return 0; 	
 }

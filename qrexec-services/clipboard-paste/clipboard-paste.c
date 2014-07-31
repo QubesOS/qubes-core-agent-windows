@@ -3,8 +3,8 @@
 #include <Shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include "utf8-conv.h"
+#include "log.h"
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -25,7 +25,6 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
         }
         got_read += ret;
     }
-//      fprintf(stderr, "read %d bytes\n", size);
     return got_read;
 }
 
@@ -39,24 +38,26 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 
 	uRead = ReadUntilEOF(hInput, lpStr, sizeof(lpStr)-1);
 	if (uRead < 0) {
-		fprintf(stderr, "failed to read stdin: %d\n", GetLastError());
+		perror("ReadUntilEOF");
 		return FALSE;
 	}
 
 	lpStr[uRead] = '\0';
 
 	if (FAILED(ConvertUTF8ToUTF16(lpStr, &pwszUtf16, &cchwStr))) {
-		fprintf(stderr, "failed to convert text from UTF-8\n");
+		perror("ConvertUTF8ToUTF16");
 		return FALSE;
 	}
 
 	hglb = GlobalAlloc(GMEM_MOVEABLE, (cchwStr+1) * sizeof(WCHAR));
 	if (!hglb) {
+		perror("GlobalAlloc");
 		return FALSE;
 	}
 
 	pwszUtf16dest = GlobalLock(hglb);
 	if (!pwszUtf16dest) {
+		perror("GlobalLock");
 		GlobalFree(hglb);
 		return FALSE;
 	}
@@ -67,17 +68,20 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 	GlobalUnlock(hglb);
 
 	if (!OpenClipboard(hWin)) {
+		perror("OpenClipboard");
 		GlobalFree(hglb);
 		return FALSE;
 	}
 
 	if (!EmptyClipboard()) {
+		perror("EmptyClipboard");
 		GlobalFree(hglb);
 		CloseClipboard();
 		return FALSE;
 	}
 
 	if (!SetClipboardData(CLIPBOARD_FORMAT, hglb)) {
+		perror("SetClipboardData");
 		GlobalFree(hglb);
 		CloseClipboard();
 		return FALSE;
@@ -86,7 +90,6 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
 	CloseClipboard();
 	return TRUE;
 }
-
 
 HWND createMainWindow(HINSTANCE hInst)
 {
@@ -108,6 +111,7 @@ HWND createMainWindow(HINSTANCE hInst)
 
 	windowClass = RegisterClassEx(&wc);
 	if (!windowClass) {
+		perror("RegisterClassEx");
 		return NULL;
 	}
 
@@ -130,13 +134,13 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 
 	hStdIn = GetStdHandle(STD_INPUT_HANDLE);
 	if (hStdIn == INVALID_HANDLE_VALUE) {
-		// some error handler?
+		perror("GetStdHandle");
 		return 1;
 	}
 
 	hWin = createMainWindow(hInst);
 	if (!hWin) {
-		fprintf(stderr, "create window failed: %d\n", GetLastError());
+		perror("createMainWindow");
 		return 1;
 	}
 
