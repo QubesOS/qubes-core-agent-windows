@@ -211,7 +211,7 @@ ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClient
 	if (!pClientInfo || !pparams || !pCpr)
 		return ERROR_INVALID_PARAMETER;
 
-	LogDebug("client_id %d: Got the params '%s', vm '%s'\n", client_id, pparams->exec_index, pparams->target_vmname);
+	LogDebug("client_id %d: Got the params '%S', vm '%S'\n", client_id, pparams->exec_index, pparams->target_vmname);
 
 	if (CPR_TYPE_ERROR_CODE == pCpr->bType) {
 
@@ -577,7 +577,7 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
 				g_Pipes[i].fPendingIO = FALSE;
 				g_Pipes[i].uState = STATE_WAITING_FOR_DAEMON_DECISION;
 
-				LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %s, %s\n", g_Pipes[i].params.exec_index, g_Pipes[i].params.target_vmname);
+				LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %S, %S\n", g_Pipes[i].params.exec_index, g_Pipes[i].params.target_vmname);
 
 				uResult = SendParametersToDaemon(i);
 				if (ERROR_SUCCESS != uResult) {
