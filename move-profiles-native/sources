@@ -1,0 +1,21 @@
+TARGETNAME=move-profiles
+TARGETTYPE=PROGRAM
+UMTYPE=nt
+USE_NTDLL=1
+
+C_DEFINES = \
+    $(C_DEFINES) \
+    /D_UNICODE \
+    /DUNICODE \
+    /DDBG
+
+MINWIN_SDK_LIB_PATH = $(SDK_LIB_PATH)
+
+INCLUDES = \
+    $(DDK_INC_PATH);
+
+SOURCES = move-profiles.c io.c
+
+TARGETLIBS = \
+    $(DDK_LIB_PATH)\ntdll.lib \
+    $(DDK_LIB_PATH)\nt.lib
