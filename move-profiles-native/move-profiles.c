@@ -111,7 +111,15 @@ NTSTATUS main(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
 {
     NTSTATUS status;
 
+    DisplayString(L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
+    Sleep(1000);
+
     g_Heap = InitHeap();
+    if (!g_Heap)
+    {
+        status = STATUS_NO_MEMORY;
+        goto cleanup;
+    }
 
     status = EnablePrivileges();
     if (!NT_SUCCESS(status))
@@ -120,9 +128,6 @@ NTSTATUS main(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
         goto cleanup;
     }
     
-    DisplayString(L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
-    Sleep(1000);
-
     // TODO: params, removing old, create symlink
     status = FileCopyDirectory(L"c:\\users", L"c:\\welp");
 

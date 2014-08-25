@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+// Number of 100ns ticks in 1 second.
 #define NANOTICKS 10000LL
 
 extern HANDLE g_Heap;
 
+// Maximum path length for NTFS.
 #define MAX_PATH_LONG 32768
 
 void NtLog(IN BOOLEAN print, IN const PWCHAR format, ...);

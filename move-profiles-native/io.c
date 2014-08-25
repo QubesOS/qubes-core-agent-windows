@@ -2,16 +2,18 @@
 
 NTSTATUS FileOpen(OUT PHANDLE file, const IN PWCHAR fileName, IN BOOLEAN write, IN BOOLEAN overwrite, IN BOOLEAN isReparse)
 {
-    UNICODE_STRING fileNameU;
+    UNICODE_STRING fileNameU = { 0 };
     IO_STATUS_BLOCK iosb;
     ULONG createDisposition = 0;
-    WCHAR fileNameNt[1024] = L"\\??\\"; // FIXME: long paths
     OBJECT_ATTRIBUTES oa;
     ACCESS_MASK desiredAccess;
     NTSTATUS status;
 
-    wcscat(fileNameNt, fileName);
-    RtlInitUnicodeString(&fileNameU, fileNameNt);
+    if (!RtlDosPathNameToNtPathName_U(fileName, &fileNameU, NULL, NULL))
+    {
+        status = STATUS_INVALID_PARAMETER_2;
+        goto cleanup;
+    }
 
     InitializeObjectAttributes(
         &oa,
@@ -56,25 +58,34 @@ NTSTATUS FileOpen(OUT PHANDLE file, const IN PWCHAR fileName, IN BOOLEAN write, 
         NULL,
         0);
 
+cleanup:
+    if (fileNameU.Buffer)
+        RtlFreeUnicodeString(&fileNameU);
     return status;
 }
 
 NTSTATUS FileGetAttributes(const IN PWCHAR fileName, OUT PULONG attrs)
 {
     NTSTATUS status;
-    WCHAR fileNameNt[1024] = L"\\??\\"; // FIXME: long paths
     OBJECT_ATTRIBUTES oa;
-    UNICODE_STRING fileNameU;
+    UNICODE_STRING fileNameU = { 0 };
     FILE_BASIC_INFORMATION fbi;
 
-    wcscat(fileNameNt, fileName);
-    RtlInitUnicodeString(&fileNameU, fileNameNt);
+    if (!RtlDosPathNameToNtPathName_U(fileName, &fileNameU, NULL, NULL))
+    {
+        status = STATUS_INVALID_PARAMETER_1;
+        goto cleanup;
+    }
 
     InitializeObjectAttributes(&oa, &fileNameU, OBJ_CASE_INSENSITIVE, NULL, NULL);
     status = NtQueryAttributesFile(&oa, &fbi);
 
     if (NT_SUCCESS(status))
         *attrs = fbi.FileAttributes;
+
+cleanup:
+    if (fileNameU.Buffer)
+        RtlFreeUnicodeString(&fileNameU);
 
     return status;
 }
@@ -87,9 +98,7 @@ NTSTATUS FileGetSize(IN HANDLE file, OUT PLONGLONG fileSize)
 
     status = NtQueryInformationFile(file, &iosb, &fsi, sizeof(fsi), FileStandardInformation);
     if (NT_SUCCESS(status))
-    {
         *fileSize = fsi.EndOfFile.QuadPart;
-    }
 
     return status;
 }
@@ -102,9 +111,7 @@ NTSTATUS FileGetPosition(IN HANDLE file, OUT PLONGLONG position)
 
     status = NtQueryInformationFile(file, &iosb, &fpi, sizeof(fpi), FilePositionInformation);
     if (NT_SUCCESS(status))
-    {
         *position = fpi.CurrentByteOffset.QuadPart;
-    }
 
     return status;
 }
@@ -158,26 +165,22 @@ NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileNam
     PFILE_RENAME_INFORMATION fri;
     OBJECT_ATTRIBUTES oa;
     IO_STATUS_BLOCK iosb;
-    UNICODE_STRING existingFileNameU;
-    WCHAR newFileNameNt[1024] = L"\\??\\";
+    UNICODE_STRING existingFileNameU = { 0 };
+    UNICODE_STRING newFileNameU = { 0 };
     HANDLE file = NULL;
     ULONG fileNameSize;
     NTSTATUS status;
 
-    existingFileNameU.Buffer = NULL;
     if (!RtlDosPathNameToNtPathName_U(existingFileName, &existingFileNameU, NULL, NULL))
     {
-        status = STATUS_UNSUCCESSFUL;
+        status = STATUS_INVALID_PARAMETER_1;
         goto cleanup;
     }
 
-    if ((wcslen(newFileName) > 2) && L':' == newFileName[1])
+    if (!RtlDosPathNameToNtPathName_U(newFileName, &newFileNameU, NULL, NULL))
     {
-        wcscat(newFileNameNt, newFileName);
-    }
-    else
-    {
-        wcsncpy(newFileNameNt, newFileName, RTL_NUMBER_OF(newFileNameNt) - 5);
+        status = STATUS_INVALID_PARAMETER_2;
+        goto cleanup;
     }
 
     InitializeObjectAttributes(
@@ -202,18 +205,17 @@ NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileNam
 
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] NtCreateFile failed: %lx\n", status);
+        NtLog(TRUE, L"[!] FileRename: NtCreateFile(%s) failed: %lx\n", existingFileName, status);
         goto cleanup;
     }
 
-    fileNameSize = wcslen(newFileNameNt) * sizeof(*newFileNameNt);
+    fileNameSize = newFileNameU.Length * sizeof(WCHAR);
 
-    fri = (PFILE_RENAME_INFORMATION) RtlAllocateHeap(g_Heap,
-        HEAP_ZERO_MEMORY, sizeof(FILE_RENAME_INFORMATION) + fileNameSize);
+    fri = (PFILE_RENAME_INFORMATION) RtlAllocateHeap(g_Heap, HEAP_ZERO_MEMORY, sizeof(FILE_RENAME_INFORMATION) + fileNameSize);
 
     if (!fri)
     {
-        NtLog(TRUE, L"[!] RtlAllocateHeap failed\n");
+        NtLog(TRUE, L"[!] FileRename: RtlAllocateHeap failed\n");
         status = STATUS_NO_MEMORY;
         goto cleanup;
     }
@@ -221,7 +223,7 @@ NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileNam
     fri->RootDirectory = NULL;
     fri->ReplaceIfExists = replaceIfExists;
     fri->FileNameLength = fileNameSize;
-    RtlCopyMemory(fri->FileName, newFileNameNt, fileNameSize);
+    RtlCopyMemory(fri->FileName, newFileNameU.Buffer, fileNameSize);
 
     status = NtSetInformationFile(
         file,
@@ -237,6 +239,8 @@ cleanup:
         NtClose(file);
     if (existingFileNameU.Buffer)
         RtlFreeUnicodeString(&existingFileNameU);
+    if (newFileNameU.Buffer)
+        RtlFreeUnicodeString(&newFileNameU);
 
     return status;
 }
@@ -340,14 +344,13 @@ cleanup:
 
 NTSTATUS FileDelete(IN const PWCHAR path)
 {
-    UNICODE_STRING pathU;
+    UNICODE_STRING pathU = { 0 };
     NTSTATUS status;
     OBJECT_ATTRIBUTES oa;
 
-    pathU.Buffer = NULL;
     if (!RtlDosPathNameToNtPathName_U(path, &pathU, NULL, NULL))
     {
-        status = STATUS_UNSUCCESSFUL;
+        status = STATUS_INVALID_PARAMETER_1;
         goto cleanup;
     }
 
@@ -363,13 +366,12 @@ cleanup:
 
 NTSTATUS FileCreateDirectory(IN const PWCHAR path)
 {
-    UNICODE_STRING pathU;
+    UNICODE_STRING pathU = { 0 };
     NTSTATUS status;
     HANDLE file = NULL;
     OBJECT_ATTRIBUTES oa;
     IO_STATUS_BLOCK iosb;
 
-    pathU.Buffer = NULL;
     if (!RtlDosPathNameToNtPathName_U(path, &pathU, NULL, NULL))
     {
         status = STATUS_UNSUCCESSFUL;
@@ -414,7 +416,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
     status = FileOpen(&source, sourcePath, FALSE, FALSE, TRUE);
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", sourcePath, status);
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: FileOpen(%s) failed: %x\n", sourcePath, status);
         goto cleanup;
     }
 
@@ -430,7 +432,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
 
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] FSCTL_GET_REPARSE_POINT failed: %x\n", status);
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: FSCTL_GET_REPARSE_POINT(%s) failed: %x\n", sourcePath, status);
         goto cleanup;
     }
 
@@ -441,7 +443,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
             rdb->SymbolicLinkReparseBuffer.PrintNameLength);
         dest[rdb->SymbolicLinkReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
 
-        NtLog(TRUE, L"[*] Symlink: '%s' -> '%s'\n", sourcePath, dest);
+        NtLog(FALSE, L"[*] Symlink: '%s' -> '%s'\n", sourcePath, dest);
         /*
         if (!CreateSymbolicLink(targetPath, dest, (attrs & FILE_ATTRIBUTE_DIRECTORY) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0))
         {
@@ -456,7 +458,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
             rdb->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR),
             rdb->MountPointReparseBuffer.PrintNameLength);
         dest[rdb->MountPointReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
-        NtLog(TRUE, L"[*] Mount point: '%s' -> '%s'\n", sourcePath, dest);
+        NtLog(FALSE, L"[*] Mount point: '%s' -> '%s'\n", sourcePath, dest);
 
         // TODO: copy security
         FileCreateDirectory(targetPath);
@@ -464,7 +466,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         status = FileOpen(&target, targetPath, TRUE, FALSE, FALSE);
         if (!NT_SUCCESS(status))
         {
-            NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", targetPath, status);
+            NtLog(TRUE, L"[!] FileCopyReparsePoint: FileOpen(%s) failed: %x\n", targetPath, status);
             goto cleanup;
         }
 
@@ -480,13 +482,13 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
 
         if (!NT_SUCCESS(status))
         {
-            NtLog(TRUE, L"[!] FSCTL_SET_REPARSE_POINT failed: %x\n", status);
+            NtLog(TRUE, L"[!] FileCopyReparsePoint: FSCTL_SET_REPARSE_POINT(%s) failed: %x\n", targetPath, status);
             goto cleanup;
         }
     }
     else
     {
-        NtLog(TRUE, L"[!] Unknown reparse tag 0x%x in '%s'\n", rdb->ReparseTag, sourcePath);
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: Unknown reparse tag 0x%x in '%s'\n", rdb->ReparseTag, sourcePath);
     }
 
 cleanup:
@@ -499,7 +501,7 @@ cleanup:
 
 NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
 {
-    UNICODE_STRING dirNameU;
+    UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
     HANDLE dir = NULL, target = NULL;
     NTSTATUS status;
@@ -507,10 +509,9 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
     BOOLEAN firstQuery = TRUE;
     PFILE_FULL_DIR_INFORMATION dirInfo = NULL, entry;
     HANDLE event = NULL;
-    WCHAR fullPath[MAX_PATH]; // FIXME: long paths
-    WCHAR fullTargetPath[MAX_PATH];
+    PWCHAR fullPath = NULL;
+    PWCHAR fullTargetPath = NULL;
 
-    dirNameU.Buffer = NULL;
     if (!RtlDosPathNameToNtPathName_U(sourcePath, &dirNameU, NULL, NULL))
     {
         NtLog(TRUE, L"[!] RtlDosPathNameToNtPathName_U(%s) failed\n", sourcePath);
@@ -597,7 +598,7 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
 
         if (!NT_SUCCESS(status))
         {
-            NtLog(FALSE, L"[*] NtQueryDirectoryFile: %x\n", status);
+            NtLog(FALSE, L"[!] NtQueryDirectoryFile(%s) failed: %x\n", sourcePath, status);
             goto cleanup;
         }
 
@@ -612,12 +613,17 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
                     entry->FileNameLength / 2, entry->FileName,
                     entry->FileAttributes, entry->EaSize, entry->AllocationSize.QuadPart);
 
-                wcscpy(fullPath, sourcePath);
-                wcscat(fullPath, L"\\");
-                wcsncat(fullPath, entry->FileName, entry->FileNameLength / 2);
-                wcscpy(fullTargetPath, targetPath);
-                wcscat(fullTargetPath, L"\\");
-                wcsncat(fullTargetPath, entry->FileName, entry->FileNameLength / 2);
+                if (!fullPath)
+                    fullPath = RtlAllocateHeap(g_Heap, HEAP_ZERO_MEMORY, MAX_PATH_LONG*sizeof(WCHAR));
+                if (!fullTargetPath)
+                    fullTargetPath = RtlAllocateHeap(g_Heap, HEAP_ZERO_MEMORY, MAX_PATH_LONG*sizeof(WCHAR));
+
+                wcscpy_s(fullPath, MAX_PATH_LONG - 1, sourcePath); // 1 for backslash
+                wcscat_s(fullPath, MAX_PATH_LONG, L"\\");
+                wcsncat_s(fullPath, MAX_PATH_LONG, entry->FileName, entry->FileNameLength / 2);
+                wcscpy_s(fullTargetPath, MAX_PATH_LONG - 1, targetPath); // 1 for backslash
+                wcscat_s(fullTargetPath, MAX_PATH_LONG, L"\\");
+                wcsncat_s(fullTargetPath, MAX_PATH_LONG, entry->FileName, entry->FileNameLength / 2);
 
                 if (entry->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
                 {
@@ -650,6 +656,10 @@ cleanup:
         RtlFreeUnicodeString(&dirNameU);
     if (dirInfo)
         RtlFreeHeap(g_Heap, 0, dirInfo);
+    if (fullPath)
+        RtlFreeHeap(g_Heap, 0, fullPath);
+    if (fullTargetPath)
+        RtlFreeHeap(g_Heap, 0, fullTargetPath);
     if (event)
         NtClose(event);
     if (dir)
