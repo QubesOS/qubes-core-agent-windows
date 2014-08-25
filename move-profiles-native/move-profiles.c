@@ -107,7 +107,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS main(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
+NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
 {
     NTSTATUS status;
 
@@ -128,8 +128,16 @@ NTSTATUS main(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
         goto cleanup;
     }
     
-    // TODO: params, removing old, create symlink
-    status = FileCopyDirectory(L"c:\\users", L"c:\\welp");
+    if (argc < 3)
+    {
+        NtLog(TRUE, L"[!] Usage: move-profiles <source dir> <target dir>\n");
+        status = STATUS_INVALID_PARAMETER;
+        goto cleanup;
+    }
+
+    // TODO: parsing quotes so directories can have embedded spaces
+    // Might happen in some non-english languages?
+    status = FileCopyDirectory(argv[1], argv[2]);
 
 cleanup:
     if (g_Heap)
