@@ -436,59 +436,64 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         goto cleanup;
     }
 
-    if (rdb->ReparseTag == IO_REPARSE_TAG_SYMLINK)
+    switch (rdb->ReparseTag)
     {
+    case IO_REPARSE_TAG_SYMLINK:
+
         memcpy(dest, rdb->SymbolicLinkReparseBuffer.PathBuffer +
             rdb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(WCHAR),
             rdb->SymbolicLinkReparseBuffer.PrintNameLength);
         dest[rdb->SymbolicLinkReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
 
         NtLog(FALSE, L"[*] Symlink: '%s' -> '%s'\n", sourcePath, dest);
-        /*
-        if (!CreateSymbolicLink(targetPath, dest, (attrs & FILE_ATTRIBUTE_DIRECTORY) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0))
-        {
-            status = perror("CreateSymbolicLink");
-            goto cleanup;
-        }
-        */
-    }
-    else if (rdb->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT)
-    {
+        break;
+
+    case IO_REPARSE_TAG_MOUNT_POINT:
+
         memcpy(dest, rdb->MountPointReparseBuffer.PathBuffer +
             rdb->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR),
             rdb->MountPointReparseBuffer.PrintNameLength);
         dest[rdb->MountPointReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
+
         NtLog(FALSE, L"[*] Mount point: '%s' -> '%s'\n", sourcePath, dest);
+        break;
 
-        // TODO: copy security
-        FileCreateDirectory(targetPath);
+    default:
 
-        status = FileOpen(&target, targetPath, TRUE, FALSE, FALSE);
-        if (!NT_SUCCESS(status))
-        {
-            NtLog(TRUE, L"[!] FileCopyReparsePoint: FileOpen(%s) failed: %x\n", targetPath, status);
-            goto cleanup;
-        }
-
-        // Copy reparse data.
-        status = NtFsControlFile(
-            target,
-            NULL,
-            NULL, NULL,
-            &iosb,
-            FSCTL_SET_REPARSE_POINT,
-            buffer, (ULONG)iosb.Information,
-            NULL, 0);
-
-        if (!NT_SUCCESS(status))
-        {
-            NtLog(TRUE, L"[!] FileCopyReparsePoint: FSCTL_SET_REPARSE_POINT(%s) failed: %x\n", targetPath, status);
-            goto cleanup;
-        }
-    }
-    else
-    {
         NtLog(TRUE, L"[!] FileCopyReparsePoint: Unknown reparse tag 0x%x in '%s'\n", rdb->ReparseTag, sourcePath);
+        goto cleanup;
+    }
+
+    FileCreateDirectory(targetPath);
+
+    status = FileOpen(&target, targetPath, TRUE, FALSE, FALSE);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: FileOpen(%s) failed: %x\n", targetPath, status);
+        goto cleanup;
+    }
+
+    status = FileCopySecurity(source, target);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: FileCopySecurity(%s, %s) failed: %x\n", sourcePath, targetPath, status);
+        goto cleanup;
+    }
+
+    // Copy reparse data.
+    status = NtFsControlFile(
+        target,
+        NULL,
+        NULL, NULL,
+        &iosb,
+        FSCTL_SET_REPARSE_POINT,
+        buffer, (ULONG)iosb.Information,
+        NULL, 0);
+
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: FSCTL_SET_REPARSE_POINT(%s) failed: %x\n", targetPath, status);
+        goto cleanup;
     }
 
 cleanup:
