@@ -139,6 +139,9 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     // Might happen in some non-english languages?
     status = FileCopyDirectory(argv[1], argv[2]);
 
+    NtLog(TRUE, L"\n--- DELETING ---\n\n");
+    status = FileDeleteDirectory(argv[2]);
+
 cleanup:
     if (g_Heap)
         FreeHeap(g_Heap);

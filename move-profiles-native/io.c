@@ -27,7 +27,7 @@ NTSTATUS FileOpen(OUT PHANDLE file, const IN PWCHAR fileName, IN BOOLEAN write, 
     if (write)
     {
         if (!isReparse)
-            desiredAccess |= FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | WRITE_DAC | WRITE_OWNER;
+            desiredAccess |= FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | WRITE_DAC | WRITE_OWNER | DELETE;
 
         if (overwrite)
         {
@@ -88,6 +88,60 @@ cleanup:
 
     if (fileNameU.Buffer)
         RtlFreeUnicodeString(&fileNameU);
+
+    return status;
+}
+
+NTSTATUS FileSetAttributes(const IN PWCHAR fileName, IN ULONG attrs)
+{
+    NTSTATUS status;
+    OBJECT_ATTRIBUTES oa;
+    UNICODE_STRING fileNameU = { 0 };
+    FILE_BASIC_INFORMATION fbi;
+    IO_STATUS_BLOCK iosb;
+    HANDLE file = NULL;
+
+    if (!RtlDosPathNameToNtPathName_U(fileName, &fileNameU, NULL, NULL))
+    {
+        status = STATUS_INVALID_PARAMETER_1;
+        goto cleanup;
+    }
+
+    InitializeObjectAttributes(&oa, &fileNameU, OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+    // Not using FileOpen because it requests DELETE access by default, which would fail for read-only files.
+    status = NtCreateFile(
+        &file,
+        SYNCHRONIZE | FILE_WRITE_ATTRIBUTES,
+        &oa,
+        &iosb,
+        NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        0, // no sharing
+        FILE_OPEN,
+        FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT | FILE_OPEN_FOR_BACKUP_INTENT,
+        NULL,
+        0);
+    
+    if (!NT_SUCCESS(status))
+        goto cleanup;
+
+    // Read current attributes (to not overwrite creation time etc).
+    status = NtQueryAttributesFile(&oa, &fbi);
+    if (!NT_SUCCESS(status))
+        goto cleanup;
+
+    fbi.FileAttributes = attrs;
+
+    // Set new attributes.
+    status = NtSetInformationFile(file, &iosb, &fbi, sizeof(fbi), FileBasicInformation);
+
+cleanup:
+
+    if (fileNameU.Buffer)
+        RtlFreeUnicodeString(&fileNameU);
+    if (file)
+        NtClose(file);
 
     return status;
 }
@@ -387,26 +441,76 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileDelete(IN const PWCHAR path)
+// Read-only attribute must be cleared, otherwise the file can't be opened for DELETE access.
+NTSTATUS FileDelete(IN HANDLE file)
 {
-    UNICODE_STRING pathU = { 0 };
     NTSTATUS status;
-    OBJECT_ATTRIBUTES oa;
+    FILE_BASIC_INFORMATION fbi;
+    FILE_DISPOSITION_INFORMATION fdi;
+    PREPARSE_DATA_BUFFER rdb = NULL;
+    REPARSE_GUID_DATA_BUFFER rgdb = { 0 };
+    IO_STATUS_BLOCK iosb;
 
-    if (!RtlDosPathNameToNtPathName_U(path, &pathU, NULL, NULL))
-    {
-        status = STATUS_INVALID_PARAMETER_1;
+    // Get attributes.
+    status = NtQueryInformationFile(file, &iosb, &fbi, sizeof(fbi), FileBasicInformation);
+    if (!NT_SUCCESS(status))
         goto cleanup;
+
+    if (fbi.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+    {
+        // Get reparse tag.
+
+        // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
+        rdb = RtlAllocateHeap(g_Heap, 0, MAX_PATH_LONG); // don't allocate on stack, deep recursion can be fatal
+        if (!rdb)
+        {
+            status = STATUS_NO_MEMORY;
+            goto cleanup;
+        }
+
+        // Get reparse data.
+        status = NtFsControlFile(
+            file,
+            NULL,
+            NULL, NULL,
+            &iosb,
+            FSCTL_GET_REPARSE_POINT,
+            NULL, 0,
+            rdb, MAX_PATH_LONG);
+
+        if (!NT_SUCCESS(status))
+        {
+            NtLog(TRUE, L"[!] FileDelete: FSCTL_GET_REPARSE_POINT failed: %x\n", status);
+            goto cleanup;
+        }
+
+        rgdb.ReparseTag = rdb->ReparseTag;
+
+        // Delete reparse point.
+        status = NtFsControlFile(
+            file,
+            NULL,
+            NULL, NULL,
+            &iosb,
+            FSCTL_DELETE_REPARSE_POINT,
+            &rgdb, REPARSE_GUID_DATA_BUFFER_HEADER_SIZE,
+            NULL, 0);
+
+        if (!NT_SUCCESS(status))
+        {
+            NtLog(TRUE, L"[!] FileDelete: FSCTL_DELETE_REPARSE_POINT failed: %x\n", status);
+            goto cleanup;
+        }
     }
 
-    InitializeObjectAttributes(&oa, &pathU, OBJ_CASE_INSENSITIVE, NULL, NULL);
-    
-    status = NtDeleteFile(&oa);
+    // Set delete disposition.
+    fdi.DeleteFile = TRUE;
+
+    status = NtSetInformationFile(file, &iosb, &fdi, sizeof(fdi), FileDispositionInformation);
 
 cleanup:
-
-    if (pathU.Buffer)
-        RtlFreeUnicodeString(&pathU);
+    if (rdb)
+        RtlFreeHeap(g_Heap, 0, rdb);
     return status;
 }
 
@@ -674,7 +778,7 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
 
         if (!NT_SUCCESS(status))
         {
-            NtLog(FALSE, L"[!] NtQueryDirectoryFile(%s) failed: %x\n", sourcePath, status);
+            NtLog(TRUE, L"[!] NtQueryDirectoryFile(%s) failed: %x\n", sourcePath, status);
             goto cleanup;
         }
 
@@ -742,5 +846,207 @@ cleanup:
         NtClose(dir);
     if (target)
         NtClose(target);
+    return status;
+}
+
+NTSTATUS FileDeleteDirectory(IN const PWCHAR path)
+{
+    UNICODE_STRING dirNameU = { 0 };
+    OBJECT_ATTRIBUTES oa;
+    HANDLE dir = NULL, file;
+    NTSTATUS status;
+    IO_STATUS_BLOCK iosb;
+    BOOLEAN firstQuery = TRUE;
+    PFILE_FULL_DIR_INFORMATION dirInfo = NULL, entry;
+    HANDLE event = NULL;
+    PWCHAR fullPath = NULL;
+    ULONG attrs;
+
+    if (!RtlDosPathNameToNtPathName_U(path, &dirNameU, NULL, NULL))
+    {
+        NtLog(TRUE, L"[!] RtlDosPathNameToNtPathName_U(%s) failed\n", path);
+        status = STATUS_UNSUCCESSFUL;
+        goto cleanup;
+    }
+
+    NtLog(TRUE, L"[~] %s\n", path);
+
+    status = FileOpen(&dir, path, FALSE, FALSE, FALSE);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", path, status);
+        goto cleanup;
+    }
+
+    dirInfo = RtlAllocateHeap(g_Heap, 0, 16384);
+    if (!dirInfo)
+    {
+        NtLog(TRUE, L"[!] RtlAllocateHeap(dirInfo) failed\n");
+        status = STATUS_NO_MEMORY;
+        goto cleanup;
+    }
+
+    InitializeObjectAttributes(&oa, NULL, 0, NULL, NULL);
+    status = NtCreateEvent(
+        &event,
+        EVENT_ALL_ACCESS,
+        &oa,
+        SynchronizationEvent,
+        FALSE);
+
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] NtCreateEvent failed: %x\n", status);
+        goto cleanup;
+    }
+
+    while (TRUE)
+    {
+        status = NtQueryDirectoryFile(
+            dir,
+            event,
+            NULL,
+            0,
+            &iosb,
+            dirInfo,
+            16384,
+            FileFullDirectoryInformation,
+            FALSE,
+            NULL,
+            firstQuery);
+
+        if (status == STATUS_PENDING)
+        {
+            NtWaitForSingleObject(event, FALSE, NULL);
+            status = iosb.Status;
+        }
+
+        if (status == STATUS_NO_MORE_FILES)
+            break;
+
+        if (!NT_SUCCESS(status))
+        {
+            NtLog(TRUE, L"[!] NtQueryDirectoryFile(%s) failed: %x\n", path, status);
+            goto cleanup;
+        }
+
+        entry = dirInfo;
+
+        while (entry)
+        {
+            if (0 != wcsncmp(L".", entry->FileName, entry->FileNameLength / 2) &&
+                0 != wcsncmp(L"..", entry->FileName, entry->FileNameLength / 2))
+            {
+                NtLog(FALSE, L"- %.*s [A: %x, EA: %x, Size: %ld]\n",
+                    entry->FileNameLength / 2, entry->FileName,
+                    entry->FileAttributes, entry->EaSize, entry->AllocationSize.QuadPart);
+
+                if (!fullPath)
+                    fullPath = RtlAllocateHeap(g_Heap, HEAP_ZERO_MEMORY, MAX_PATH_LONG*sizeof(WCHAR));
+
+                wcscpy_s(fullPath, MAX_PATH_LONG - 1, path); // 1 for backslash
+                wcscat_s(fullPath, MAX_PATH_LONG, L"\\");
+                wcsncat_s(fullPath, MAX_PATH_LONG, entry->FileName, entry->FileNameLength / 2);
+
+                // Clear read-only attribute.
+                if (entry->FileAttributes & FILE_ATTRIBUTE_READONLY)
+                {
+                    status = FileSetAttributes(fullPath, entry->FileAttributes & ~FILE_ATTRIBUTE_READONLY);
+                    if (!NT_SUCCESS(status))
+                    {
+                        NtLog(TRUE, L"[!] FileSetAttributes(%s) failed: %x\n", fullPath, status);
+                        goto cleanup;
+                    }
+                }
+
+                if ((entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(entry->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+                {
+                    // directory that is not a reparse point: recursively delete
+                    status = FileDeleteDirectory(fullPath);
+                    if (!NT_SUCCESS(status))
+                    {
+                        NtLog(TRUE, L"[!] FileDeleteDirectory(%s) failed: %x\n", fullPath, status);
+                        goto cleanup;
+                    }
+                }
+                else
+                {
+                    // just delete
+                    status = FileOpen(&file, fullPath, TRUE, FALSE, FALSE);
+                    if (!NT_SUCCESS(status))
+                    {
+                        NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", fullPath, status);
+                        goto cleanup;
+                    }
+
+                    status = FileDelete(file);
+                    if (!NT_SUCCESS(status))
+                    {
+                        NtLog(TRUE, L"[!] FileDelete(%s) failed: %x\n", fullPath, status);
+                        NtClose(file);
+                        goto cleanup;
+                    }
+                    NtClose(file);
+                }
+            }
+
+            if (!entry->NextEntryOffset)
+                break;
+
+            // Move to next entry.
+            entry = (PFILE_FULL_DIR_INFORMATION)((ULONG_PTR)entry + entry->NextEntryOffset);
+        }
+
+        firstQuery = FALSE;
+    }
+
+    NtClose(dir);
+
+    // Clear read-only attribute.
+    status = FileGetAttributes(path, &attrs);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileGetAttributes(%s) failed: %x\n", path, status);
+        goto cleanup;
+    }
+
+    if (attrs & FILE_ATTRIBUTE_READONLY)
+    {
+        status = FileSetAttributes(path, attrs & ~FILE_ATTRIBUTE_READONLY);
+        if (!NT_SUCCESS(status))
+        {
+            NtLog(TRUE, L"[!] FileSetAttributes(%s) failed: %x\n", path, status);
+            goto cleanup;
+        }
+    }
+    // Reopen for write.
+    status = FileOpen(&dir, path, TRUE, FALSE, FALSE);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", path, status);
+        goto cleanup;
+    }
+
+    // Delete the parent itself.
+    status = FileDelete(dir);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileDelete(%s) failed: %x\n", path, status);
+        goto cleanup;
+    }
+
+    status = STATUS_SUCCESS;
+
+cleanup:
+    if (dirNameU.Buffer)
+        RtlFreeUnicodeString(&dirNameU);
+    if (dirInfo)
+        RtlFreeHeap(g_Heap, 0, dirInfo);
+    if (fullPath)
+        RtlFreeHeap(g_Heap, 0, fullPath);
+    if (event)
+        NtClose(event);
+    if (dir)
+        NtClose(dir);
     return status;
 }
