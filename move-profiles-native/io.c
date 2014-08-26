@@ -247,16 +247,24 @@ cleanup:
 
 NTSTATUS FileCopySecurity(IN HANDLE source, IN HANDLE target)
 {
-    BYTE buffer[65536]; // maximum security descriptor size for NTFS (http://msdn.microsoft.com/en-us/library/windows/hardware/ff567066(v=vs.85).aspx)
-    PSECURITY_DESCRIPTOR sd = (PSECURITY_DESCRIPTOR)buffer;
+    PSECURITY_DESCRIPTOR sd = NULL;
     ULONG requiredSize = 0;
     NTSTATUS status;
+
+    sd = RtlAllocateHeap(g_Heap, 0, 65536); // don't allocate on stack, deep recursion can be fatal
+    // maximum security descriptor size for NTFS (http://msdn.microsoft.com/en-us/library/windows/hardware/ff567066(v=vs.85).aspx)
+    if (!sd)
+    {
+        NtLog(TRUE, L"[!] FileCopySecurity: RtlAllocateHeap failed\n");
+        status = STATUS_NO_MEMORY;
+        goto cleanup;
+    }
 
     status = NtQuerySecurityObject(
         source,
         OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION,
         sd,
-        sizeof(buffer),
+        65536,
         &requiredSize);
 
     if (!NT_SUCCESS(status))
@@ -276,6 +284,8 @@ NTSTATUS FileCopySecurity(IN HANDLE source, IN HANDLE target)
     }
 
 cleanup:
+    if (sd)
+        RtlFreeHeap(g_Heap, 0, sd);
     return status;
 }
 
@@ -283,7 +293,7 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
 {
     HANDLE fileSource = NULL;
     HANDLE fileTarget = NULL;
-    BYTE buffer[16384];
+    PBYTE buffer = NULL;
     LONGLONG fileSize = 0;
     LONGLONG writtenTotal = 0;
     ULONG readSize = 0;
@@ -306,6 +316,13 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
     if (!NT_SUCCESS(status))
         goto cleanup;
 
+    buffer = RtlAllocateHeap(g_Heap, 0, 65536); // don't allocate on stack, deep recursion can be fatal
+    if (!buffer)
+    {
+        status = STATUS_NO_MEMORY;
+        goto cleanup;
+    }
+
     // TODO: attributes, ADS?
     // Copy data.
     writtenTotal = 0;
@@ -313,7 +330,7 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
     {
         readSize = 0;
 
-        status = FileRead(fileSource, buffer, sizeof(buffer), &readSize);
+        status = FileRead(fileSource, buffer, 65536, &readSize);
         if (!NT_SUCCESS(status))
             goto cleanup;
 
@@ -334,6 +351,8 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
         status = STATUS_UNSUCCESSFUL;
 
 cleanup:
+    if (buffer)
+        RtlFreeHeap(g_Heap, 0, buffer);
     if (fileSource)
         NtClose(fileSource);
     if (fileTarget)
@@ -403,8 +422,7 @@ cleanup:
 
 NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
 {
-    BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
-    PREPARSE_DATA_BUFFER rdb = (PREPARSE_DATA_BUFFER)buffer;
+    PREPARSE_DATA_BUFFER rdb = NULL;
     ULONG size;
     WCHAR dest[MAX_PATH_LONG];
     NTSTATUS status;
@@ -420,6 +438,14 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         goto cleanup;
     }
 
+    // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
+    rdb = RtlAllocateHeap(g_Heap, 0, MAX_PATH_LONG); // don't allocate on stack, deep recursion can be fatal
+    if (!rdb)
+    {
+        status = STATUS_NO_MEMORY;
+        goto cleanup;
+    }
+
     // Get reparse data.
     status = NtFsControlFile(
         source,
@@ -428,7 +454,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         &iosb,
         FSCTL_GET_REPARSE_POINT,
         NULL, 0,
-        buffer, sizeof(buffer));
+        rdb, MAX_PATH_LONG);
 
     if (!NT_SUCCESS(status))
     {
@@ -464,7 +490,12 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         goto cleanup;
     }
 
-    FileCreateDirectory(targetPath);
+    status = FileCreateDirectory(targetPath);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopyReparsePoint: FileCreateDirectory(%s) failed: %x\n", targetPath, status);
+        goto cleanup;
+    }
 
     status = FileOpen(&target, targetPath, TRUE, FALSE, FALSE);
     if (!NT_SUCCESS(status))
@@ -487,7 +518,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         NULL, NULL,
         &iosb,
         FSCTL_SET_REPARSE_POINT,
-        buffer, (ULONG)iosb.Information,
+        rdb, (ULONG)iosb.Information,
         NULL, 0);
 
     if (!NT_SUCCESS(status))
@@ -497,6 +528,8 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
     }
 
 cleanup:
+    if (rdb)
+        RtlFreeHeap(g_Heap, 0, rdb);
     if (source)
         NtClose(source);
     if (target)
