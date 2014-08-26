@@ -59,6 +59,7 @@ NTSTATUS FileOpen(OUT PHANDLE file, const IN PWCHAR fileName, IN BOOLEAN write, 
         0);
 
 cleanup:
+
     if (fileNameU.Buffer)
         RtlFreeUnicodeString(&fileNameU);
     return status;
@@ -84,6 +85,7 @@ NTSTATUS FileGetAttributes(const IN PWCHAR fileName, OUT PULONG attrs)
         *attrs = fbi.FileAttributes;
 
 cleanup:
+
     if (fileNameU.Buffer)
         RtlFreeUnicodeString(&fileNameU);
 
@@ -235,6 +237,7 @@ NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileNam
     RtlFreeHeap(g_Heap, 0, fri);
 
 cleanup:
+
     if (file)
         NtClose(file);
     if (existingFileNameU.Buffer)
@@ -284,8 +287,26 @@ NTSTATUS FileCopySecurity(IN HANDLE source, IN HANDLE target)
     }
 
 cleanup:
+
     if (sd)
         RtlFreeHeap(g_Heap, 0, sd);
+    return status;
+}
+
+NTSTATUS FileCopyBasicInformation(IN HANDLE source, IN HANDLE target)
+{
+    NTSTATUS status;
+    IO_STATUS_BLOCK iosb;
+    FILE_BASIC_INFORMATION fbi;
+
+    status = NtQueryInformationFile(source, &iosb, &fbi, sizeof(fbi), FileBasicInformation);
+    if (!NT_SUCCESS(status))
+        goto cleanup;
+
+    status = NtSetInformationFile(target, &iosb, &fbi, sizeof(fbi), FileBasicInformation);
+
+cleanup:
+
     return status;
 }
 
@@ -308,6 +329,10 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
     if (!NT_SUCCESS(status))
         goto cleanup;
 
+    status = FileCopyBasicInformation(fileSource, fileTarget);
+    if (!NT_SUCCESS(status))
+        goto cleanup;
+
     status = FileCopySecurity(fileSource, fileTarget);
     if (!NT_SUCCESS(status))
         goto cleanup;
@@ -323,7 +348,7 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
         goto cleanup;
     }
 
-    // TODO: attributes, ADS?
+    // TODO: ADS, quota, ...?
     // Copy data.
     writtenTotal = 0;
     while (writtenTotal < fileSize)
@@ -351,6 +376,7 @@ NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
         status = STATUS_UNSUCCESSFUL;
 
 cleanup:
+
     if (buffer)
         RtlFreeHeap(g_Heap, 0, buffer);
     if (fileSource)
@@ -378,6 +404,7 @@ NTSTATUS FileDelete(IN const PWCHAR path)
     status = NtDeleteFile(&oa);
 
 cleanup:
+
     if (pathU.Buffer)
         RtlFreeUnicodeString(&pathU);
     return status;
@@ -413,6 +440,7 @@ NTSTATUS FileCreateDirectory(IN const PWCHAR path)
         0);
 
 cleanup:
+
     if (pathU.Buffer)
         RtlFreeUnicodeString(&pathU);
     if (file)
@@ -504,6 +532,10 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         goto cleanup;
     }
 
+    status = FileCopyBasicInformation(source, target);
+    if (!NT_SUCCESS(status))
+        goto cleanup;
+
     status = FileCopySecurity(source, target);
     if (!NT_SUCCESS(status))
     {
@@ -573,11 +605,17 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
         goto cleanup;
     }
 
-    // Copy security.
     status = FileOpen(&target, targetPath, TRUE, FALSE, FALSE);
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", targetPath, status);
+        goto cleanup;
+    }
+
+    status = FileCopyBasicInformation(dir, target);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopyBasicInformation(%s, %s) failed: %x\n", sourcePath, targetPath, status);
         goto cleanup;
     }
 
