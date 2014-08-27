@@ -26,5 +26,6 @@ NTSTATUS FileCopySecurity(IN HANDLE source, IN HANDLE target);
 NTSTATUS FileDelete(IN HANDLE file);
 NTSTATUS FileCreateDirectory(const IN PWCHAR dirName);
 NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR targetPath);
+NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath);
 NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath);
-NTSTATUS FileDeleteDirectory(IN const PWCHAR path);
+NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf);

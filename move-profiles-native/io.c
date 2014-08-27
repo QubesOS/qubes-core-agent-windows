@@ -122,7 +122,7 @@ NTSTATUS FileSetAttributes(const IN PWCHAR fileName, IN ULONG attrs)
         FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT | FILE_OPEN_FOR_BACKUP_INTENT,
         NULL,
         0);
-    
+
     if (!NT_SUCCESS(status))
         goto cleanup;
 
@@ -552,6 +552,64 @@ cleanup:
     return status;
 }
 
+// sourcePath must be an existing and empty directory.
+NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
+{
+    BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
+    PREPARSE_DATA_BUFFER rdb = (PREPARSE_DATA_BUFFER)buffer;
+    DWORD size, targetSize;
+    WCHAR dest[MAX_PATH_LONG];
+    NTSTATUS status;
+    HANDLE file = NULL;
+    IO_STATUS_BLOCK iosb;
+
+    status = FileOpen(&file, sourcePath, TRUE, FALSE, FALSE);
+    if (!NT_SUCCESS(status))
+        goto cleanup;
+
+    targetSize = wcslen(targetPath) * sizeof(WCHAR);
+
+    rdb->ReparseTag = IO_REPARSE_TAG_SYMLINK;
+    // 12 = SymbolicLinkReparseBuffer fields without PathBuffer
+    // sizeof(PathBuffer) = 2*targetSize + sizeof(L"\\??\\")
+    rdb->ReparseDataLength = (USHORT)(12 + targetSize * 2 + 8);
+    rdb->SymbolicLinkReparseBuffer.Flags = 0; // absolute link
+
+    swprintf_s(rdb->SymbolicLinkReparseBuffer.PathBuffer, (sizeof(buffer) - sizeof(REPARSE_DATA_BUFFER)) / sizeof(WCHAR),
+        L"%s\\??\\%s", targetPath, targetPath);
+
+    rdb->SymbolicLinkReparseBuffer.PrintNameOffset = 0;
+    rdb->SymbolicLinkReparseBuffer.PrintNameLength = (USHORT)targetSize;
+    rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset = rdb->SymbolicLinkReparseBuffer.PrintNameLength;
+    rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = (USHORT)(targetSize + 8);
+
+    NtLog(FALSE, L"PrintName: %.*s", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
+    NtLog(FALSE, L"SubstituteName: %.*s", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
+
+    status = NtFsControlFile(
+        file,
+        NULL,
+        NULL, NULL,
+        &iosb,
+        FSCTL_SET_REPARSE_POINT,
+        // 8 = fields before the union
+        buffer, rdb->ReparseDataLength + 8,
+        NULL, 0);
+
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileSetReparsePoint: FSCTL_SET_REPARSE_POINT(%s) failed: %x\n", sourcePath, status);
+        goto cleanup;
+    }
+
+    status = STATUS_SUCCESS;
+
+cleanup:
+    if (file)
+        NtClose(file);
+    return status;
+}
+
 NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
 {
     PREPARSE_DATA_BUFFER rdb = NULL;
@@ -562,7 +620,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
     HANDLE target = NULL;
     OBJECT_ATTRIBUTES oa;
     IO_STATUS_BLOCK iosb;
-    
+
     status = FileOpen(&source, sourcePath, FALSE, FALSE, TRUE);
     if (!NT_SUCCESS(status))
     {
@@ -692,7 +750,7 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
         status = STATUS_UNSUCCESSFUL;
         goto cleanup;
     }
-    
+
     NtLog(TRUE, L"[D] %s\n", sourcePath);
 
     status = FileCreateDirectory(targetPath);
@@ -849,7 +907,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileDeleteDirectory(IN const PWCHAR path)
+NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
 {
     UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
@@ -962,7 +1020,7 @@ NTSTATUS FileDeleteDirectory(IN const PWCHAR path)
                 if ((entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(entry->FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
                 {
                     // directory that is not a reparse point: recursively delete
-                    status = FileDeleteDirectory(fullPath);
+                    status = FileDeleteDirectory(fullPath, TRUE);
                     if (!NT_SUCCESS(status))
                     {
                         NtLog(TRUE, L"[!] FileDeleteDirectory(%s) failed: %x\n", fullPath, status);
@@ -1000,39 +1058,42 @@ NTSTATUS FileDeleteDirectory(IN const PWCHAR path)
         firstQuery = FALSE;
     }
 
-    NtClose(dir);
-
-    // Clear read-only attribute.
-    status = FileGetAttributes(path, &attrs);
-    if (!NT_SUCCESS(status))
+    if (deleteSelf)
     {
-        NtLog(TRUE, L"[!] FileGetAttributes(%s) failed: %x\n", path, status);
-        goto cleanup;
-    }
+        NtClose(dir);
 
-    if (attrs & FILE_ATTRIBUTE_READONLY)
-    {
-        status = FileSetAttributes(path, attrs & ~FILE_ATTRIBUTE_READONLY);
+        // Clear read-only attribute.
+        status = FileGetAttributes(path, &attrs);
         if (!NT_SUCCESS(status))
         {
-            NtLog(TRUE, L"[!] FileSetAttributes(%s) failed: %x\n", path, status);
+            NtLog(TRUE, L"[!] FileGetAttributes(%s) failed: %x\n", path, status);
             goto cleanup;
         }
-    }
-    // Reopen for write.
-    status = FileOpen(&dir, path, TRUE, FALSE, FALSE);
-    if (!NT_SUCCESS(status))
-    {
-        NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", path, status);
-        goto cleanup;
-    }
 
-    // Delete the parent itself.
-    status = FileDelete(dir);
-    if (!NT_SUCCESS(status))
-    {
-        NtLog(TRUE, L"[!] FileDelete(%s) failed: %x\n", path, status);
-        goto cleanup;
+        if (attrs & FILE_ATTRIBUTE_READONLY)
+        {
+            status = FileSetAttributes(path, attrs & ~FILE_ATTRIBUTE_READONLY);
+            if (!NT_SUCCESS(status))
+            {
+                NtLog(TRUE, L"[!] FileSetAttributes(%s) failed: %x\n", path, status);
+                goto cleanup;
+            }
+        }
+        // Reopen for write.
+        status = FileOpen(&dir, path, TRUE, FALSE, FALSE);
+        if (!NT_SUCCESS(status))
+        {
+            NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", path, status);
+            goto cleanup;
+        }
+
+        // Delete the parent itself.
+        status = FileDelete(dir);
+        if (!NT_SUCCESS(status))
+        {
+            NtLog(TRUE, L"[!] FileDelete(%s) failed: %x\n", path, status);
+            goto cleanup;
+        }
     }
 
     status = STATUS_SUCCESS;

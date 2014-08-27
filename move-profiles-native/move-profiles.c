@@ -84,7 +84,7 @@ NTSTATUS EnablePrivileges(void)
     // This is a variable-size struct, but definition contains 1 element by default.
     size = sizeof(TOKEN_PRIVILEGES) + sizeof(LUID_AND_ATTRIBUTES);
     tp = RtlAllocateHeap(g_Heap, 0, size);
-    
+
     status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_ALL_ACCESS, &processToken);
     if (!NT_SUCCESS(status))
         goto cleanup;
@@ -110,6 +110,7 @@ cleanup:
 NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
 {
     NTSTATUS status;
+    ULONG attrs;
 
     DisplayString(L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
     Sleep(1000);
@@ -127,7 +128,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
         NtLog(TRUE, L"[!] EnablePrivileges failed: %x", status);
         goto cleanup;
     }
-    
+
     if (argc < 3)
     {
         NtLog(TRUE, L"[!] Usage: move-profiles <source dir> <target dir>\n");
@@ -135,12 +136,41 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
         goto cleanup;
     }
 
+    // Check if source directory is already a symlink.
+    status = FileGetAttributes(argv[1], &attrs);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileGetAttributes(%s) failed: %x", argv[1], status);
+        goto cleanup;
+    }
+
     // TODO: parsing quotes so directories can have embedded spaces
     // Might happen in some non-english languages?
+    NtLog(TRUE, L"[*] Copying: '%s' -> '%s'\n", argv[1], argv[2]);
     status = FileCopyDirectory(argv[1], argv[2]);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopyDirectory failed: %x", status);
+        goto cleanup;
+    }
 
-    NtLog(TRUE, L"\n--- DELETING ---\n\n");
-    status = FileDeleteDirectory(argv[2]);
+    NtLog(TRUE, L"[*] Deleting: '%s'\n", argv[1]);
+    status = FileDeleteDirectory(argv[1], FALSE);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileDeleteDirectory failed: %x", status);
+        goto cleanup;
+    }
+
+    NtLog(TRUE, L"[*] Creating symlink: '%s' -> '%s'\n", argv[1], argv[2]);
+    status = FileSetSymlink(argv[1], argv[2]);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileSetReparsePoint failed: %x", status);
+        goto cleanup;
+    }
+
+    status = STATUS_SUCCESS;
 
 cleanup:
     if (g_Heap)
