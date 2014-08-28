@@ -26,25 +26,27 @@
         <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
           <Directory Id='QubesProgramFilesDir' Name='Qubes'>
             <Directory Id='BinDir' Name='bin'>
-              <Component Id='MoveProfiles' Guid='220A22F3-0B73-4A4C-B825-53132A88D1DF'>
-                <File Id='move_profiles.exe' Name='move-profiles.exe' DiskId='1' Source='move-profiles\bin\$(var.ARCHDIR)\move-profiles.exe' KeyPath="no" />
-              </Component>
-              <Component Id='MoveProfilesBootstrap' Guid='C4325378-B946-4C6C-A685-F3E39A10AF20'>
-                <File Id='move_profiles_bootstrap.exe' Name='move-profiles-bootstrap.exe' DiskId='1' Source='move-profiles-bootstrap\bin\$(var.ARCHDIR)\move-profiles-bootstrap.exe' KeyPath="no" />
+              <Component Id='PrepareVolume' Guid='220A22F3-0B73-4A4C-B825-53132A88D1DF'>
+                <File Id='prepare_volume.exe' Name='prepare-volume.exe' DiskId='1' Source='prepare-volume\bin\$(var.ARCHDIR)\prepare-volume.exe' KeyPath="no" />
               </Component>
             </Directory>
           </Directory>
         </Directory>
       </Directory>
       <Directory Id='SendToFolder'/>
+      <Directory Id="SystemFolder" Name="System">
+        <Component Id='MoveProfiles' Guid='C4325378-B946-4C6C-A685-F3E39A10AF20'>
+          <File Id='move_profiles.exe' Name='move-profiles.exe' DiskId='1' Source='move-profiles\bin\$(var.ARCHDIR)\move-profiles.exe' KeyPath="no" />
+        </Component>
+      </Directory>
     </Directory>
 
-    <Binary Id='RegisterScriptExe' SourceFile='register-startup-script\bin\$(var.ARCHDIR)\register-startup-script.exe' />
+    <Binary Id='PrepareVolumeExe' SourceFile='prepare-volume\bin\$(var.ARCHDIR)\prepare-volume.exe' />
 
-    <CustomAction Id='RegisterScript' Return='check' Impersonate='no' Execute='deferred' BinaryKey='RegisterScriptExe' ExeCommand='"[BinDir]\move-profiles-bootstrap.exe" "\"\"[BinDir]\move-profiles.exe 51728\"\""' />
+    <CustomAction Id='PrepareVolume' Return='check' Impersonate='no' Execute='deferred' BinaryKey='PrepareVolumeExe' ExeCommand='51728' />
 
     <InstallExecuteSequence>
-      <Custom Action='RegisterScript' After='InstallFiles'>
+      <Custom Action='PrepareVolume' After='InstallFiles'>
         NOT Installed
       </Custom>
     </InstallExecuteSequence>
