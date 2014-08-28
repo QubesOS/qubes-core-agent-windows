@@ -1,5 +1,5 @@
 #pragma once
-#include "move-profiles.h"
+#include "prepare-volume.h"
 
 // MBR signature for private disk, basically unique disk ID for Windows
 // http://technet.microsoft.com/en-us/library/cc976786.aspx
