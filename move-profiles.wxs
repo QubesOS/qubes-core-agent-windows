@@ -28,6 +28,8 @@
             <Directory Id='BinDir' Name='bin'>
               <Component Id='PrepareVolume' Guid='220A22F3-0B73-4A4C-B825-53132A88D1DF'>
                 <File Id='prepare_volume.exe' Name='prepare-volume.exe' DiskId='1' Source='prepare-volume\bin\$(var.ARCHDIR)\prepare-volume.exe' KeyPath="no" />
+                <!-- This needs to run *after* Xen disk drivers are loaded, so can't run directly during install as drivers will load after reboot. -->
+                <RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce" Name="QTW Move Profiles" Type="string" Value="[BinDir]prepare-volume.exe 51728"/>
               </Component>
             </Directory>
           </Directory>
@@ -40,16 +42,6 @@
         </Component>
       </Directory>
     </Directory>
-
-    <Binary Id='PrepareVolumeExe' SourceFile='prepare-volume\bin\$(var.ARCHDIR)\prepare-volume.exe' />
-
-    <CustomAction Id='PrepareVolume' Return='check' Impersonate='no' Execute='deferred' BinaryKey='PrepareVolumeExe' ExeCommand='51728' />
-
-    <InstallExecuteSequence>
-      <Custom Action='PrepareVolume' After='InstallFiles'>
-        NOT Installed
-      </Custom>
-    </InstallExecuteSequence>
 
   </Module>
 </Wix>
