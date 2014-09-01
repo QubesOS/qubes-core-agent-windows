@@ -60,6 +60,7 @@ int wmain(int argc, PWCHAR argv[])
     DWORD size;
     WCHAR valueData[MAX_PATH_LONG];
     WCHAR command[MAX_PATH_LONG];
+    WCHAR msg[1024];
 
     if (argc < 2)
     {
@@ -156,6 +157,12 @@ int wmain(int argc, PWCHAR argv[])
     }
 
     RegCloseKey(key);
+
+    StringCchPrintf(msg, RTL_NUMBER_OF(msg),
+        L"Qubes private disk image initialized as disk %c:.\r\n"
+        L"User profiles directory will be moved there during the next system boot.",
+        toPath[0]);
+    MessageBox(0, msg, L"Qubes Tools for Windows", MB_OK | MB_ICONINFORMATION);
 
     return 0;
 }
