@@ -8,13 +8,13 @@
     <?define PFILESDIR = ProgramFiles64Folder ?>
   <?endif ?>
 
-  <Module  Id='moveProfiles'
+  <Module Id='moveProfiles'
     Language='1033' Codepage='1252' Version='$(env.VERSION)'>
 
     <Package Id='{8BA696C6-3769-441A-A54D-B40CF7CC271F}' Keywords='Installer' Description="Qubes Agent for Windows"
       Comments='no comment' Manufacturer='Invisible Things Lab' InstallScope='perMachine'
       InstallerVersion='200' Languages='1033' SummaryCodepage='1252'
-      InstallPrivileges="elevated" />
+      InstallPrivileges="elevated" Platform="x64"/>
 
     <Configuration Name="ProductFolder" Format="Key" Type="Identifier" DefaultValue="QubesProgramFilesDir"
       Description="Installation directory" DisplayName="Installation directory"/>
@@ -22,6 +22,7 @@
       Row="BinDir" Value="[=ProductFolder]"/>
 
     <Directory Id='TARGETDIR' Name='SourceDir'>
+
       <Directory Id='$(var.PFILESDIR)'>
         <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
           <Directory Id='QubesProgramFilesDir' Name='Qubes'>
@@ -35,12 +36,15 @@
           </Directory>
         </Directory>
       </Directory>
-      <Directory Id='SendToFolder'/>
-      <Directory Id="SystemFolder" Name="System">
-        <Component Id='MoveProfiles' Guid='C4325378-B946-4C6C-A685-F3E39A10AF20'>
-          <File Id='move_profiles.exe' Name='move-profiles.exe' DiskId='1' Source='move-profiles\bin\$(var.ARCHDIR)\move-profiles.exe' KeyPath="no" />
-        </Component>
+
+      <Directory Id="WindowsFolder">
+        <Directory Id="System64Folder">
+          <Component Id='MoveProfiles' Guid='C4325378-B946-4C6C-A685-F3E39A10AF20' Win64='yes'>
+            <File Id='move_profiles.exe' Name='move-profiles.exe' DiskId='1' Source='move-profiles\bin\$(var.ARCHDIR)\move-profiles.exe' KeyPath='yes' />
+          </Component>
+        </Directory>
       </Directory>
+
     </Directory>
 
   </Module>
