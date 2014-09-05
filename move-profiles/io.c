@@ -583,8 +583,8 @@ NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
     rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset = rdb->SymbolicLinkReparseBuffer.PrintNameLength;
     rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = (USHORT)(targetSize + 8);
 
-    NtLog(FALSE, L"PrintName: %.*s", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
-    NtLog(FALSE, L"SubstituteName: %.*s", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
+    NtLog(FALSE, L"PrintName: %.*s\n", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
+    NtLog(FALSE, L"SubstituteName: %.*s\n", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
 
     status = NtFsControlFile(
         file,
