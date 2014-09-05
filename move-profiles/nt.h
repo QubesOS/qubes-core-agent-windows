@@ -452,6 +452,18 @@ typedef struct _RTL_HEAP_PARAMETERS
     SIZE_T Reserved[2];
 } RTL_HEAP_PARAMETERS, *PRTL_HEAP_PARAMETERS;
 
+typedef struct _TIME_FIELDS
+{
+    SHORT Year;
+    SHORT Month;
+    SHORT Day;
+    SHORT Hour;
+    SHORT Minute;
+    SHORT Second;
+    SHORT Milliseconds;
+    SHORT Weekday;
+} TIME_FIELDS, *PTIME_FIELDS;
+
 NTSYSAPI
 PVOID
 NTAPI
@@ -514,6 +526,22 @@ RtlDosPathNameToNtPathName_U(
     OUT PUNICODE_STRING NtPathName,
     OUT OPTIONAL PCWSTR *NtFileNamePart,
     OUT OPTIONAL PRTL_RELATIVE_NAME_U DirectoryInfo
+);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlSystemTimeToLocalTime(
+    IN PLARGE_INTEGER SystemTime,
+    OUT PLARGE_INTEGER LocalTime
+);
+
+NTSYSAPI
+VOID
+NTAPI
+RtlTimeToTimeFields(
+    IN PLARGE_INTEGER Time,
+    OUT PTIME_FIELDS TimeFields
 );
 
 /////////////////// Ex ///////////////////
@@ -615,4 +643,11 @@ NTAPI
 NtTerminateProcess(
     IN HANDLE ProcessHandle,
     IN NTSTATUS ExitStatus
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtQuerySystemTime(
+    OUT PLARGE_INTEGER CurrentTime
 );

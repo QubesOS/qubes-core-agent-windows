@@ -111,9 +111,17 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
 {
     NTSTATUS status;
     ULONG attrs;
+    TIME_FIELDS tf;
+    LARGE_INTEGER systemTime, localTime;
 
-    DisplayString(L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
-    Sleep(1000);
+    NtLog(FALSE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
+
+    NtQuerySystemTime(&systemTime);
+    RtlSystemTimeToLocalTime(&systemTime, &localTime);
+    RtlTimeToTimeFields(&localTime, &tf);
+
+    NtLog(FALSE, L"[*] Start time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
+        tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
 
     g_Heap = InitHeap();
     if (!g_Heap)
@@ -173,6 +181,13 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     status = STATUS_SUCCESS;
 
 cleanup:
+    NtQuerySystemTime(&systemTime);
+    RtlSystemTimeToLocalTime(&systemTime, &localTime);
+    RtlTimeToTimeFields(&localTime, &tf);
+
+    NtLog(FALSE, L"[*] End time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
+        tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
+
     if (g_Heap)
         FreeHeap(g_Heap);
     NtTerminateProcess(NtCurrentProcess(), status);
