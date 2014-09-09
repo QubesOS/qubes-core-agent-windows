@@ -114,15 +114,6 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     TIME_FIELDS tf;
     LARGE_INTEGER systemTime, localTime;
 
-    NtLog(FALSE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
-
-    NtQuerySystemTime(&systemTime);
-    RtlSystemTimeToLocalTime(&systemTime, &localTime);
-    RtlTimeToTimeFields(&localTime, &tf);
-
-    NtLog(FALSE, L"[*] Start time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
-        tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
-
     g_Heap = InitHeap();
     if (!g_Heap)
     {
@@ -130,12 +121,21 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
         goto cleanup;
     }
 
+    NtLog(FALSE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
+
     status = EnablePrivileges();
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] EnablePrivileges failed: %x", status);
+        NtLog(TRUE, L"[!] EnablePrivileges failed: %x\n", status);
         goto cleanup;
     }
+
+    NtQuerySystemTime(&systemTime);
+    RtlSystemTimeToLocalTime(&systemTime, &localTime);
+    RtlTimeToTimeFields(&localTime, &tf);
+
+    NtLog(FALSE, L"[*] Start time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
+        tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
 
     if (argc < 3)
     {
@@ -148,7 +148,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     status = FileGetAttributes(argv[1], &attrs);
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] FileGetAttributes(%s) failed: %x", argv[1], status);
+        NtLog(TRUE, L"[!] FileGetAttributes(%s) failed: %x\n", argv[1], status);
         goto cleanup;
     }
 
@@ -158,7 +158,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     status = FileCopyDirectory(argv[1], argv[2]);
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] FileCopyDirectory failed: %x", status);
+        NtLog(TRUE, L"[!] FileCopyDirectory(%s, %s) failed: %x\n", argv[1], argv[2], status);
         goto cleanup;
     }
 
@@ -166,7 +166,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     status = FileDeleteDirectory(argv[1], FALSE);
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] FileDeleteDirectory failed: %x", status);
+        NtLog(TRUE, L"[!] FileDeleteDirectory failed: %x\n", status);
         goto cleanup;
     }
 
@@ -174,7 +174,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     status = FileSetSymlink(argv[1], argv[2]);
     if (!NT_SUCCESS(status))
     {
-        NtLog(TRUE, L"[!] FileSetReparsePoint failed: %x", status);
+        NtLog(TRUE, L"[!] FileSetReparsePoint failed: %x\n", status);
         goto cleanup;
     }
 
