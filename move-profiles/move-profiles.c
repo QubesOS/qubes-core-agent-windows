@@ -155,7 +155,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     // TODO: parsing quotes so directories can have embedded spaces
     // Might happen in some non-english languages?
     NtLog(TRUE, L"[*] Copying: '%s' -> '%s'\n", argv[1], argv[2]);
-    status = FileCopyDirectory(argv[1], argv[2]);
+    status = FileCopyDirectory(argv[1], argv[2], FALSE);
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] FileCopyDirectory(%s, %s) failed: %x\n", argv[1], argv[2], status);
@@ -167,6 +167,9 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] FileDeleteDirectory failed: %x\n", status);
+
+        // Attempt to restore previous state.
+        FileCopyDirectory(argv[2], argv[1], TRUE);
         goto cleanup;
     }
 

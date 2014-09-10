@@ -731,7 +731,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
+NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath, IN BOOLEAN ignoreErrors)
 {
     UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
@@ -757,7 +757,8 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] FileCreateDirectory(%s) failed: %x\n", targetPath, status);
-        goto cleanup;
+        if (!ignoreErrors)
+            goto cleanup;
     }
 
     status = FileOpen(&dir, sourcePath, FALSE, FALSE, FALSE);
@@ -778,14 +779,16 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] FileCopyBasicInformation(%s, %s) failed: %x\n", sourcePath, targetPath, status);
-        goto cleanup;
+        if (!ignoreErrors)
+            goto cleanup;
     }
 
     status = FileCopySecurity(dir, target);
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] FileCopySecurity(%s, %s) failed: %x\n", sourcePath, targetPath, status);
-        goto cleanup;
+        if (!ignoreErrors)
+            goto cleanup;
     }
 
     dirInfo = RtlAllocateHeap(g_Heap, 0, 16384);
@@ -869,7 +872,7 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
                 }
                 else if (entry->FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
                 {
-                    FileCopyDirectory(fullPath, fullTargetPath);
+                    FileCopyDirectory(fullPath, fullTargetPath, ignoreErrors);
                 }
                 else
                 {
