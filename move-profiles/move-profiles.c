@@ -107,6 +107,54 @@ cleanup:
     return status;
 }
 
+// TODO: preserve non-default values if present.
+NTSTATUS RemoveBootExecuteEntry(void)
+{
+    WCHAR keyName[] = L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Session Manager";
+    WCHAR valueName[] = L"BootExecute";
+    WCHAR defaultValue[] = L"autocheck autochk *\0"; // multi-string, so double null-terminated
+    UNICODE_STRING keyNameU, valueNameU;
+    OBJECT_ATTRIBUTES oa;
+    HANDLE key = NULL;
+    NTSTATUS status;
+
+    keyNameU.Buffer = keyName;
+    keyNameU.Length = wcslen(keyName) * sizeof(WCHAR);
+    keyNameU.MaximumLength = keyNameU.Length + sizeof(WCHAR);
+
+    InitializeObjectAttributes(
+        &oa,
+        &keyNameU,
+        OBJ_CASE_INSENSITIVE,
+        NULL,
+        NULL);
+
+    status = NtOpenKey(&key, KEY_READ|KEY_WRITE, &oa);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] RemoveBootExecuteEntry: NtOpenKey(%s) failed: %x\n", keyName, status);
+        goto cleanup;
+    }
+
+    valueNameU.Buffer = valueName;
+    valueNameU.Length = wcslen(valueName) * sizeof(WCHAR);
+    valueNameU.MaximumLength = valueNameU.Length + sizeof(WCHAR);
+
+    status = NtSetValueKey(key, &valueNameU, 0, REG_MULTI_SZ, defaultValue, sizeof(defaultValue));
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] RemoveBootExecuteEntry: NtSetValueKey(%s, %s) failed: %x\n", keyName, valueName, status);
+        goto cleanup;
+    }
+
+    status = STATUS_SUCCESS;
+
+cleanup:
+    if (key)
+        NtClose(key);
+    return status;
+}
+
 NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
 {
     NTSTATUS status;
@@ -197,6 +245,7 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
 
     status = STATUS_SUCCESS;
 
+
 cleanup:
     NtQuerySystemTime(&systemTime);
     RtlSystemTimeToLocalTime(&systemTime, &localTime);
@@ -204,6 +253,9 @@ cleanup:
 
     NtLog(FALSE, L"[*] End time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
         tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
+
+    // Remove itself from BootExecute.
+    RemoveBootExecuteEntry();
 
     if (g_Heap)
         FreeHeap(g_Heap);

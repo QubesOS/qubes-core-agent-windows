@@ -578,6 +578,29 @@ NtDisplayString(
     IN PUNICODE_STRING DisplayString
 );
 
+/////////////////// Cm ///////////////////
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtOpenKey(
+    OUT PHANDLE KeyHandle,
+    IN ACCESS_MASK DesiredAccess,
+    IN POBJECT_ATTRIBUTES ObjectAttributes
+);
+
+NTSYSCALLAPI
+NTSTATUS
+NTAPI
+NtSetValueKey(
+    IN HANDLE KeyHandle,
+    IN PUNICODE_STRING ValueName,
+    IN OPTIONAL ULONG TitleIndex,
+    IN ULONG Type,
+    IN PVOID Data,
+    IN ULONG DataSize
+);
+
 /////////////////// Se ///////////////////
 
 //
