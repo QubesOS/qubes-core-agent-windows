@@ -152,6 +152,20 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
         goto cleanup;
     }
 
+    if (attrs & FILE_ATTRIBUTE_REPARSE_POINT)
+    {
+        NtLog(TRUE, L"[*] Source directory (%s) is already a reparse point, aborting\n", argv[1]);
+        goto cleanup;
+    }
+
+    // Check if destination directory exists.
+    status = FileGetAttributes(argv[2], &attrs);
+    if (NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[?] Destination directory (%s) already exists, aborting\n", argv[2]);
+        goto cleanup;
+    }
+
     // TODO: parsing quotes so directories can have embedded spaces
     // Might happen in some non-english languages?
     NtLog(TRUE, L"[*] Copying: '%s' -> '%s'\n", argv[1], argv[2]);
