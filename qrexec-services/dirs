@@ -1,1 +1,1 @@
-DIRS= filecopy-common filecopy-agent filecopy-unpacker clipboard-copy clipboard-paste set-gui-mode vm-file-editor open-in-vm wait-for-logon
+DIRS= filecopy-common filecopy-agent filecopy-unpacker clipboard-copy clipboard-paste set-gui-mode vm-file-editor open-in-vm wait-for-logon get-image-rgba
