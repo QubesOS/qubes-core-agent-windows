@@ -91,6 +91,7 @@
                 <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='qrexec-services\qubes.WaitForSession' KeyPath="no"/>
                 <File Id='qubes.SetGuiMode' Name='qubes.SetGuiMode' DiskId='1' Source='qrexec-services\qubes.SetGuiMode' KeyPath="no"/>
                 <File Id='qubes.GetAppMenus' Name='qubes.GetAppMenus' DiskId='1' Source='qrexec-services\qubes.GetAppMenus' KeyPath="no"/>
+                <File Id='qubes.GetImageRGBA' Name='qubes.GetImageRGBA' DiskId='1' Source='qrexec-services\qubes.GetImageRGBA' KeyPath="no"/>
               </Component>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
@@ -104,6 +105,7 @@
                 <File Id='wait_for_logon.exe' Name='wait-for-logon.exe' DiskId='1' Source='qrexec-services\wait-for-logon\bin\$(var.ARCHDIR)\wait-for-logon.exe' KeyPath="no"/>
                 <File Id='set_gui_mode.exe' Name='set-gui-mode.exe' DiskId='1' Source='qrexec-services\set-gui-mode\bin\$(var.ARCHDIR)\set-gui-mode.exe' KeyPath="no"/>
                 <File Id='get_appmenus.ps1' Name='get-appmenus.ps1' DiskId='1' Source='qrexec-services\get-appmenus.ps1' KeyPath="no"/>
+                <File Id='get_image_rgba.exe' Name='get_image_rgba.exe' DiskId='1' Source='qrexec-services\get-image-rgba\bin\$(var.ARCHDIR)\get-image-rgba.exe' KeyPath="no"/>
               </Component>
             </Directory>
           </Directory>
