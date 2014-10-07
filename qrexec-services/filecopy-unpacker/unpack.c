@@ -105,14 +105,14 @@ void process_one_file_reg(struct file_header *untrusted_hdr,
 		do_exit(EINVAL, NULL);
 
 	hResult = StringCchPrintfW(
-			wszTrustedFilePath, 
-			RTL_NUMBER_OF(wszTrustedFilePath), 
-			L"%c:\\%s", 
+			wszTrustedFilePath,
+			RTL_NUMBER_OF(wszTrustedFilePath),
+			L"%c:\\%s",
 			g_wcMappedDriveLetter,
 			pszUtf16UntrustedName);
 	free(pszUtf16UntrustedName);
 
-	if (FAILED(hResult)) 
+	if (FAILED(hResult))
 		do_exit(EINVAL, untrusted_name);
 
 
@@ -156,14 +156,14 @@ void process_one_file_dir(struct file_header *untrusted_hdr,
 		do_exit(EINVAL, NULL);
 
 	hResult = StringCchPrintfW(
-			wszTrustedDirectoryPath, 
-			RTL_NUMBER_OF(wszTrustedDirectoryPath), 
-			L"%c:\\%s", 
+			wszTrustedDirectoryPath,
+			RTL_NUMBER_OF(wszTrustedDirectoryPath),
+			L"%c:\\%s",
 			g_wcMappedDriveLetter,
 			pszUtf16UntrustedName);
 	free(pszUtf16UntrustedName);
 
-	if (FAILED(hResult)) 
+	if (FAILED(hResult))
 		do_exit(EINVAL, untrusted_name);
 
 	if (!CreateDirectory(wszTrustedDirectoryPath, NULL)) {	/* safe because of chroot */

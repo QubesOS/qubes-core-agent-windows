@@ -40,4 +40,4 @@ char * copy_file_status_to_str(int status)
 		case COPY_FILE_WRITE_ERROR: return "Error writing";
 		default: return "????????";
 	}
-} 
+}

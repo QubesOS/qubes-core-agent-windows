@@ -6,7 +6,7 @@
 #include "resource.h"
 
 
-INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) 
+INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	TCHAR szInput[128];
 	if (message==WM_COMMAND) {
@@ -20,7 +20,7 @@ INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
 				return TRUE;
 		}
 	}
-	
+
 	return FALSE;
 }
 
@@ -89,5 +89,5 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
 		return 1;
 	}
 
-	return 0; 	
+	return 0;
 }

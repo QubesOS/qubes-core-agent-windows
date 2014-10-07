@@ -37,8 +37,8 @@ int gntmem_set_global_quota(struct gntmem_handle* h, int new_limit);
 /* Grant a number of pages to a nominated domain. Both allocates and shares those
    pages. There is no support for sharing an existing page, because the allocation
    is performed in the kernel driver.
-   grants_out should be a pointer to an array of grant_ref_t large enough to handle n_pages grants. 
-   address_out will be assigned the user-accessible address of the granted pages on success. 
+   grants_out should be a pointer to an array of grant_ref_t large enough to handle n_pages grants.
+   address_out will be assigned the user-accessible address of the granted pages on success.
    Be aware that the pages so granted are virtually but not necessarily (pseudo-)physically contiguous.
    The return value is an opaque pointer to a handle representing this grant, or NULL on error,
    in which case the out parameters are assigned nothing useful.

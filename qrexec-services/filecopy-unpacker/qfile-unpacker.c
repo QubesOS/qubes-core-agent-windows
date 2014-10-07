@@ -57,9 +57,9 @@ ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
 		return ERROR_INVALID_PARAMETER;
 
 	hResult = StringCchPrintfW(
-			wszDirectoryObjectName, 
-			RTL_NUMBER_OF(wszDirectoryObjectName), 
-			L"\\BaseNamedObjects\\qfile-unpacker-%d", 
+			wszDirectoryObjectName,
+			RTL_NUMBER_OF(wszDirectoryObjectName),
+			L"\\BaseNamedObjects\\qfile-unpacker-%d",
 			GetCurrentProcessId());
 	if (FAILED(hResult)) {
 		internal_fatal(L"CreateLink(): StringCchPrintfW() failed with error %d\n", hResult);
@@ -82,9 +82,9 @@ ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
 
 	// Translate the directory path to a form of \Device\HarddiskVolumeN\path
 	hResult = StringCchPrintfW(
-			wszTargetDirectoryPath, 
-			RTL_NUMBER_OF(wszTargetDirectoryPath), 
-			L"%s%s", 
+			wszTargetDirectoryPath,
+			RTL_NUMBER_OF(wszTargetDirectoryPath),
+			L"%s%s",
 			wszDevicePath,
 			(PWCHAR)&pwszTargetDirectory[2]);
 	if (FAILED(hResult)) {
@@ -187,11 +187,11 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
 
 	hResult = StringCchPrintf(
-			wszIncomingDir, 
-			RTL_NUMBER_OF(wszIncomingDir), 
-			L"%s\\%s\\%s", 
-			pwszDocuments, 
-			INCOMING_DIR_ROOT, 
+			wszIncomingDir,
+			RTL_NUMBER_OF(wszIncomingDir),
+			L"%s\\%s\\%s",
+			pwszDocuments,
+			INCOMING_DIR_ROOT,
 			wszRemoteDomainName);
 	CoTaskMemFree(pwszDocuments);
 

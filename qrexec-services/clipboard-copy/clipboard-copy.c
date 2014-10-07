@@ -24,67 +24,67 @@ int write_all(HANDLE fd, void *buf, int size)
 
 BOOL getClipboard(HWND hWin, HANDLE hOutput)
 {
-	HANDLE hglb;
-	PWCHAR lpwstr;
-	PUCHAR lpstr;
-	size_t cbStr;
-	ULONG  uWritten;
+    HANDLE hglb;
+    PWCHAR lpwstr;
+    PUCHAR lpstr;
+    size_t cbStr;
+    ULONG  uWritten;
 
-	if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
-		return FALSE;
+    if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
+        return FALSE;
 
-	if (!OpenClipboard(hWin))
-	{
-		perror("OpenClipboard");
-		return FALSE;
-	}
+    if (!OpenClipboard(hWin))
+    {
+        perror("OpenClipboard");
+        return FALSE;
+    }
 
-	hglb = GetClipboardData(CLIPBOARD_FORMAT);
-	if (!hglb) {
-		perror("GetClipboardData");
-		CloseClipboard();
-		return FALSE;
-	}
+    hglb = GetClipboardData(CLIPBOARD_FORMAT);
+    if (!hglb) {
+        perror("GetClipboardData");
+        CloseClipboard();
+        return FALSE;
+    }
 
-	lpwstr = GlobalLock(hglb);
-	if (!lpwstr) {
-		perror("GlobalLock");
-		CloseClipboard();
-		return FALSE;
-	}
+    lpwstr = GlobalLock(hglb);
+    if (!lpwstr) {
+        perror("GlobalLock");
+        CloseClipboard();
+        return FALSE;
+    }
 
-	if (FAILED(ConvertUTF16ToUTF8(lpwstr, &lpstr, &cbStr))) {
-		perror("ConvertUTF16ToUTF8");
-		GlobalUnlock(hglb);
-		CloseClipboard();
-		return FALSE;
-	}
+    if (FAILED(ConvertUTF16ToUTF8(lpwstr, &lpstr, &cbStr))) {
+        perror("ConvertUTF16ToUTF8");
+        GlobalUnlock(hglb);
+        CloseClipboard();
+        return FALSE;
+    }
 
-	if (!write_all(hOutput, lpstr, cbStr)) {
-		LogError("write failed");
-		GlobalUnlock(hglb); 
-		CloseClipboard();
-		return FALSE;
-	}
+    if (!write_all(hOutput, lpstr, cbStr)) {
+        LogError("write failed");
+        GlobalUnlock(hglb);
+        CloseClipboard();
+        return FALSE;
+    }
 
-	GlobalUnlock(hglb); 
-	CloseClipboard(); 
-	return TRUE;
+    GlobalUnlock(hglb);
+    CloseClipboard();
+    return TRUE;
 }
 
 int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLine, int nCmdShow)
 {
-	HANDLE hStdOut;
+    HANDLE hStdOut;
 
-	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-	if (hStdOut == INVALID_HANDLE_VALUE) {
-		perror("GetStdHandle");
-		return 1;
-	}
-	if (!getClipboard(NULL, hStdOut)) {
-		return 1;
-	}
+    hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hStdOut == INVALID_HANDLE_VALUE) {
+        perror("GetStdHandle");
+        return 1;
+    }
+    if (!getClipboard(NULL, hStdOut)) {
+        return 1;
+    }
 
-	LogDebug("all ok");
-	return 0; 	
+    LogDebug("all ok");
+    return 0;
 }

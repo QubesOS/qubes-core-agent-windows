@@ -1,4 +1,4 @@
-/* 
+/*
     Xen Store Daemon providing simple tree-like database.
     Copyright (C) 2005 Rusty Russell IBM Corporation
 
@@ -51,46 +51,46 @@ void xs_daemon_close(struct xs_handle *);
  * Num indicates size.
  */
 char **xs_directory(struct xs_handle *h, xs_transaction_t t,
-		    const char *path, unsigned int *num);
+            const char *path, unsigned int *num);
 
 /* Get the value of a single file, nul terminated.
  * Returns a malloced value: call free() on it after use.
  * len indicates length in bytes, not including terminator.
  */
 void *xs_read(struct xs_handle *h, xs_transaction_t t,
-	      const char *path, unsigned int *len);
+          const char *path, unsigned int *len);
 
 /* Write the value of a single file.
  * Returns false on failure.
  */
 BOOL xs_write(struct xs_handle *h, xs_transaction_t t,
-	      const char *path, const void *data, unsigned int len);
+          const char *path, const void *data, unsigned int len);
 
 /* Create a new directory.
  * Returns false on failure, or success if it already exists.
  */
 BOOL xs_mkdir(struct xs_handle *h, xs_transaction_t t,
-	      const char *path);
+          const char *path);
 
 /* Destroy a file or directory (and children).
  * Returns false on failure, or if it doesn't exist.
  */
 BOOL xs_rm(struct xs_handle *h, xs_transaction_t t,
-	   const char *path);
+       const char *path);
 
 /* Get permissions of node (first element is owner, first perms is "other").
  * Returns malloced array, or NULL: call free() after use.
  */
 struct xs_permissions *xs_get_permissions(struct xs_handle *h,
-					  xs_transaction_t t,
-					  const char *path, unsigned int *num);
+                      xs_transaction_t t,
+                      const char *path, unsigned int *num);
 
 /* Set permissions of node (must be owner).
  * Returns false on failure.
  */
 BOOL xs_set_permissions(struct xs_handle *h, xs_transaction_t t,
-			const char *path, struct xs_permissions *perms,
-			unsigned int num_perms);
+            const char *path, struct xs_permissions *perms,
+            unsigned int num_perms);
 
 /* Watch a node for changes (poll on fd to detect, or call read_watch()).
  * When the node (or any child) changes, fd will become readable.
@@ -135,24 +135,24 @@ xs_transaction_t xs_transaction_start(struct xs_handle *h);
  * transaction.
  */
 BOOL xs_transaction_end(struct xs_handle *h, xs_transaction_t t,
-			BOOL abort);
+            BOOL abort);
 
 /* Introduce a new domain.
  * This tells the store daemon about a shared memory page, event channel and
  * store path associated with a domain: the domain uses these to communicate.
  */
 BOOL xs_introduce_domain(struct xs_handle *h,
-			 unsigned int domid,
-			 unsigned long mfn,
-                         unsigned int eventchn); 
+             unsigned int domid,
+             unsigned long mfn,
+                         unsigned int eventchn);
 
 /* Set the target of a domain
  * This tells the store daemon that a domain is targetting another one, so
  * it should let it tinker with it.
  */
 BOOL xs_set_target(struct xs_handle *h,
-		   unsigned int domid,
-		   unsigned int target);
+           unsigned int domid,
+           unsigned int target);
 
 /* Resume a domain.
  * Clear the shutdown flag for this domain in the store.
@@ -174,7 +174,7 @@ BOOL xs_is_domain_introduced(struct xs_handle *h, unsigned int domid);
 
 /* Only useful for DEBUG versions */
 char *xs_debug_command(struct xs_handle *h, const char *cmd,
-		       void *data, unsigned int len);
+               void *data, unsigned int len);
 
 #ifdef __cplusplus
 }

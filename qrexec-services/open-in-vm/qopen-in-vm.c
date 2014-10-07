@@ -106,9 +106,9 @@ void talk_to_daemon(PTCHAR fname)
 
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
-	if (argc!=2) 
+	if (argc!=2)
 		gui_fatal(TEXT("OpenInVM - no file given?"));
 	fprintf(stderr, "OpenInVM starting\n");
 	talk_to_daemon(argv[1]);
 	return 0;
-}	
+}

@@ -15,10 +15,10 @@ typedef enum {
 	STATE_RECEIVING_PROCESS_HANDLE
 };
 
-#define INSTANCES	4 
+#define INSTANCES	4
 #define PIPE_TIMEOUT	5000
 #define IO_HANDLES_ARRAY_SIZE	sizeof(IO_HANDLES_ARRAY)
- 
+
 typedef struct {
 	OVERLAPPED	oOverlapped;
 	HANDLE	hPipeInst;

@@ -102,10 +102,10 @@ DEFINE_KNOWN_FOLDER(FOLDERID_Documents,             0xfdd39ad0, 0x238f, 0x46af, 
 
 
 NTSTATUS NTAPI ZwSetInformationProcess(
-	HANDLE ProcessHandle,
-	PROCESSINFOCLASS ProcessInformationClass,
-	PVOID pProcessInformation,
-	ULONG ProcessInformationLength
+    HANDLE ProcessHandle,
+    PROCESSINFOCLASS ProcessInformationClass,
+    PVOID pProcessInformation,
+    ULONG ProcessInformationLength
 );
 
 NTSTATUS

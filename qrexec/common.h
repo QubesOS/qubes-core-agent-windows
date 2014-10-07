@@ -25,7 +25,7 @@ typedef enum {
 } PIPE_TYPE;
 
 
-typedef struct _PIPE_DATA {	
+typedef struct _PIPE_DATA {
 	HANDLE	hReadPipe;
 	PIPE_TYPE	bPipeType;
 	BOOLEAN	bReadInProgress;
@@ -51,23 +51,23 @@ typedef struct _CLIENT_INFO {
 
 	PIPE_DATA	Stdout;
 	PIPE_DATA	Stderr;
-	
+
 } CLIENT_INFO, *PCLIENT_INFO;
 
 ULONG AddExistingClient(
-	int client_id, 
+	int client_id,
 	PCLIENT_INFO pClientInfo
 );
 
 ULONG CreateClientPipes(
-	CLIENT_INFO *pClientInfo, 
-	HANDLE *phPipeStdin, 
-	HANDLE *phPipeStdout, 
+	CLIENT_INFO *pClientInfo,
+	HANDLE *phPipeStdin,
+	HANDLE *phPipeStdout,
 	HANDLE *phPipeStderr
 );
 
 ULONG CloseReadPipeHandles(
-	int client_id, 
+	int client_id,
 	PIPE_DATA *pPipeData
 );
 

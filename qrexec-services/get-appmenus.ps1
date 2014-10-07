@@ -5,7 +5,7 @@ $RegistryMapKey = 'AppMap'
 New-Item -Path $RegistryMapPath -Name $RegistryMapKey -Force | Out-Null
 
 # Instantiate the wscript.shell COM object
-$WshShell = new-object -comobject "WScript.Shell" 
+$WshShell = new-object -comobject "WScript.Shell"
 
 $Sha1 = [System.Security.Cryptography.SHA1]::Create()
 Function GetHash($string)
@@ -24,13 +24,13 @@ Function ProcessLink($pathObj, $basepath)
     } else {
         $appmenuLocation = ""
     }
-    
-    $linkObj = $WshShell.CreateShortcut($pathObj.FullName) 
+
+    $linkObj = $WshShell.CreateShortcut($pathObj.FullName)
     $targetPath = "cmd.exe /c `"$($pathObj.FullName)`""
     # We send .LNK file hash as icon name since the name can't contain some characters that can be in a file path
     # and the GetImageRGBA Qubes service needs to retrieve bitmap from this name alone.
     $targetHash = GetHash($pathObj.FullName)
-    
+
     # Store the hash-LNK mapping in the registry for easy  retrieval by GetImageRGBA.
     New-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $targetHash -PropertyType String -Value $pathObj.FullName | Out-Null
 

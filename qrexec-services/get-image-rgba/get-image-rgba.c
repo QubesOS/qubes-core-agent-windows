@@ -32,7 +32,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     }
 
     LogDebug("input: '%S'", param);
-    
+
     // Strip whitespaces at the end.
     for (i = RTL_NUMBER_OF(param) - 1; i > 0; i--)
     {

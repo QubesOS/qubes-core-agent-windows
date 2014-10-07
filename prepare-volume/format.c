@@ -113,7 +113,7 @@ BOOL FormatVolume(IN DWORD diskNumber)
 				return FALSE;
 			}
 		}
-		
+
 		// This call is synchronous.
 		g_FormatEx(volumeName, FixedMedia, L"NTFS", L"Qubes Private Image", TRUE, 0, FormatExCallback);
 	}

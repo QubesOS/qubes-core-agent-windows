@@ -4,14 +4,14 @@
  * A library for low-level access to the Xen control interfaces.
  *
  * Copyright (c) 2003-2004, K A Fraser.
- * 
+ *
  *
  * xc_gnttab functions:
  * Copyright (c) 2007-2008, D G Murray <Derek.Muray@cl.cam.ac.uk>
  *
  * Windows modifications:
  * Copyright (c) 2009 C Smowton <chris.smowton@cl.cam.ac.uk>
- * 
+ *
  * Quoted here solely for the /dev/evtchn-related functions.
  */
 
@@ -72,7 +72,7 @@ evtchn_port_or_error_t
 xc_evtchn_bind_virq(HANDLE xce_handle, unsigned int virq);
 
 /*
- * Unbind the given event channel. Returns -1 on failure, in which case call 
+ * Unbind the given event channel. Returns -1 on failure, in which case call
  * GetLastError for more information.
  */
 int xc_evtchn_unbind(HANDLE xce_handle, evtchn_port_t port);
@@ -93,7 +93,7 @@ evtchn_port_or_error_t
 xc_evtchn_pending_with_flush(HANDLE xce_handle);
 
 /*
- * Unmask the given event channel. Returns -1 on failure, in which case call 
+ * Unmask the given event channel. Returns -1 on failure, in which case call
  * GetLastError for more information.
  */
 int xc_evtchn_unmask(HANDLE xce_handle, evtchn_port_t port);

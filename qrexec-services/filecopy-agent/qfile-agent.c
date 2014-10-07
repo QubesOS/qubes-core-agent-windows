@@ -141,7 +141,7 @@ int single_file_processor(PTCHAR pszFilename, DWORD dwAttrs)
 	HANDLE hInput;
 	FILETIME atime, mtime;
 
-	if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY) 
+	if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY)
 		hdr.mode = 0755 | 0040000;
 	else
 		hdr.mode = 0644 | 0100000;
