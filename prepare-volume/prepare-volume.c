@@ -31,8 +31,8 @@ DWORD EnablePrivilege(HANDLE token, const PWCHAR privilegeName)
         FALSE,
         &tp,
         sizeof(TOKEN_PRIVILEGES),
-        (PTOKEN_PRIVILEGES)NULL,
-        (PDWORD)NULL))
+        (PTOKEN_PRIVILEGES) NULL,
+        (PDWORD) NULL))
         return perror("AdjustTokenPrivileges");
 
     if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
@@ -124,7 +124,7 @@ int wmain(int argc, PWCHAR argv[])
 
     // Get current value (usually filesystem autocheck).
     size = sizeof(valueData);
-    status = RegQueryValueEx(key, L"BootExecute", NULL, &valueType, (PBYTE)valueData, &size);
+    status = RegQueryValueEx(key, L"BootExecute", NULL, &valueType, (PBYTE) valueData, &size);
     if (ERROR_SUCCESS != status)
     {
         perror2(status, "RegQueryValueEx");
@@ -149,7 +149,7 @@ int wmain(int argc, PWCHAR argv[])
 
     memcpy(valueData + size / sizeof(WCHAR) - 1, command, (wcslen(command) + 2) * sizeof(WCHAR));
 
-    status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE)valueData, (wcslen(command) + 1) * sizeof(WCHAR) + size);
+    status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE) valueData, (wcslen(command) + 1) * sizeof(WCHAR) + size);
     if (ERROR_SUCCESS != status)
     {
         perror2(status, "RegSetValueEx");

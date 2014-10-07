@@ -2,16 +2,16 @@
 
 typedef LONG NTSTATUS, *PNTSTATUS;
 
-typedef struct _UNICODE_STRING {
+typedef struct _UNICODE_STRING
+{
     USHORT Length;
     USHORT MaximumLength;
 #ifdef MIDL_PASS
-    [size_is(MaximumLength / 2), length_is((Length) / 2) ] USHORT * Buffer;
+    [size_is(MaximumLength / 2), length_is((Length) / 2)] USHORT * Buffer;
 #else // MIDL_PASS
     __field_bcount_part(MaximumLength, Length) PWCH   Buffer;
 #endif // MIDL_PASS
-} UNICODE_STRING;
-typedef UNICODE_STRING *PUNICODE_STRING;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 #define OBJ_INHERIT             0x00000002L
 #define OBJ_PERMANENT           0x00000010L
@@ -20,15 +20,15 @@ typedef UNICODE_STRING *PUNICODE_STRING;
 
 #define DIRECTORY_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | 0xF)
 
-typedef struct _OBJECT_ATTRIBUTES {
+typedef struct _OBJECT_ATTRIBUTES
+{
     ULONG Length;
     HANDLE RootDirectory;
     PUNICODE_STRING ObjectName;
     ULONG Attributes;
     PVOID SecurityDescriptor;        // Points to type SECURITY_DESCRIPTOR
     PVOID SecurityQualityOfService;  // Points to type SECURITY_QUALITY_OF_SERVICE
-} OBJECT_ATTRIBUTES;
-typedef OBJECT_ATTRIBUTES *POBJECT_ATTRIBUTES;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
     (p)->Length = sizeof( OBJECT_ATTRIBUTES );          \
@@ -39,10 +39,10 @@ typedef OBJECT_ATTRIBUTES *POBJECT_ATTRIBUTES;
     (p)->SecurityQualityOfService = NULL;               \
     }
 
-
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)
 
-typedef enum _PROCESSINFOCLASS {
+typedef enum _PROCESSINFOCLASS
+{
     ProcessBasicInformation,
     ProcessQuotaLimits,
     ProcessIoCounters,
@@ -97,39 +97,35 @@ typedef enum _PROCESSINFOCLASS {
     MaxProcessInfoClass             // MaxProcessInfoClass should always be the last enum
 } PROCESSINFOCLASS;
 
-
-DEFINE_KNOWN_FOLDER(FOLDERID_Documents,             0xfdd39ad0, 0x238f, 0x46af, 0xad, 0xb4, 0x6c, 0x85, 0x48, 0x03, 0x69, 0xc7);
-
+DEFINE_KNOWN_FOLDER(FOLDERID_Documents, 0xfdd39ad0, 0x238f, 0x46af, 0xad, 0xb4, 0x6c, 0x85, 0x48, 0x03, 0x69, 0xc7);
 
 NTSTATUS NTAPI ZwSetInformationProcess(
     HANDLE ProcessHandle,
     PROCESSINFOCLASS ProcessInformationClass,
     PVOID pProcessInformation,
     ULONG ProcessInformationLength
-);
+    );
 
 NTSTATUS
 NTAPI
 ZwClose(
-    __in HANDLE Handle
+    IN HANDLE Handle
     );
 
 NTSTATUS
 NTAPI
 ZwCreateDirectoryObject(
-     PHANDLE DirectoryHandle,
-     ACCESS_MASK DesiredAccess,
-     POBJECT_ATTRIBUTES ObjectAttributes
+    PHANDLE DirectoryHandle,
+    ACCESS_MASK DesiredAccess,
+    POBJECT_ATTRIBUTES ObjectAttributes
     );
-
 
 VOID
 NTAPI
 RtlInitUnicodeString(
-     PUNICODE_STRING DestinationString,
-     PCWSTR SourceString
+    PUNICODE_STRING DestinationString,
+    PCWSTR SourceString
     );
-
 
 NTSTATUS NTAPI
 ZwCreateSymbolicLinkObject(
@@ -137,4 +133,4 @@ ZwCreateSymbolicLinkObject(
     IN ACCESS_MASK DesiredAccess,
     IN POBJECT_ATTRIBUTES pObjectAttributes,
     IN PUNICODE_STRING pLinkTarget
-);
+    );

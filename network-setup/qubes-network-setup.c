@@ -10,7 +10,8 @@
 // from service.c
 int service_main(void);
 
-int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInterfaceIndex) {
+int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInterfaceIndex)
+{
     PIP_ADAPTER_INFO	pAdapterInfo;
     PIP_ADAPTER_INFO	pAdapterInfoCurrent;
     PIP_ADDR_STRING		pAddrCurrent;
@@ -29,19 +30,22 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
 
     ulOutBufLen = 0;
     /* wait for adapters to initialize */
-    while ((dwRetVal=GetAdaptersInfo(NULL, &ulOutBufLen)) == ERROR_NO_DATA) {
+    while ((dwRetVal = GetAdaptersInfo(NULL, &ulOutBufLen)) == ERROR_NO_DATA)
+    {
         LogWarning("GetAdaptersInfo call failed with %d, retrying\n", dwRetVal);
         Sleep(200);
     }
 
     SetLastError(dwRetVal);
-    if (dwRetVal != ERROR_BUFFER_OVERFLOW) {
+    if (dwRetVal != ERROR_BUFFER_OVERFLOW)
+    {
         perror("GetAdaptersInfo");
         goto cleanup;
     }
-    pAdapterInfo = (IP_ADAPTER_INFO *)malloc (ulOutBufLen);
+    pAdapterInfo = (IP_ADAPTER_INFO *) malloc(ulOutBufLen);
 
-    if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) != ERROR_SUCCESS) {
+    if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) != ERROR_SUCCESS)
+    {
         SetLastError(dwRetVal);
         perror("GetAdaptersInfo 2");
         goto cleanup;
@@ -49,10 +53,13 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
 
     /* set IP address */
     pAdapterInfoCurrent = pAdapterInfo;
-    while (pAdapterInfoCurrent) {
-        if (pAdapterInfoCurrent->Type == MIB_IF_TYPE_ETHERNET) {
+    while (pAdapterInfoCurrent)
+    {
+        if (pAdapterInfoCurrent->Type == MIB_IF_TYPE_ETHERNET)
+        {
             pAddrCurrent = &pAdapterInfoCurrent->IpAddressList;
-            while (pAddrCurrent) {
+            while (pAddrCurrent)
+            {
                 if (0 == strcmp("0.0.0.0", pAddrCurrent->IpAddress.String))
                 {
                     pAddrCurrent = pAddrCurrent->Next;
@@ -60,14 +67,16 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
                 }
                 LogInfo("Deleting IP %S", pAddrCurrent->IpAddress.String);
                 SetLastError(dwRetVal = DeleteIPAddress(pAddrCurrent->Context));
-                if (dwRetVal != ERROR_SUCCESS) {
+                if (dwRetVal != ERROR_SUCCESS)
+                {
                     perror("DeleteIPAddress");
                     goto cleanup;
                 }
                 pAddrCurrent = pAddrCurrent->Next;
             }
             SetLastError(dwRetVal = AddIPAddress(ip, netmask, pAdapterInfoCurrent->Index, &NTEContext, &NTEInstance));
-            if (dwRetVal != ERROR_SUCCESS) {
+            if (dwRetVal != ERROR_SUCCESS)
+            {
                 perror("AddIPAddress");
                 goto cleanup;
             }
@@ -80,10 +89,12 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
 
     /* set default gateway */
     dwRetVal = GetIpForwardTable(NULL, &dwSize, FALSE);
-    if (dwRetVal == ERROR_INSUFFICIENT_BUFFER) {
+    if (dwRetVal == ERROR_INSUFFICIENT_BUFFER)
+    {
         // Allocate the memory for the table
         pIpForwardTable = (PMIB_IPFORWARDTABLE) malloc(dwSize);
-        if (pIpForwardTable == NULL) {
+        if (pIpForwardTable == NULL)
+        {
             LogError("Unable to allocate memory for the IPFORWARDTALE\n");
             goto cleanup;
         }
@@ -91,7 +102,8 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
         SetLastError(dwRetVal = GetIpForwardTable(pIpForwardTable, &dwSize, FALSE));
     }
 
-    if (dwRetVal != ERROR_SUCCESS) {
+    if (dwRetVal != ERROR_SUCCESS)
+    {
         perror("GetIpForwardTable");
         goto cleanup;
     }
@@ -100,12 +112,15 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     // of 0.0.0.0. Notice that we continue looking through the table, but copy only
     // one row. This is so that if there happen to be multiple default gateways, we can
     // be sure to delete them all.
-    for (i = 0; i < pIpForwardTable->dwNumEntries; i++) {
-        if (pIpForwardTable->table[i].dwForwardDest == 0) {
+    for (i = 0; i < pIpForwardTable->dwNumEntries; i++)
+    {
+        if (pIpForwardTable->table[i].dwForwardDest == 0)
+        {
             // Delete the old default gateway entry.
             SetLastError(dwRetVal = DeleteIpForwardEntry(&(pIpForwardTable->table[i])));
 
-            if (dwRetVal != ERROR_SUCCESS) {
+            if (dwRetVal != ERROR_SUCCESS)
+            {
                 perror("DeleteIpForwardEntry");
                 goto cleanup;
             }
@@ -116,11 +131,11 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     ipInterfaceRow.Family = AF_INET;
     ipInterfaceRow.InterfaceIndex = ipfRow.dwForwardIfIndex;
     SetLastError(dwRetVal = GetIpInterfaceEntry(&ipInterfaceRow));
-    if (dwRetVal != NO_ERROR) {
+    if (dwRetVal != NO_ERROR)
+    {
         perror("GetIpInterfaceEntry");
         goto cleanup;
     }
-
 
     ipfRow.dwForwardDest = 0; // default gateway (0.0.0.0)
     ipfRow.dwForwardMask = 0;
@@ -145,7 +160,8 @@ cleanup:
     return dwRetVal;
 }
 
-int qubes_setup_network() {
+int qubes_setup_network()
+{
     struct xs_handle *xs;
     int interface_index;
     char *qubes_ip;
@@ -155,23 +171,27 @@ int qubes_setup_network() {
     char cmdline[255];
 
     xs = xs_domain_open();
-    if (!xs) {
+    if (!xs)
+    {
         LogError("Failed to open xenstore connection\n");
         goto cleanup;
     }
 
     qubes_ip = xs_read(xs, XBT_NULL, "qubes-ip", NULL);
-    if (!qubes_ip) {
+    if (!qubes_ip)
+    {
         LogError("Failed to get qubes_ip\n");
         goto cleanup;
     }
     qubes_netmask = xs_read(xs, XBT_NULL, "qubes-netmask", NULL);
-    if (!qubes_netmask) {
+    if (!qubes_netmask)
+    {
         LogError("Failed to get qubes_netmask\n");
         goto cleanup;
     }
     qubes_gateway = xs_read(xs, XBT_NULL, "qubes-gateway", NULL);
-    if (!qubes_gateway) {
+    if (!qubes_gateway)
+    {
         LogError("Failed to get qubes_gateway\n");
         goto cleanup;
     }
@@ -179,9 +199,10 @@ int qubes_setup_network() {
     LogInfo("ip: %S, netmask: %S, gateway: %S", qubes_ip, qubes_netmask, qubes_gateway);
 
     if (set_network_parameters(inet_addr(qubes_ip),
-                inet_addr(qubes_netmask),
-                inet_addr(qubes_gateway),
-                &interface_index) != ERROR_SUCCESS) {
+        inet_addr(qubes_netmask),
+        inet_addr(qubes_gateway),
+        &interface_index) != ERROR_SUCCESS)
+    {
         /* error already reported */
         goto cleanup;
     }
@@ -189,8 +210,9 @@ int qubes_setup_network() {
     /* don't know how to programatically (and easily) set DNS address, so stay
      * with netsh... */
     _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
-            interface_index, qubes_gateway);
-    if (system(cmdline)!=0) {
+        interface_index, qubes_gateway);
+    if (system(cmdline) != 0)
+    {
         LogError("Failed to set DNS address by calling: %S\n", cmdline);
         goto cleanup;
     }
@@ -211,11 +233,14 @@ cleanup:
     return ret;
 }
 
-int __cdecl wmain(int argc, wchar_t **argv) {
-
-    if (argc >= 2 && 0==wcscmp(argv[1], L"-service")) {
+int __cdecl wmain(int argc, wchar_t **argv)
+{
+    if (argc >= 2 && 0 == wcscmp(argv[1], L"-service"))
+    {
         return service_main();
-    } else {
+    }
+    else
+    {
         return qubes_setup_network();
     }
 }

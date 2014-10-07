@@ -27,66 +27,80 @@
 
 void perror_wrapper(char * msg)
 {
-	/* TODO */
+    /* TODO */
 #if 0
-	lprintf_err(GetLastError(), msg);
+    lprintf_err(GetLastError(), msg);
 #endif
 }
 
-
 int write_all(HANDLE fd, void *buf, int size)
 {
-	int written = 0;
-	int ret;
-	while (written < size) {
-		if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL)) {
-			perror_wrapper("write");
-			return 0;
-		}
-		written += ret;
-	}
-//      fprintf(stderr, "sent %d bytes\n", size);
-	return 1;
+    int written = 0;
+    int ret;
+
+    while (written < size)
+    {
+        if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL))
+        {
+            perror_wrapper("write");
+            return 0;
+        }
+        written += ret;
+    }
+    //      fprintf(stderr, "sent %d bytes\n", size);
+    return 1;
 }
 
 int read_all(HANDLE fd, void *buf, int size)
 {
-	int got_read = 0;
-	int ret;
-	while (got_read < size) {
-		if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL)) {
-			perror_wrapper("read");
-			return 0;
-		}
-		if (ret == 0) {
-			errno = 0;
-			fprintf(stderr, "EOF\n");
-			return 0;
-		}
-		got_read += ret;
-	}
-//      fprintf(stderr, "read %d bytes\n", size);
-	return 1;
+    int got_read = 0;
+    int ret;
+
+    while (got_read < size)
+    {
+        if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL))
+        {
+            perror_wrapper("read");
+            return 0;
+        }
+
+        if (ret == 0)
+        {
+            errno = 0;
+            fprintf(stderr, "EOF\n");
+            return 0;
+        }
+
+        got_read += ret;
+    }
+    //      fprintf(stderr, "read %d bytes\n", size);
+    return 1;
 }
 
 int copy_fd_all(HANDLE fdout, HANDLE fdin)
 {
-	int ret;
-	char buf[4096];
-	for (;;) {
-		if (!ReadFile(fdin, buf, sizeof(buf), &ret, NULL)) {
-			// PIPE returns ERROR_BROKEN_PIPE instead of 0-bytes read on EOF
-			if (GetLastError() == ERROR_BROKEN_PIPE)
-				break;
-			perror_wrapper("read");
-			return 0;
-		}
-		if (!ret)
-			break;
-		if (!write_all(fdout, buf, ret)) {
-			perror_wrapper("write");
-			return 0;
-		}
-	}
-	return 1;
+    int ret;
+    char buf[4096];
+
+    for (;;)
+    {
+        if (!ReadFile(fdin, buf, sizeof(buf), &ret, NULL))
+        {
+            // PIPE returns ERROR_BROKEN_PIPE instead of 0-bytes read on EOF
+            if (GetLastError() == ERROR_BROKEN_PIPE)
+                break;
+            perror_wrapper("read");
+            return 0;
+        }
+
+        if (!ret)
+            break;
+
+        if (!write_all(fdout, buf, ret))
+        {
+            perror_wrapper("write");
+            return 0;
+        }
+    }
+    return 1;
 }

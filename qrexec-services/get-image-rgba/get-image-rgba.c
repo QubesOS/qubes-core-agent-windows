@@ -66,7 +66,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     }
 
     size = linkPathLength * sizeof(WCHAR); // buffer size
-    SetLastError(status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (PBYTE)linkPath, &size));
+    SetLastError(status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (PBYTE) linkPath, &size));
     if (status != ERROR_SUCCESS)
     {
         status = perror("RegQueryValueEx");
@@ -163,7 +163,7 @@ int wmain(int argc, WCHAR *argv[])
     GetObject(ii.hbmColor, sizeof(bm), &bm);
 
     size = bm.bmBitsPixel / 8 * bm.bmHeight * bm.bmWidth; // pixel buffer size
-    buffer = (BYTE *)malloc(size); // pixel buffer
+    buffer = (BYTE *) malloc(size); // pixel buffer
     ZeroMemory(&bmi, sizeof(BITMAPINFO));
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = bm.bmWidth;

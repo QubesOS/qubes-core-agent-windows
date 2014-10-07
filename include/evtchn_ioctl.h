@@ -42,8 +42,9 @@ typedef UINT16 domid_t;
  */
 #define IOCTL_EVTCHN_BIND_VIRQ 			\
 	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x800, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_evtchn_bind_virq {
-	unsigned int virq;
+struct ioctl_evtchn_bind_virq
+{
+    unsigned int virq;
 };
 
 /*
@@ -52,8 +53,9 @@ struct ioctl_evtchn_bind_virq {
  */
 #define IOCTL_EVTCHN_BIND_INTERDOMAIN			\
 	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x801, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_evtchn_bind_interdomain {
-	unsigned int remote_domain, remote_port;
+struct ioctl_evtchn_bind_interdomain
+{
+    unsigned int remote_domain, remote_port;
 };
 
 /*
@@ -62,8 +64,9 @@ struct ioctl_evtchn_bind_interdomain {
  */
 #define IOCTL_EVTCHN_BIND_UNBOUND_PORT			\
 	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x802, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_evtchn_bind_unbound_port {
-	unsigned int remote_domain;
+struct ioctl_evtchn_bind_unbound_port
+{
+    unsigned int remote_domain;
 };
 
 /*
@@ -71,8 +74,9 @@ struct ioctl_evtchn_bind_unbound_port {
  */
 #define IOCTL_EVTCHN_UNBIND				\
 	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x803, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_evtchn_unbind {
-	unsigned int port;
+struct ioctl_evtchn_unbind
+{
+    unsigned int port;
 };
 
 /*
@@ -80,8 +84,9 @@ struct ioctl_evtchn_unbind {
  */
 #define IOCTL_EVTCHN_NOTIFY				\
 	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x804, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_evtchn_notify {
-	unsigned int port;
+struct ioctl_evtchn_notify
+{
+    unsigned int port;
 };
 
 /* Clear and reinitialise the event buffer. Clear error condition. */
@@ -96,9 +101,9 @@ struct ioctl_evtchn_notify {
  */
 #define IOCTL_EVTCHN_RESTRICT_DOMID			\
 	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x806, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_evtchn_restrict_domid {
-	domid_t domid;
+struct ioctl_evtchn_restrict_domid
+{
+    domid_t domid;
 };
-
 
 #endif /* __WINDOWS_PUBLIC_EVTCHN_H__ */

@@ -8,17 +8,16 @@
 #include "utf8-conv.h"
 
 ULONG CreatePipedProcessAsCurrentUser(
-        PTCHAR pszCommand,
-        BOOLEAN bRunInteractively,
-        HANDLE hPipeStdin,
-        HANDLE hPipeStdout,
-        HANDLE hPipeStderr,
-        HANDLE *phProcess)
+    PTCHAR pszCommand,
+    BOOLEAN bRunInteractively,
+    HANDLE hPipeStdin,
+    HANDLE hPipeStdout,
+    HANDLE hPipeStderr,
+    HANDLE *phProcess)
 {
     PROCESS_INFORMATION	pi;
     STARTUPINFO	si;
     BOOLEAN	bInheritHandles;
-
 
     if (!pszCommand || !phProcess)
         return ERROR_INVALID_PARAMETER;
@@ -32,8 +31,8 @@ ULONG CreatePipedProcessAsCurrentUser(
 
     if (INVALID_HANDLE_VALUE != hPipeStdin &&
         INVALID_HANDLE_VALUE != hPipeStdout &&
-        INVALID_HANDLE_VALUE != hPipeStderr) {
-
+        INVALID_HANDLE_VALUE != hPipeStderr)
+    {
         si.dwFlags = STARTF_USESTDHANDLES;
         si.hStdInput = hPipeStdin;
         si.hStdOutput = hPipeStdout;
@@ -43,17 +42,17 @@ ULONG CreatePipedProcessAsCurrentUser(
     }
 
     if (!CreateProcess(
-            NULL,
-            pszCommand,
-            NULL,
-            NULL,
-            bInheritHandles, // inherit handles if IO is piped
-            0,
-            NULL,
-            NULL,
-            &si,
-            &pi)) {
-
+        NULL,
+        pszCommand,
+        NULL,
+        NULL,
+        bInheritHandles, // inherit handles if IO is piped
+        0,
+        NULL,
+        NULL,
+        &si,
+        &pi))
+    {
         return perror("CreateProcess");
     }
 
@@ -67,25 +66,24 @@ ULONG CreatePipedProcessAsCurrentUser(
 
 ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
 {
-    DWORD	cbWritten;
-    DWORD	cbRead;
-
+    DWORD cbWritten;
+    DWORD cbRead;
 
     if (!pCpr)
         return ERROR_INVALID_PARAMETER;
 
     if (!WriteFile(
-            hPipe,
-            pCpr,
-            sizeof(CREATE_PROCESS_RESPONSE),
-            &cbWritten,
-            NULL)) {
-
+        hPipe,
+        pCpr,
+        sizeof(CREATE_PROCESS_RESPONSE),
+        &cbWritten,
+        NULL))
+    {
         return perror("WriteFile");
     }
 
-    if (CPR_TYPE_HANDLE == pCpr->bType) {
-
+    if (CPR_TYPE_HANDLE == pCpr->bType)
+    {
         LogDebug("Waiting for the server to read the handle, duplicate it and close the pipe\n");
 
         // Issue a blocking dummy read that will finish when the server disconnects the pipe
@@ -97,24 +95,23 @@ ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
     return ERROR_SUCCESS;
 }
 
-
 int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 {
-    HANDLE	hPipe;
-    BOOL	fSuccess = FALSE;
-    DWORD	cbRead, cbWritten, dwMode;
-    LPTSTR	lpszPipename = TEXT("\\\\.\\pipe\\qrexec_trigger");
-    struct	trigger_connect_params params;
-    ULONG	uResult;
-    PUCHAR	pszParameter;
-    PTCHAR	pszLocalProgram;
-    HRESULT	hResult;
-    IO_HANDLES_ARRAY	IoHandles;
-    HANDLE	hProcess;
-    CREATE_PROCESS_RESPONSE	CreateProcessResponse;
+    HANDLE hPipe;
+    BOOL fSuccess = FALSE;
+    DWORD cbRead, cbWritten, dwMode;
+    LPTSTR lpszPipename = TEXT("\\\\.\\pipe\\qrexec_trigger");
+    struct trigger_connect_params params;
+    ULONG uResult;
+    PUCHAR pszParameter;
+    PTCHAR pszLocalProgram;
+    HRESULT hResult;
+    IO_HANDLES_ARRAY IoHandles;
+    HANDLE hProcess;
+    CREATE_PROCESS_RESPONSE CreateProcessResponse;
 
-
-    if (argc < 4) {
+    if (argc < 4)
+    {
         _tprintf(TEXT("usage: %s target_vmname program_ident local_program [local program arguments]\n"), argv[0]);
         return 1;
     }
@@ -122,11 +119,11 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     // Prepare the parameter structure containing the first two arguments.
     memset(&params, 0, sizeof(params));
 
-
 #ifdef UNICODE
     pszParameter = NULL;
     uResult = ConvertUTF16ToUTF8(argv[2], &pszParameter, NULL);
-    if (ERROR_SUCCESS != uResult) {
+    if (ERROR_SUCCESS != uResult)
+    {
         return perror2(uResult, "ConvertUTF16ToUTF8");
     }
 #else
@@ -134,7 +131,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 #endif
 
     hResult = StringCchCopyA(params.exec_index, sizeof(params.exec_index), pszParameter);
-    if (FAILED(hResult)) {
+    if (FAILED(hResult))
+    {
         return perror2(hResult, "StringCchCopyA");
     }
 
@@ -143,7 +141,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     pszParameter = NULL;
 
     uResult = ConvertUTF16ToUTF8(argv[1], &pszParameter, NULL);
-    if (ERROR_SUCCESS != uResult) {
+    if (ERROR_SUCCESS != uResult)
+    {
         return perror2(uResult, "ConvertUTF16ToUTF8");
     }
 #else
@@ -151,7 +150,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 #endif
 
     hResult = StringCchCopyA(params.target_vmname, sizeof(params.target_vmname), pszParameter);
-    if (FAILED(hResult)) {
+    if (FAILED(hResult))
+    {
         return perror2(hResult, "StringCchCopyA");
     }
 
@@ -164,15 +164,16 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
     // Try to open a named pipe; wait for it, if necessary.
 
-    while (TRUE) {
+    while (TRUE)
+    {
         hPipe = CreateFile(
-                lpszPipename,
-                GENERIC_READ | GENERIC_WRITE,
-                0,
-                NULL,
-                OPEN_EXISTING,
-                0,
-                NULL);
+            lpszPipename,
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            NULL,
+            OPEN_EXISTING,
+            0,
+            NULL);
 
         // Break if the pipe handle is valid.
 
@@ -181,13 +182,15 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
         // Exit if an error other than ERROR_PIPE_BUSY occurs.
         uResult = GetLastError();
-        if (ERROR_PIPE_BUSY != uResult) {
+        if (ERROR_PIPE_BUSY != uResult)
+        {
             return perror2(uResult, "CreateFile(agent pipe)");
         }
 
         // All pipe instances are busy, so wait for 10 seconds.
 
-        if (!WaitNamedPipe(lpszPipename, 10000)) {
+        if (!WaitNamedPipe(lpszPipename, 10000))
+        {
             return perror("WaitNamedPipe");
         }
     }
@@ -196,18 +199,19 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
     dwMode = PIPE_READMODE_MESSAGE;
     if (!SetNamedPipeHandleState(
-            hPipe, // pipe handle
-            &dwMode, // new pipe mode
-            NULL, // don't set maximum bytes
-            NULL)) { // don't set maximum time
+        hPipe, // pipe handle
+        &dwMode, // new pipe mode
+        NULL, // don't set maximum bytes
+        NULL))
+    { // don't set maximum time
         return perror("SetNamedPipeHandleState");
     }
-
 
     // Send the params to the pipe server.
     LogDebug("Sending the parameters to the server\n");
 
-    if (!WriteFile(hPipe, &params, sizeof(params), &cbWritten, NULL)) {
+    if (!WriteFile(hPipe, &params, sizeof(params), &cbWritten, NULL))
+    {
         return perror("WriteFile");
     }
 
@@ -215,13 +219,14 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
 
     // Read the handle array from the pipe.
     fSuccess = ReadFile(
-            hPipe,
-            &IoHandles,
-            sizeof(IoHandles),
-            &cbRead,
-            NULL);
+        hPipe,
+        &IoHandles,
+        sizeof(IoHandles),
+        &cbRead,
+        NULL);
 
-    if (!fSuccess || cbRead != sizeof(IoHandles)) {
+    if (!fSuccess || cbRead != sizeof(IoHandles))
+    {
         // If the message is too large to fit in a buffer, treat it as an error as well:
         // this shouldn't happen if the pipe server operates correctly.
         return perror("ReadFile");
@@ -236,28 +241,28 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
         pszLocalProgram++;
 
     uResult = CreatePipedProcessAsCurrentUser(
-            pszLocalProgram,	// local program
-            TRUE,
-            IoHandles.hPipeStdin,
-            IoHandles.hPipeStdout,
-            IoHandles.hPipeStderr,
-            &hProcess);
+        pszLocalProgram,	// local program
+        TRUE,
+        IoHandles.hPipeStdin,
+        IoHandles.hPipeStdout,
+        IoHandles.hPipeStderr,
+        &hProcess);
 
     CloseHandle(IoHandles.hPipeStdin);
     CloseHandle(IoHandles.hPipeStdout);
     CloseHandle(IoHandles.hPipeStderr);
 
-    if (ERROR_SUCCESS != uResult) {
-
+    if (ERROR_SUCCESS != uResult)
+    {
         perror2(uResult, "CreatePipedProcessAsCurrentUser");
 
         LogDebug("Sending the error code to the server\n");
 
         CreateProcessResponse.bType = CPR_TYPE_ERROR_CODE;
         CreateProcessResponse.ResponseData.dwErrorCode = uResult;
-
-    } else {
-
+    }
+    else
+    {
         LogDebug("Sending the process handle of the local program to the server\n");
 
         CreateProcessResponse.bType = CPR_TYPE_HANDLE;

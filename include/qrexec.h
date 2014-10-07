@@ -22,65 +22,72 @@
 #pragma once
 #define REXEC_PORT 512
 
+enum
+{
+    MSG_CLIENT_TO_SERVER_EXEC_CMDLINE = 0x100,
+    MSG_CLIENT_TO_SERVER_JUST_EXEC,
+    MSG_CLIENT_TO_SERVER_CONNECT_EXISTING,
 
-enum {
-	MSG_CLIENT_TO_SERVER_EXEC_CMDLINE = 0x100,
-	MSG_CLIENT_TO_SERVER_JUST_EXEC,
-	MSG_CLIENT_TO_SERVER_CONNECT_EXISTING,
+    MSG_SERVER_TO_AGENT_CONNECT_EXISTING,
+    MSG_SERVER_TO_AGENT_EXEC_CMDLINE,
+    MSG_SERVER_TO_AGENT_JUST_EXEC,
+    MSG_SERVER_TO_AGENT_INPUT,
+    MSG_SERVER_TO_AGENT_CLIENT_END,
 
-	MSG_SERVER_TO_AGENT_CONNECT_EXISTING,
-	MSG_SERVER_TO_AGENT_EXEC_CMDLINE,
-	MSG_SERVER_TO_AGENT_JUST_EXEC,
-	MSG_SERVER_TO_AGENT_INPUT,
-	MSG_SERVER_TO_AGENT_CLIENT_END,
+    MSG_XOFF,
+    MSG_XON,
 
-	MSG_XOFF,
-	MSG_XON,
+    MSG_AGENT_TO_SERVER_STDOUT,
+    MSG_AGENT_TO_SERVER_STDERR,
+    MSG_AGENT_TO_SERVER_EXIT_CODE,
+    MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING,
 
-	MSG_AGENT_TO_SERVER_STDOUT,
-	MSG_AGENT_TO_SERVER_STDERR,
-	MSG_AGENT_TO_SERVER_EXIT_CODE,
-	MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING,
-
-	MSG_SERVER_TO_CLIENT_STDOUT,
-	MSG_SERVER_TO_CLIENT_STDERR,
-	MSG_SERVER_TO_CLIENT_EXIT_CODE
+    MSG_SERVER_TO_CLIENT_STDOUT,
+    MSG_SERVER_TO_CLIENT_STDERR,
+    MSG_SERVER_TO_CLIENT_EXIT_CODE
 };
 
-struct server_header {
-	unsigned int type;
-	unsigned int client_id;
-	unsigned int len;
+struct server_header
+{
+    unsigned int type;
+    unsigned int client_id;
+    unsigned int len;
 };
 
-struct connect_existing_params {
-	char ident[32];
+struct connect_existing_params
+{
+    char ident[32];
 };
 
-struct trigger_connect_params {
-	char exec_index[64];
-	char target_vmname[32];
-	struct connect_existing_params process_fds;
+struct trigger_connect_params
+{
+    char exec_index[64];
+    char target_vmname[32];
+    struct connect_existing_params process_fds;
 };
 
-typedef struct {
-	HANDLE	hPipeStdin;
-	HANDLE	hPipeStdout;
-	HANDLE	hPipeStderr;
+typedef struct
+{
+    HANDLE hPipeStdin;
+    HANDLE hPipeStdout;
+    HANDLE hPipeStderr;
 } IO_HANDLES_ARRAY, *PIO_HANDLES_ARRAY;
 
-enum {
-	CPR_TYPE_NONE = 0,
-	CPR_TYPE_HANDLE,
-	CPR_TYPE_ERROR_CODE
+enum
+{
+    CPR_TYPE_NONE = 0,
+    CPR_TYPE_HANDLE,
+    CPR_TYPE_ERROR_CODE
 };
 
-typedef struct {
-	UCHAR	bType;
-	union {
-		HANDLE	hProcess;
-		DWORD	dwErrorCode;
-	} ResponseData;
+typedef struct
+{
+    UCHAR bType;
+    union
+    {
+        HANDLE hProcess;
+        DWORD dwErrorCode;
+    } ResponseData;
 } CREATE_PROCESS_RESPONSE, *PCREATE_PROCESS_RESPONSE;
 
 #define	ERROR_SET_LINUX		0x00

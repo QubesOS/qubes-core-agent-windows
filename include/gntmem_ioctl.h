@@ -40,16 +40,17 @@ typedef UINT16 domid_t;
  * Set a limit on how many grants this device may issue
  */
 #define IOCTL_GNTMEM_SET_LOCAL_LIMIT 			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x800, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_gntmem_set_limit {
-	unsigned int new_limit;
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x800, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+struct ioctl_gntmem_set_limit
+{
+    unsigned int new_limit;
 };
 
 /*
  * Set a global limit on how many grants all gntmem devices taken together may issue
  */
 #define IOCTL_GNTMEM_SET_GLOBAL_LIMIT			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x801, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x801, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 /* Uses same in-struct as above */
 
 /*
@@ -57,17 +58,19 @@ struct ioctl_gntmem_set_limit {
  * issue a grant against each of those pages. Output buffer should hold the appropriate number of grant_ref_ts.
  */
 #define IOCTL_GNTMEM_GRANT_PAGES			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x802, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_gntmem_grant_pages {
-	int n_pages;
-	domid_t domid;
-	INT32 uid; // Device-local identifier for later use in GET_GRANTS.
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x802, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+struct ioctl_gntmem_grant_pages
+{
+    int n_pages;
+    domid_t domid;
+    INT32 uid; // Device-local identifier for later use in GET_GRANTS.
 };
 
 #define IOCTL_GNTMEM_GET_GRANTS \
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x803, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
-struct ioctl_gntmem_get_grants {
-	INT32 uid;
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x803, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+struct ioctl_gntmem_get_grants
+{
+    INT32 uid;
 };
 // Output is a void* followed by (n_pages) grants.
 

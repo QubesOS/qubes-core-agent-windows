@@ -193,7 +193,7 @@ NTSTATUS FileRead(IN HANDLE file, OUT PVOID buffer, IN ULONG bufferSize, OUT PUL
     if (NT_SUCCESS(status))
     {
         if (readSize)
-            *readSize = (ULONG)iosb.Information; // single io block size is limited to 32bits
+            *readSize = (ULONG) iosb.Information; // single io block size is limited to 32bits
     }
 
     return status;
@@ -209,7 +209,7 @@ NTSTATUS FileWrite(IN HANDLE file, IN const PVOID buffer, IN ULONG bufferSize, O
     if (NT_SUCCESS(status))
     {
         if (writtenSize)
-            *writtenSize = (ULONG)iosb.Information; // single io block size is limited to 32bits
+            *writtenSize = (ULONG) iosb.Information; // single io block size is limited to 32bits
     }
 
     return status;
@@ -556,7 +556,7 @@ cleanup:
 NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
 {
     BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
-    PREPARSE_DATA_BUFFER rdb = (PREPARSE_DATA_BUFFER)buffer;
+    PREPARSE_DATA_BUFFER rdb = (PREPARSE_DATA_BUFFER) buffer;
     DWORD size, targetSize;
     WCHAR dest[MAX_PATH_LONG];
     NTSTATUS status;
@@ -572,16 +572,16 @@ NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
     rdb->ReparseTag = IO_REPARSE_TAG_SYMLINK;
     // 12 = SymbolicLinkReparseBuffer fields without PathBuffer
     // sizeof(PathBuffer) = 2*targetSize + sizeof(L"\\??\\")
-    rdb->ReparseDataLength = (USHORT)(12 + targetSize * 2 + 8);
+    rdb->ReparseDataLength = (USHORT) (12 + targetSize * 2 + 8);
     rdb->SymbolicLinkReparseBuffer.Flags = 0; // absolute link
 
     swprintf_s(rdb->SymbolicLinkReparseBuffer.PathBuffer, (sizeof(buffer) - sizeof(REPARSE_DATA_BUFFER)) / sizeof(WCHAR),
         L"%s\\??\\%s", targetPath, targetPath);
 
     rdb->SymbolicLinkReparseBuffer.PrintNameOffset = 0;
-    rdb->SymbolicLinkReparseBuffer.PrintNameLength = (USHORT)targetSize;
+    rdb->SymbolicLinkReparseBuffer.PrintNameLength = (USHORT) targetSize;
     rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset = rdb->SymbolicLinkReparseBuffer.PrintNameLength;
-    rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = (USHORT)(targetSize + 8);
+    rdb->SymbolicLinkReparseBuffer.SubstituteNameLength = (USHORT) (targetSize + 8);
 
     NtLog(FALSE, L"PrintName: %.*s\n", rdb->SymbolicLinkReparseBuffer.PrintNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.PrintNameOffset / 2);
     NtLog(FALSE, L"SubstituteName: %.*s\n", rdb->SymbolicLinkReparseBuffer.SubstituteNameLength / 2, rdb->SymbolicLinkReparseBuffer.PathBuffer + rdb->SymbolicLinkReparseBuffer.SubstituteNameOffset / 2);
@@ -712,7 +712,7 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
         NULL, NULL,
         &iosb,
         FSCTL_SET_REPARSE_POINT,
-        rdb, (ULONG)iosb.Information,
+        rdb, (ULONG) iosb.Information,
         NULL, 0);
 
     if (!NT_SUCCESS(status))
@@ -884,7 +884,7 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
                 break;
 
             // Move to next entry.
-            entry = (PFILE_FULL_DIR_INFORMATION)((ULONG_PTR)entry + entry->NextEntryOffset);
+            entry = (PFILE_FULL_DIR_INFORMATION) ((ULONG_PTR) entry + entry->NextEntryOffset);
         }
 
         firstQuery = FALSE;
@@ -1055,7 +1055,7 @@ NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
                 break;
 
             // Move to next entry.
-            entry = (PFILE_FULL_DIR_INFORMATION)((ULONG_PTR)entry + entry->NextEntryOffset);
+            entry = (PFILE_FULL_DIR_INFORMATION) ((ULONG_PTR) entry + entry->NextEntryOffset);
         }
 
         firstQuery = FALSE;

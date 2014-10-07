@@ -129,7 +129,7 @@ NTSTATUS RemoveBootExecuteEntry(void)
         NULL,
         NULL);
 
-    status = NtOpenKey(&key, KEY_READ|KEY_WRITE, &oa);
+    status = NtOpenKey(&key, KEY_READ | KEY_WRITE, &oa);
     if (!NT_SUCCESS(status))
     {
         NtLog(TRUE, L"[!] RemoveBootExecuteEntry: NtOpenKey(%s) failed: %x\n", keyName, status);
@@ -244,7 +244,6 @@ NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
     }
 
     status = STATUS_SUCCESS;
-
 
 cleanup:
     NtQuerySystemTime(&systemTime);

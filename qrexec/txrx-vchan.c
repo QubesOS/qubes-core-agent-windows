@@ -25,64 +25,63 @@
 
 struct libvchan *ctrl;
 
-
 int write_all_vchan_ext(void *buf, int size)
 {
-	int written = 0;
-	int ret;
+    int written = 0;
+    int ret;
 
-	if (!ctrl)
-		return -1;
+    if (!ctrl)
+        return -1;
 
-	while (written < size) {
-		ret =
-		    libvchan_write(ctrl, (char *) buf + written,
-				   size - written);
-		if (ret <= 0)
-			return ret;
+    while (written < size)
+    {
+        ret =
+            libvchan_write(ctrl, (char *) buf + written,
+            size - written);
+        if (ret <= 0)
+            return ret;
 
-		written += ret;
-	}
+        written += ret;
+    }
 
-//      fprintf(stderr, "sent %d bytes\n", size);
-	return size;
+    //      fprintf(stderr, "sent %d bytes\n", size);
+    return size;
 }
-
 
 int read_all_vchan_ext(void *buf, int size)
 {
-	int written = 0;
-	int ret;
-	while (written < size) {
-		ret =
-		    libvchan_read(ctrl, (char *) buf + written,
-				  size - written);
-		if (ret <= 0)
-			return ret;
+    int written = 0;
+    int ret;
 
-		written += ret;
-	}
-//      fprintf(stderr, "read %d bytes\n", size);
-	return size;
+    while (written < size)
+    {
+        ret =
+            libvchan_read(ctrl, (char *) buf + written,
+            size - written);
+        if (ret <= 0)
+            return ret;
+
+        written += ret;
+    }
+    //      fprintf(stderr, "read %d bytes\n", size);
+    return size;
 }
 
 int read_ready_vchan_ext()
 {
-	return libvchan_data_ready(ctrl);
+    return libvchan_data_ready(ctrl);
 }
 
 int buffer_space_vchan_ext()
 {
-	return libvchan_buffer_space(ctrl);
+    return libvchan_buffer_space(ctrl);
 }
-
 
 int peer_server_init(int port)
 {
-	ctrl = libvchan_server_init(port);
-	if (!ctrl)
-		return 1;
+    ctrl = libvchan_server_init(port);
+    if (!ctrl)
+        return 1;
 
-	return 0;
+    return 0;
 }
-

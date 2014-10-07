@@ -19,23 +19,22 @@
  *
  */
 
-
-
 int peer_server_init(int port);
 int read_ready_vchan_ext();
 int read_all_vchan_ext(void *buf, int size);
 int write_all_vchan_ext(void *buf, int size);
 int buffer_space_vchan_ext();
 
-enum {
-	WRITE_STDIN_OK = 0x200,
-	WRITE_STDIN_BUFFERED,
-	WRITE_STDIN_ERROR
+enum
+{
+    WRITE_STDIN_OK = 0x200,
+    WRITE_STDIN_BUFFERED,
+    WRITE_STDIN_ERROR
 };
 
 int flush_client_data(int fd, int client_id, struct buffer *buffer);
 int write_stdin(int fd, int client_id, char *data, int len,
-		struct buffer *buffer);
+struct buffer *buffer);
 void set_nonblock(int fd);
 int fork_and_flush_stdin(int fd, struct buffer *buffer);
 extern struct libvchan *ctrl;

@@ -14,43 +14,52 @@ static void produce_message(int icon, const PWCHAR fmt, va_list args)
 {
     char *dialog_msg;
     WCHAR buf[1024];
-    PWCHAR  pMessage = NULL;
-    ULONG	cchErrorTextSize;
-    ULONG   nWritten;
+    PWCHAR pMessage = NULL;
+    ULONG cchErrorTextSize;
+    ULONG nWritten;
 
-    if (FAILED(StringCbVPrintfW(buf, sizeof(buf), fmt, args))) {
+    if (FAILED(StringCbVPrintfW(buf, sizeof(buf), fmt, args)))
+    {
         /* FIXME: some fallback method? */
         return;
     }
 
     cchErrorTextSize = FormatMessageW(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL,
-                GetLastError(),
-                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                pMessage,
-                0,
-                NULL);
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        GetLastError(),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        pMessage,
+        0,
+        NULL);
 
-    if (cchErrorTextSize > 0) {
-        if (FAILED(StringCbCat(buf, sizeof(buf), L": "))) {
+    if (cchErrorTextSize > 0)
+    {
+        if (FAILED(StringCbCat(buf, sizeof(buf), L": ")))
+        {
             LocalFree(pMessage);
             return;
         }
-        if (FAILED(StringCbCat(buf, sizeof(buf), pMessage))) {
+
+        if (FAILED(StringCbCat(buf, sizeof(buf), pMessage)))
+        {
             LocalFree(pMessage);
             return;
         }
     }
-    if (FAILED(StringCbCat(buf, sizeof(buf), L"\n"))) {
+
+    if (FAILED(StringCbCat(buf, sizeof(buf), L"\n")))
+    {
         LocalFree(pMessage);
         return;
     }
 
-    if (STDERR != INVALID_HANDLE_VALUE) {
+    if (STDERR != INVALID_HANDLE_VALUE)
+    {
         // message for qrexec log in dom0
         WriteFile(STDERR, buf, wcslen(buf) * sizeof(WCHAR), &nWritten, NULL);
     }
+
     MessageBoxW(NULL, buf, L"Qubes file copy error", MB_OK | icon);
     LocalFree(pMessage);
 }

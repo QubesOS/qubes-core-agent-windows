@@ -44,7 +44,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
     DWORD index;
 
     // Enumerate disk class devices.
-    UuidFromString((RPC_WSTR)DISK_CLASS_GUID, &diskClassGuid);
+    UuidFromString((RPC_WSTR) DISK_CLASS_GUID, &diskClassGuid);
     deviceInfoSet = SetupDiGetClassDevs(&diskClassGuid, NULL, NULL, DIGCF_PRESENT); // only connected devices
 
     if (deviceInfoSet == INVALID_HANDLE_VALUE)
@@ -68,7 +68,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
 
         // Get device's parent.
         ZeroMemory(parentString, sizeof(parentString));
-        if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_Parent, &devPropType, (PBYTE)parentString, sizeof(parentString), &returnedSize, 0))
+        if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_Parent, &devPropType, (PBYTE) parentString, sizeof(parentString), &returnedSize, 0))
         {
             perror("SetupDiGetDeviceProperty(parent)");
             continue;
@@ -84,8 +84,8 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
         StringCchPrintf(deviceName, RTL_NUMBER_OF(deviceName), L"\\\\?\\%s\\" DISK_INTERFACE_GUID, deviceId);
         // Replace all backslashes with #.
         for (s = deviceName + 4; *s; s++)
-        if (*s == L'\\')
-            *s = '#';
+            if (*s == L'\\')
+                *s = '#';
         LogDebug("Device name: %s", deviceName);
 
         // Get physical drive number.

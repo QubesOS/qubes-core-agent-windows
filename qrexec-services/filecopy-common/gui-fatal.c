@@ -14,7 +14,8 @@ HWND hDialog;
 
 show_error_t show_error_cb;
 
-void set_error_gui_callbacks(HWND hD, show_error_t cb) {
+void set_error_gui_callbacks(HWND hD, show_error_t cb)
+{
     hDialog = hD;
     show_error_cb = cb;
 }
@@ -23,35 +24,41 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
 {
     char *dialog_msg;
     TCHAR buf[1024];
-    PTCHAR  pMessage = NULL;
-    ULONG	cchErrorTextSize;
-    ULONG   nWritten;
+    PTCHAR pMessage = NULL;
+    ULONG cchErrorTextSize;
+    ULONG nWritten;
 
-    if (FAILED(StringCchVPrintf(buf, RTL_NUMBER_OF(buf), fmt, args))) {
+    if (FAILED(StringCchVPrintf(buf, RTL_NUMBER_OF(buf), fmt, args)))
+    {
         /* FIXME: some fallback method? */
         return;
     }
 
     cchErrorTextSize = FormatMessage(
-                FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                NULL,
-                GetLastError(),
-                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                pMessage,
-                0,
-                NULL);
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        GetLastError(),
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        pMessage,
+        0,
+        NULL);
 
-    if (cchErrorTextSize > 0) {
-        if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT(": ")))) {
+    if (cchErrorTextSize > 0)
+    {
+        if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT(": "))))
+        {
             LocalFree(pMessage);
             return;
         }
-        if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), pMessage))) {
+        if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), pMessage)))
+        {
             LocalFree(pMessage);
             return;
         }
     }
-    if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT("\n")))) {
+
+    if (FAILED(StringCchCat(buf, RTL_NUMBER_OF(buf), TEXT("\n"))))
+    {
         LocalFree(pMessage);
         return;
     }
