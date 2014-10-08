@@ -22,7 +22,7 @@ HANDLE STDERR = INVALID_HANDLE_VALUE;
 #ifdef DBG
 #define internal_fatal gui_fatal
 #else
-static __inline void internal_fatal(const PWCHAR fmt, ...)
+static __inline void internal_fatal(const WCHAR *fmt, ...)
 {
     gui_fatal(L"Internal error");
 }
@@ -32,7 +32,7 @@ int do_unpack();
 
 WCHAR g_wcMappedDriveLetter = L'\0';
 
-ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
+ULONG CreateLink(WCHAR *pwszTargetDirectory, WCHAR *pwcMappedDriveLetter)
 {
     UNICODE_STRING DirectoryObjectName;
     UNICODE_STRING MappedDriveLetter;
@@ -149,12 +149,12 @@ ULONG CreateLink(PWCHAR pwszTargetDirectory, PWCHAR pwcMappedDriveLetter)
     return ERROR_SUCCESS;
 }
 
-int __cdecl _tmain(ULONG argc, PTCHAR argv[])
+int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     WCHAR wszIncomingDir[MAX_PATH + 1];
     ULONG nWritten;
     WCHAR wcMappedDriveLetter;
-    PWCHAR pwszDocuments = NULL;
+    WCHAR *pwszDocuments = NULL;
     HRESULT hResult;
     ULONG uResult;
     WCHAR wszRemoteDomainName[MAX_PATH];

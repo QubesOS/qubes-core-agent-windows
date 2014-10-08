@@ -12,18 +12,22 @@ void Sleep(ULONG milliseconds)
     NtDelayExecution(FALSE, &sleepInterval);
 }
 
-void DisplayString(IN const PWCHAR msg)
+void DisplayString(IN const WCHAR *msg)
 {
     UNICODE_STRING us;
 
+#pragma warning(push)
+#pragma warning(disable: 4090) // different const qualifiers
+    // The call below doesn't change the string.
     us.Buffer = msg;
+#pragma warning(pop)
     us.Length = wcslen(msg) * sizeof(WCHAR);
     us.MaximumLength = us.Length + sizeof(WCHAR);
 
     NtDisplayString(&us);
 }
 
-void NtPrintf(IN const PWCHAR format, ...)
+void NtPrintf(IN const WCHAR *format, ...)
 {
     va_list args;
     WCHAR buffer[1024];
@@ -35,7 +39,7 @@ void NtPrintf(IN const PWCHAR format, ...)
     DisplayString(buffer);
 }
 
-void NtLog(IN BOOLEAN print, IN const PWCHAR format, ...)
+void NtLog(IN BOOLEAN print, IN const WCHAR *format, ...)
 {
     va_list args;
     WCHAR buffer[1024];
@@ -77,7 +81,7 @@ BOOLEAN FreeHeap(HANDLE heap)
 NTSTATUS EnablePrivileges(void)
 {
     HANDLE processToken = NULL;
-    PTOKEN_PRIVILEGES tp = NULL;
+    TOKEN_PRIVILEGES *tp = NULL;
     ULONG size;
     NTSTATUS status;
 
@@ -155,7 +159,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS wmain(INT argc, PWCHAR argv[], PWCHAR envp[], ULONG DebugFlag OPTIONAL)
+NTSTATUS wmain(INT argc, WCHAR *argv[], WCHAR *envp[], ULONG DebugFlag OPTIONAL)
 {
     NTSTATUS status;
     ULONG attrs;

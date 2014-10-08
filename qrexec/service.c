@@ -130,7 +130,7 @@ void WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
     CloseHandle(g_hStopServiceEvent);
 }
 
-ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService, PDWORD pdwCurrentState, PDWORD pdwExitCode)
+ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrentState, DWORD *pdwExitCode)
 {
     SERVICE_STATUS_PROCESS ServiceStatus;
     DWORD dwBytesNeeded;
@@ -147,7 +147,7 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
     if (!QueryServiceStatusEx(
         hService, // handle to service
         SC_STATUS_PROCESS_INFO, // info level
-        (LPBYTE) &ServiceStatus, // address of structure
+        (BYTE *) &ServiceStatus, // address of structure
         sizeof(SERVICE_STATUS_PROCESS), // size of structure
         &dwBytesNeeded))
     {
@@ -188,7 +188,7 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
         if (!QueryServiceStatusEx(
             hService,
             SC_STATUS_PROCESS_INFO,
-            (LPBYTE) &ServiceStatus,
+            (BYTE *) &ServiceStatus,
             sizeof(SERVICE_STATUS_PROCESS),
             &dwBytesNeeded))
         {
@@ -291,7 +291,7 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
     return WaitForService(dwPendingState, dwWantedState, hService, pdwCurrentState, pdwExitCode);
 }
 
-ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
+ULONG InstallService(TCHAR *pszServiceFileName, TCHAR *pszServiceName)
 {
     SC_HANDLE hService;
     SC_HANDLE hScm;
@@ -358,7 +358,7 @@ ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName)
     return ERROR_SUCCESS;
 }
 
-ULONG UninstallService(PTCHAR pszServiceName)
+ULONG UninstallService(TCHAR *pszServiceName)
 {
     SC_HANDLE hService;
     SC_HANDLE hScm;

@@ -10,10 +10,10 @@
 #include "dvm2.h"
 #include "utf8-conv.h"
 
-void send_file(PTCHAR fname)
+void send_file(TCHAR *fname)
 {
-    PTCHAR base, base1, base2;
-    PUCHAR baseUTF8;
+    TCHAR *base, *base1, *base2;
+    UCHAR *baseUTF8;
     UCHAR basePadded[DVM_FILENAME_SIZE];
     HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     HANDLE fd = CreateFile(fname, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -80,7 +80,7 @@ int copy_and_return_nonemptiness(HANDLE tmpfd)
     return size.QuadPart > 0;
 }
 
-void actually_recv_file(PTCHAR fname, PTCHAR tempfile, HANDLE tmpfd)
+void actually_recv_file(TCHAR *fname, TCHAR *tempfile, HANDLE tmpfd)
 {
     if (!copy_and_return_nonemptiness(tmpfd))
     {
@@ -92,7 +92,7 @@ void actually_recv_file(PTCHAR fname, PTCHAR tempfile, HANDLE tmpfd)
         gui_fatal(TEXT("rename"));
 }
 
-void recv_file(PTCHAR fname)
+void recv_file(TCHAR *fname)
 {
     HANDLE tmpfd;
     int ret;
@@ -117,13 +117,13 @@ void recv_file(PTCHAR fname)
     actually_recv_file(fname, tempfile, tmpfd);
 }
 
-void talk_to_daemon(PTCHAR fname)
+void talk_to_daemon(TCHAR *fname)
 {
     send_file(fname);
     recv_file(fname);
 }
 
-int __cdecl _tmain(ULONG argc, PTCHAR argv[])
+int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     if (argc != 2)
         gui_fatal(TEXT("OpenInVM - no file given?"));

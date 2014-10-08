@@ -14,7 +14,7 @@
 HANDLE hStdIn = INVALID_HANDLE_VALUE;
 HANDLE hStdOut = INVALID_HANDLE_VALUE;
 
-BOOL get_tempdir(PTCHAR *pBuf, size_t *pcchBuf)
+BOOL get_tempdir(TCHAR **pBuf, size_t *pcchBuf)
 {
     BOOL retval = FALSE;
     int size = 0, size_all = 0;
@@ -70,11 +70,11 @@ cleanup:
     return retval;
 }
 
-TCHAR *get_filename(PTCHAR *tmpname)
+TCHAR *get_filename(TCHAR **tmpname)
 {
     char buf[DVM_FILENAME_SIZE + 1];
-    PTCHAR basename;
-    PTCHAR retname;
+    TCHAR *basename;
+    TCHAR *retname;
     size_t basename_len, retname_len, tmpname_len;
     int i;
 
@@ -125,7 +125,7 @@ TCHAR *get_filename(PTCHAR *tmpname)
     return retname;
 }
 
-BOOL copy_file(PTCHAR filename)
+BOOL copy_file(TCHAR *filename)
 {
     BOOL retval = FALSE;
     HANDLE fd = CreateFile(filename, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -152,7 +152,7 @@ cleanup:
     return retval;
 }
 
-BOOL send_file_back(PTCHAR filename)
+BOOL send_file_back(TCHAR *filename)
 {
     BOOL retval = FALSE;
     HANDLE fd = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -183,17 +183,17 @@ cleanup:
     return retval;
 }
 
-int __cdecl _tmain(ULONG argc, PTCHAR argv[])
+int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post, session_stat;
-    PTCHAR filename;
+    TCHAR *filename;
     HANDLE child;
     TCHAR cmdline[32768];
     int	exitCode = 1, childExitCode;
     SHELLEXECUTEINFO sei;
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
-    PTCHAR tempDir = NULL;
+    TCHAR *tempDir = NULL;
 
     hStdIn = GetStdHandle(STD_INPUT_HANDLE);
     if (hStdIn == INVALID_HANDLE_VALUE)

@@ -25,7 +25,7 @@ extern	WCHAR g_wcMappedDriveLetter;
 #ifdef DBG
 #define internal_fatal gui_fatal
 #else
-static __inline void internal_fatal(const PWCHAR fmt, ...)
+static __inline void internal_fatal(const WCHAR *fmt, ...)
 {
     gui_fatal(L"Internal error");
 }
@@ -101,7 +101,7 @@ void process_one_file_reg(struct file_header *untrusted_hdr, char *untrusted_nam
     int	ret;
     ULONG uResult;
     HANDLE fdout;
-    PWCHAR pszUtf16UntrustedName = NULL;
+    WCHAR *pszUtf16UntrustedName = NULL;
     WCHAR wszTrustedFilePath[MAX_PATH + 1];
     HRESULT hResult;
 
@@ -152,7 +152,7 @@ void process_one_file_dir(struct file_header *untrusted_hdr, char *untrusted_nam
     // fix perms only when the directory is sent for the second time
     // it allows to transfer r.x directory contents, as we create it rwx initially
     ULONG uResult;
-    PWCHAR pszUtf16UntrustedName = NULL;
+    WCHAR *pszUtf16UntrustedName = NULL;
     WCHAR wszTrustedDirectoryPath[MAX_PATH + 1];
     HRESULT hResult;
 
@@ -185,9 +185,9 @@ void process_one_file_link(struct file_header *untrusted_hdr, char *untrusted_na
 {
     char untrusted_content[MAX_PATH_LENGTH];
     unsigned int filelen;
-    PWCHAR pszUtf16UntrustedName = NULL;
+    WCHAR *pszUtf16UntrustedName = NULL;
     WCHAR wszTrustedFilePath[MAX_PATH + 1];
-    PWCHAR pwszUntrustedLinkTargetPath = NULL;
+    WCHAR *pwszUntrustedLinkTargetPath = NULL;
     WCHAR wszUntrustedLinkTargetAbsolutePath[MAX_PATH + 1];
     BOOLEAN bResult;
     HRESULT hResult;

@@ -6,12 +6,12 @@
 #include <utf8-conv.h>
 #include <Shlwapi.h>
 
-PTCHAR pszExpectedUser;
+TCHAR *pszExpectedUser;
 BOOL bFound = FALSE;
 
 BOOL CheckSession(DWORD	dSessionId)
 {
-    PTCHAR pszUserName;
+    TCHAR *pszUserName;
     DWORD cbUserName;
 
     if (FAILED(WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE, dSessionId, WTSUserName, &pszUserName, &cbUserName)))
@@ -39,7 +39,7 @@ BOOL CheckSession(DWORD	dSessionId)
 
 BOOL CheckIfUserLoggedIn()
 {
-    PWTS_SESSION_INFO pSessionInfo;
+    WTS_SESSION_INFO *pSessionInfo;
     DWORD dSessionCount;
     DWORD i;
 
@@ -71,7 +71,7 @@ LRESULT CALLBACK WindowProc(
     LPARAM lParam    // session ID
     )
 {
-    PTCHAR pszUserName;
+    TCHAR *pszUserName;
     size_t cbUserName;
 
     switch (Msg)
@@ -152,7 +152,7 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
     return got_read;
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, PTCHAR pszCommandLine, int nCmdShow)
+int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLine, int nCmdShow)
 {
     HWND hMainWindow;
     size_t cbExpectedUserUtf8;

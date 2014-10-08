@@ -12,7 +12,7 @@
 #define FASTCALL
 #define NT_SUCCESS(Status)              (((NTSTATUS)(Status)) >= 0)
 
-typedef long NTSTATUS, *PNTSTATUS;
+typedef long NTSTATUS;
 
 #define NtCurrentProcess()                      ((HANDLE)(LONG_PTR)-1)
 
@@ -21,17 +21,17 @@ typedef struct _UNICODE_STRING
     USHORT Length;
     USHORT MaximumLength;
     PWSTR Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
+} UNICODE_STRING;
 
 typedef struct _OBJECT_ATTRIBUTES
 {
     ULONG Length;
     HANDLE RootDirectory;
-    PUNICODE_STRING ObjectName;
+    UNICODE_STRING *ObjectName;
     ULONG Attributes;
-    PVOID SecurityDescriptor;
-    PVOID SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+    void *SecurityDescriptor;
+    void *SecurityQualityOfService;
+} OBJECT_ATTRIBUTES;
 
 /////////////////// Io ///////////////////
 //
@@ -115,7 +115,7 @@ typedef enum _FILE_INFORMATION_CLASS
     FileValidDataLengthInformation,
     FileShortNameInformation,
     FileMaximumInformation
-} FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
+} FILE_INFORMATION_CLASS;
 
 //
 // I/O Status Block
@@ -125,10 +125,10 @@ typedef struct _IO_STATUS_BLOCK
     union
     {
         NTSTATUS Status;
-        PVOID Pointer;
+        void *Pointer;
     };
     ULONG_PTR Information;
-} IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
+} IO_STATUS_BLOCK;
 
 //
 // File Information structures for NtQueryInformationFile
@@ -140,7 +140,7 @@ typedef struct _FILE_BASIC_INFORMATION
     LARGE_INTEGER LastWriteTime;
     LARGE_INTEGER ChangeTime;
     ULONG FileAttributes;
-} FILE_BASIC_INFORMATION, *PFILE_BASIC_INFORMATION;
+} FILE_BASIC_INFORMATION;
 
 typedef struct _FILE_STANDARD_INFORMATION
 {
@@ -149,7 +149,7 @@ typedef struct _FILE_STANDARD_INFORMATION
     ULONG NumberOfLinks;
     BOOLEAN DeletePending;
     BOOLEAN Directory;
-} FILE_STANDARD_INFORMATION, *PFILE_STANDARD_INFORMATION;
+} FILE_STANDARD_INFORMATION;
 
 typedef struct _FILE_STREAM_INFORMATION
 {
@@ -158,12 +158,12 @@ typedef struct _FILE_STREAM_INFORMATION
     LARGE_INTEGER StreamSize;
     LARGE_INTEGER StreamAllocationSize;
     WCHAR StreamName[1];
-} FILE_STREAM_INFORMATION, *PFILE_STREAM_INFORMATION;
+} FILE_STREAM_INFORMATION;
 
 typedef struct _FILE_POSITION_INFORMATION
 {
     LARGE_INTEGER CurrentByteOffset;
-} FILE_POSITION_INFORMATION, *PFILE_POSITION_INFORMATION;
+} FILE_POSITION_INFORMATION;
 
 typedef struct _FILE_RENAME_INFORMATION
 {
@@ -171,7 +171,7 @@ typedef struct _FILE_RENAME_INFORMATION
     HANDLE  RootDirectory;
     ULONG FileNameLength;
     WCHAR FileName[1];
-} FILE_RENAME_INFORMATION, *PFILE_RENAME_INFORMATION;
+} FILE_RENAME_INFORMATION;
 
 typedef struct _FILE_FULL_DIR_INFORMATION
 {
@@ -187,12 +187,12 @@ typedef struct _FILE_FULL_DIR_INFORMATION
     ULONG FileNameLength;
     ULONG EaSize;
     WCHAR FileName[1];
-} FILE_FULL_DIR_INFORMATION, *PFILE_FULL_DIR_INFORMATION;
+} FILE_FULL_DIR_INFORMATION;
 
 typedef struct _FILE_DISPOSITION_INFORMATION
 {
     BOOLEAN DeleteFile;
-} FILE_DISPOSITION_INFORMATION, *PFILE_DISPOSITION_INFORMATION;
+} FILE_DISPOSITION_INFORMATION;
 
 typedef struct _REPARSE_DATA_BUFFER
 {
@@ -229,12 +229,12 @@ typedef struct _REPARSE_DATA_BUFFER
         }
         GenericReparseBuffer;
     };
-} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+} REPARSE_DATA_BUFFER;
 
-typedef VOID
+typedef void
 (NTAPI *PIO_APC_ROUTINE)(
-    IN PVOID ApcContext,
-    IN PIO_STATUS_BLOCK IoStatusBlock,
+    IN void *ApcContext,
+    IN IO_STATUS_BLOCK *IoStatusBlock,
     IN ULONG Reserved
 );
 
@@ -242,16 +242,16 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtCreateFile(
-    OUT PHANDLE FileHandle,
+    OUT HANDLE *FileHandle,
     IN ACCESS_MASK DesiredAccess,
-    IN POBJECT_ATTRIBUTES ObjectAttributes,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    IN OPTIONAL PLARGE_INTEGER AllocationSize,
+    IN OBJECT_ATTRIBUTES *ObjectAttributes,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
+    IN OPTIONAL LARGE_INTEGER *AllocationSize,
     IN ULONG FileAttributes,
     IN ULONG ShareAccess,
     IN ULONG CreateDisposition,
     IN ULONG CreateOptions,
-    IN OPTIONAL PVOID EaBuffer,
+    IN OPTIONAL void *EaBuffer,
     IN ULONG EaLength
 );
 
@@ -259,7 +259,7 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtDeleteFile(
-    IN POBJECT_ATTRIBUTES ObjectAttributes
+    IN OBJECT_ATTRIBUTES *ObjectAttributes
 );
 
 NTSYSCALLAPI
@@ -269,12 +269,12 @@ NtFsControlFile(
     IN HANDLE FileHandle,
     IN OPTIONAL HANDLE Event,
     IN OPTIONAL PIO_APC_ROUTINE ApcRoutine,
-    IN OPTIONAL PVOID ApcContext,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
+    IN OPTIONAL void *ApcContext,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
     IN ULONG FsControlCode,
-    IN OPTIONAL PVOID InputBuffer,
+    IN OPTIONAL void *InputBuffer,
     IN ULONG InputBufferLength,
-    OUT OPTIONAL PVOID OutputBuffer,
+    OUT OPTIONAL void *OutputBuffer,
     IN ULONG OutputBufferLength
 );
 
@@ -282,8 +282,8 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtQueryAttributesFile(
-    IN POBJECT_ATTRIBUTES ObjectAttributes,
-    OUT PFILE_BASIC_INFORMATION FileInformation
+    IN OBJECT_ATTRIBUTES *ObjectAttributes,
+    OUT FILE_BASIC_INFORMATION *FileInformation
 );
 
 NTSYSCALLAPI
@@ -291,8 +291,8 @@ NTSTATUS
 NTAPI
 NtQueryInformationFile(
     IN HANDLE FileHandle,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    OUT PVOID FileInformation,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
+    OUT void *FileInformation,
     IN ULONG Length,
     IN FILE_INFORMATION_CLASS FileInformationClass
 );
@@ -302,8 +302,8 @@ NTSTATUS
 NTAPI
 NtSetInformationFile(
     IN HANDLE FileHandle,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    IN PVOID FileInformation,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
+    IN void *FileInformation,
     IN ULONG Length,
     IN FILE_INFORMATION_CLASS FileInformationClass
 );
@@ -315,13 +315,13 @@ NtQueryDirectoryFile(
     IN HANDLE FileHandle,
     IN OPTIONAL HANDLE Event,
     IN OPTIONAL PIO_APC_ROUTINE ApcRoutine,
-    IN OPTIONAL PVOID ApcContext,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    OUT PVOID FileInformation,
+    IN OPTIONAL void *ApcContext,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
+    OUT void *FileInformation,
     IN ULONG Length,
     IN FILE_INFORMATION_CLASS FileInformationClass,
     IN BOOLEAN ReturnSingleEntry,
-    IN OPTIONAL PUNICODE_STRING FileName,
+    IN OPTIONAL UNICODE_STRING *FileName,
     IN BOOLEAN RestartScan
 );
 
@@ -332,12 +332,12 @@ NtReadFile(
     IN HANDLE FileHandle,
     IN OPTIONAL HANDLE Event,
     IN OPTIONAL PIO_APC_ROUTINE ApcRoutine,
-    IN OPTIONAL PVOID ApcContext,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    OUT PVOID Buffer,
+    IN OPTIONAL void *ApcContext,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
+    OUT void *Buffer,
     IN ULONG Length,
-    IN OPTIONAL PLARGE_INTEGER ByteOffset,
-    IN OPTIONAL PULONG Key
+    IN OPTIONAL LARGE_INTEGER *ByteOffset,
+    IN OPTIONAL ULONG *Key
 );
 
 NTSYSCALLAPI
@@ -347,12 +347,12 @@ NtWriteFile(
     IN HANDLE FileHandle,
     IN OPTIONAL HANDLE Event,
     IN OPTIONAL PIO_APC_ROUTINE ApcRoutine,
-    IN OPTIONAL PVOID ApcContext,
-    OUT PIO_STATUS_BLOCK IoStatusBlock,
-    IN PVOID Buffer,
+    IN OPTIONAL void *ApcContext,
+    OUT IO_STATUS_BLOCK *IoStatusBlock,
+    IN const void *Buffer,
     IN ULONG Length,
-    IN OPTIONAL PLARGE_INTEGER ByteOffset,
-    IN OPTIONAL PULONG Key
+    IN OPTIONAL LARGE_INTEGER *ByteOffset,
+    IN OPTIONAL ULONG *Key
 );
 
 /////////////////// Ob ///////////////////
@@ -392,9 +392,9 @@ NTAPI
 NtQuerySecurityObject(
     IN HANDLE Handle,
     IN SECURITY_INFORMATION SecurityInformation,
-    OUT OPTIONAL PSECURITY_DESCRIPTOR SecurityDescriptor,
+    OUT OPTIONAL SECURITY_DESCRIPTOR *SecurityDescriptor,
     IN ULONG Length,
-    OUT PULONG LengthNeeded
+    OUT ULONG *LengthNeeded
 );
 
 NTSYSCALLAPI
@@ -403,7 +403,7 @@ NTAPI
 NtSetSecurityObject(
     IN HANDLE Handle,
     IN SECURITY_INFORMATION SecurityInformation,
-    IN PSECURITY_DESCRIPTOR SecurityDescriptor
+    IN SECURITY_DESCRIPTOR *SecurityDescriptor
 );
 
 NTSYSCALLAPI
@@ -412,7 +412,7 @@ NTAPI
 NtWaitForSingleObject(
     IN HANDLE Object,
     IN BOOLEAN Alertable,
-    IN OPTIONAL PLARGE_INTEGER Time
+    IN OPTIONAL LARGE_INTEGER *Time
 );
 
 /////////////////// Rtl ///////////////////
@@ -421,20 +421,20 @@ typedef struct _RTLP_CURDIR_REF
 {
     LONG RefCount;
     HANDLE Handle;
-} RTLP_CURDIR_REF, *PRTLP_CURDIR_REF;
+} RTLP_CURDIR_REF;
 
 typedef struct _RTL_RELATIVE_NAME_U
 {
     UNICODE_STRING RelativeName;
     HANDLE ContainingDirectory;
-    PRTLP_CURDIR_REF CurDirRef;
-} RTL_RELATIVE_NAME_U, *PRTL_RELATIVE_NAME_U;
+    RTLP_CURDIR_REF *CurDirRef;
+} RTL_RELATIVE_NAME_U;
 
 typedef NTSTATUS
 (NTAPI * PRTL_HEAP_COMMIT_ROUTINE)(
-IN PVOID Base,
-    IN OUT PVOID *CommitAddress,
-    IN OUT PSIZE_T CommitSize
+IN void *Base,
+    IN OUT void **CommitAddress,
+    IN OUT SIZE_T *CommitSize
 );
 
 typedef struct _RTL_HEAP_PARAMETERS
@@ -450,7 +450,7 @@ typedef struct _RTL_HEAP_PARAMETERS
     SIZE_T InitialReserve;
     PRTL_HEAP_COMMIT_ROUTINE CommitRoutine;
     SIZE_T Reserved[2];
-} RTL_HEAP_PARAMETERS, *PRTL_HEAP_PARAMETERS;
+} RTL_HEAP_PARAMETERS;
 
 typedef struct _TIME_FIELDS
 {
@@ -462,25 +462,25 @@ typedef struct _TIME_FIELDS
     SHORT Second;
     SHORT Milliseconds;
     SHORT Weekday;
-} TIME_FIELDS, *PTIME_FIELDS;
+} TIME_FIELDS;
 
 NTSYSAPI
-PVOID
+void *
 NTAPI
 RtlCreateHeap(
     IN ULONG Flags,
-    IN OPTIONAL PVOID BaseAddress,
+    IN OPTIONAL void *BaseAddress,
     IN OPTIONAL SIZE_T SizeToReserve,
     IN OPTIONAL SIZE_T SizeToCommit,
-    IN OPTIONAL PVOID Lock,
-    IN OPTIONAL PRTL_HEAP_PARAMETERS Parameters
+    IN OPTIONAL void *Lock,
+    IN OPTIONAL RTL_HEAP_PARAMETERS *Parameters
 );
 
 NTSYSAPI
-PVOID
+void *
 NTAPI
 RtlAllocateHeap(
-    IN PVOID HeapHandle,
+    IN void *HeapHandle,
     IN OPTIONAL ULONG Flags,
     IN SIZE_T Size
 );
@@ -498,24 +498,24 @@ NTAPI
 RtlFreeHeap(
     IN HANDLE HeapHandle,
     IN OPTIONAL ULONG Flags,
-    IN PVOID P
+    IN void *P
 );
 
 #define RtlGetProcessHeap() (NtCurrentPeb()->ProcessHeap)
 
 NTSYSAPI
-VOID
+void
 NTAPI
 RtlInitUnicodeString(
-    OUT PUNICODE_STRING DestinationString,
+    OUT UNICODE_STRING *DestinationString,
     IN OPTIONAL PCWSTR SourceString
 );
 
 NTSYSAPI
-VOID
+void
 NTAPI
 RtlFreeUnicodeString(
-    IN OUT PUNICODE_STRING UnicodeString
+    IN OUT UNICODE_STRING *UnicodeString
 );
 
 NTSYSAPI
@@ -523,25 +523,25 @@ BOOLEAN
 NTAPI
 RtlDosPathNameToNtPathName_U(
     IN OPTIONAL PCWSTR DosPathName,
-    OUT PUNICODE_STRING NtPathName,
+    OUT UNICODE_STRING *NtPathName,
     OUT OPTIONAL PCWSTR *NtFileNamePart,
-    OUT OPTIONAL PRTL_RELATIVE_NAME_U DirectoryInfo
+    OUT OPTIONAL RTL_RELATIVE_NAME_U *DirectoryInfo
 );
 
 NTSYSAPI
 NTSTATUS
 NTAPI
 RtlSystemTimeToLocalTime(
-    IN PLARGE_INTEGER SystemTime,
-    OUT PLARGE_INTEGER LocalTime
+    IN LARGE_INTEGER *SystemTime,
+    OUT LARGE_INTEGER *LocalTime
 );
 
 NTSYSAPI
-VOID
+void
 NTAPI
 RtlTimeToTimeFields(
-    IN PLARGE_INTEGER Time,
-    OUT PTIME_FIELDS TimeFields
+    IN LARGE_INTEGER *Time,
+    OUT TIME_FIELDS *TimeFields
 );
 
 /////////////////// Ex ///////////////////
@@ -557,16 +557,16 @@ NTSTATUS
 NTAPI
 NtDelayExecution(
     IN BOOLEAN Alertable,
-    IN PLARGE_INTEGER Interval
+    IN LARGE_INTEGER *Interval
 );
 
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtCreateEvent(
-    OUT PHANDLE EventHandle,
+    OUT HANDLE *EventHandle,
     IN ACCESS_MASK DesiredAccess,
-    IN OPTIONAL POBJECT_ATTRIBUTES ObjectAttributes,
+    IN OPTIONAL OBJECT_ATTRIBUTES *ObjectAttributes,
     IN EVENT_TYPE EventType,
     IN BOOLEAN InitialState
 );
@@ -575,7 +575,7 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtDisplayString(
-    IN PUNICODE_STRING DisplayString
+    IN UNICODE_STRING *DisplayString
 );
 
 /////////////////// Cm ///////////////////
@@ -584,9 +584,9 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtOpenKey(
-    OUT PHANDLE KeyHandle,
+    OUT HANDLE *KeyHandle,
     IN ACCESS_MASK DesiredAccess,
-    IN POBJECT_ATTRIBUTES ObjectAttributes
+    IN OBJECT_ATTRIBUTES *ObjectAttributes
 );
 
 NTSYSCALLAPI
@@ -594,10 +594,10 @@ NTSTATUS
 NTAPI
 NtSetValueKey(
     IN HANDLE KeyHandle,
-    IN PUNICODE_STRING ValueName,
+    IN UNICODE_STRING *ValueName,
     IN OPTIONAL ULONG TitleIndex,
     IN ULONG Type,
-    IN PVOID Data,
+    IN void *Data,
     IN ULONG DataSize
 );
 
@@ -645,7 +645,7 @@ NTAPI
 NtOpenProcessToken(
     IN HANDLE ProcessHandle,
     IN ACCESS_MASK DesiredAccess,
-    OUT PHANDLE TokenHandle
+    OUT HANDLE *TokenHandle
 );
 
 NTSYSCALLAPI
@@ -654,10 +654,10 @@ NTAPI
 NtAdjustPrivilegesToken(
     IN HANDLE TokenHandle,
     IN BOOLEAN DisableAllPrivileges,
-    IN OPTIONAL PTOKEN_PRIVILEGES NewState,
+    IN OPTIONAL TOKEN_PRIVILEGES *NewState,
     IN ULONG BufferLength,
-    OUT OPTIONAL PTOKEN_PRIVILEGES PreviousState,
-    OUT OPTIONAL PULONG ReturnLength
+    OUT OPTIONAL TOKEN_PRIVILEGES *PreviousState,
+    OUT OPTIONAL ULONG *ReturnLength
 );
 
 NTSYSCALLAPI
@@ -672,5 +672,5 @@ NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtQuerySystemTime(
-    OUT PLARGE_INTEGER CurrentTime
+    OUT LARGE_INTEGER *CurrentTime
 );

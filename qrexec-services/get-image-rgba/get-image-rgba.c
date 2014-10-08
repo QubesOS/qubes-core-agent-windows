@@ -66,7 +66,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     }
 
     size = linkPathLength * sizeof(WCHAR); // buffer size
-    SetLastError(status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (PBYTE) linkPath, &size));
+    SetLastError(status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (BYTE *) linkPath, &size));
     if (status != ERROR_SUCCESS)
     {
         status = perror("RegQueryValueEx");
@@ -197,10 +197,6 @@ int wmain(int argc, WCHAR *argv[])
             BYTE a = *(buffer + offset + 3);
 
             fwrite(buffer + offset, 4, 1, stdout);
-            //fwrite(&r, 1, 1, stdout);
-            //fwrite(&g, 1, 1, stdout);
-            //fwrite(&b, 1, 1, stdout);
-            //fwrite(&a, 1, 1, stdout);
 #ifdef WRITE_PPM
             fprintf(f1, "%d %d %d ", r, g, b);
 #endif

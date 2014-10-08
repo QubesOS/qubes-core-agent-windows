@@ -10,19 +10,19 @@
 // from service.c
 int service_main(void);
 
-int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInterfaceIndex)
+int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, DWORD *outInterfaceIndex)
 {
-    PIP_ADAPTER_INFO	pAdapterInfo;
-    PIP_ADAPTER_INFO	pAdapterInfoCurrent;
-    PIP_ADDR_STRING		pAddrCurrent;
-    MIB_IPINTERFACE_ROW	ipInterfaceRow;
-    ULONG				ulOutBufLen;
-    DWORD				NTEContext, NTEInstance;
-    PMIB_IPFORWARDTABLE	pIpForwardTable = NULL;
-    MIB_IPFORWARDROW	ipfRow;
-    DWORD				dwSize = 0;
-    DWORD				dwRetVal = 0;
-    DWORD				i;
+    IP_ADAPTER_INFO *pAdapterInfo;
+    IP_ADAPTER_INFO *pAdapterInfoCurrent;
+    IP_ADDR_STRING *pAddrCurrent;
+    MIB_IPINTERFACE_ROW ipInterfaceRow;
+    ULONG ulOutBufLen;
+    DWORD NTEContext, NTEInstance;
+    MIB_IPFORWARDTABLE *pIpForwardTable = NULL;
+    MIB_IPFORWARDROW ipfRow;
+    DWORD dwSize = 0;
+    DWORD dwRetVal = 0;
+    DWORD i;
 
     /* clear this early, to not override dwForwardIfIndex */
     memset(&ipfRow, 0, sizeof(ipfRow));
@@ -65,6 +65,7 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
                     pAddrCurrent = pAddrCurrent->Next;
                     continue;
                 }
+
                 LogInfo("Deleting IP %S", pAddrCurrent->IpAddress.String);
                 SetLastError(dwRetVal = DeleteIPAddress(pAddrCurrent->Context));
                 if (dwRetVal != ERROR_SUCCESS)
@@ -74,12 +75,14 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
                 }
                 pAddrCurrent = pAddrCurrent->Next;
             }
+
             SetLastError(dwRetVal = AddIPAddress(ip, netmask, pAdapterInfoCurrent->Index, &NTEContext, &NTEInstance));
             if (dwRetVal != ERROR_SUCCESS)
             {
                 perror("AddIPAddress");
                 goto cleanup;
             }
+
             ipfRow.dwForwardIfIndex = pAdapterInfoCurrent->Index;
             if (outInterfaceIndex)
                 *outInterfaceIndex = ipfRow.dwForwardIfIndex;
@@ -92,7 +95,7 @@ int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, PDWORD outInt
     if (dwRetVal == ERROR_INSUFFICIENT_BUFFER)
     {
         // Allocate the memory for the table
-        pIpForwardTable = (PMIB_IPFORWARDTABLE) malloc(dwSize);
+        pIpForwardTable = (MIB_IPFORWARDTABLE *) malloc(dwSize);
         if (pIpForwardTable == NULL)
         {
             LogError("Unable to allocate memory for the IPFORWARDTALE\n");
@@ -211,6 +214,7 @@ int qubes_setup_network()
      * with netsh... */
     _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
         interface_index, qubes_gateway);
+
     if (system(cmdline) != 0)
     {
         LogError("Failed to set DNS address by calling: %S\n", cmdline);

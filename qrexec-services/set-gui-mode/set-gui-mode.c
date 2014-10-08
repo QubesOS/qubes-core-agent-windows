@@ -8,7 +8,7 @@
 #define FULLSCREEN_OFF_EVENT_NAME TEXT("WGA_FULLSCREEN_OFF")
 #define FULLSCREEN_OFF_COMMAND "SEAMLESS"
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLine, int nCmdShow)
+int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *lpCommandLine, int nCmdShow)
 {
     char param[64] = { 0 };
     DWORD size;

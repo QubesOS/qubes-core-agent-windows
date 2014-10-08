@@ -2,10 +2,10 @@
 #include <Shlwapi.h>
 #include "utf8-conv.h"
 
-HANDLE	g_hAddExistingClientEvent;
+HANDLE g_hAddExistingClientEvent;
 
-CLIENT_INFO	g_Clients[MAX_CLIENTS];
-HANDLE	g_WatchedEvents[MAXIMUM_WAIT_OBJECTS];
+CLIENT_INFO g_Clients[MAX_CLIENTS];
+HANDLE g_WatchedEvents[MAXIMUM_WAIT_OBJECTS];
 HANDLE_INFO	g_HandlesInfo[MAXIMUM_WAIT_OBJECTS];
 
 ULONG64	g_uPipeId = 0;
@@ -103,7 +103,7 @@ ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
     return ERROR_SUCCESS;
 }
 
-ULONG ReturnData(int client_id, int type, PVOID pData, ULONG uDataSize, PULONG puDataWritten)
+ULONG ReturnData(int client_id, int type, void *pData, ULONG uDataSize, ULONG *puDataWritten)
 {
     struct server_header s_hdr;
     unsigned int vchan_space_avail;
@@ -179,7 +179,7 @@ ULONG send_exit_code(int client_id, int status)
     return ERROR_SUCCESS;
 }
 
-PCLIENT_INFO FindClientById(int client_id)
+CLIENT_INFO *FindClientById(int client_id)
 {
     ULONG uClientNumber;
 
@@ -194,7 +194,7 @@ ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
 {
     DWORD dwRead;
     int	message_type;
-    PCLIENT_INFO pClientInfo;
+    CLIENT_INFO *pClientInfo;
     ULONG uResult;
     ULONG uDataSent;
 
@@ -300,10 +300,10 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
     return uResult;
 }
 
-ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
+ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, WCHAR **ppwszUtf16)
 {
     size_t cbSkipChars = 0;
-    PWCHAR pwszUtf16 = NULL;
+    WCHAR *pwszUtf16 = NULL;
     ULONG uResult;
     HRESULT hResult;
 
@@ -366,13 +366,13 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, PWCHAR *ppwszUtf16)
     return ERROR_SUCCESS;
 }
 
-ULONG ParseUtf8Command(PUCHAR pszUtf8Command, PWCHAR *ppwszCommand, PWCHAR *ppwszUserName, PWCHAR *ppwszCommandLine, PBOOLEAN pbRunInteractively)
+ULONG ParseUtf8Command(UCHAR *pszUtf8Command, WCHAR **ppwszCommand, WCHAR **ppwszUserName, WCHAR **ppwszCommandLine, BOOLEAN *pbRunInteractively)
 {
     ULONG uResult;
-    PWCHAR pwszCommand = NULL;
-    PWCHAR pwszCommandLine = NULL;
-    PWCHAR pwSeparator = NULL;
-    PWCHAR pwszUserName = NULL;
+    WCHAR *pwszCommand = NULL;
+    WCHAR *pwszCommandLine = NULL;
+    WCHAR *pwSeparator = NULL;
+    WCHAR *pwszUserName = NULL;
 
     if (!pszUtf8Command || !pbRunInteractively)
         return ERROR_INVALID_PARAMETER;
@@ -486,7 +486,7 @@ ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *p
 }
 
 // This routine may be called by pipe server threads, hence the critical section around g_Clients array is required.
-ULONG ReserveClientNumber(int client_id, PULONG puClientNumber)
+ULONG ReserveClientNumber(int client_id, ULONG *puClientNumber)
 {
     ULONG uClientNumber;
 
@@ -535,7 +535,7 @@ ULONG ReleaseClientNumber(ULONG uClientNumber)
     return ERROR_SUCCESS;
 }
 
-ULONG AddFilledClientInfo(ULONG uClientNumber, PCLIENT_INFO pClientInfo)
+ULONG AddFilledClientInfo(ULONG uClientNumber, CLIENT_INFO *pClientInfo)
 {
     if (!pClientInfo || uClientNumber >= MAX_CLIENTS)
         return ERROR_INVALID_PARAMETER;
@@ -550,7 +550,7 @@ ULONG AddFilledClientInfo(ULONG uClientNumber, PCLIENT_INFO pClientInfo)
     return ERROR_SUCCESS;
 }
 
-ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOLEAN bRunInteractively)
+ULONG AddClient(int client_id, WCHAR *pwszUserName, WCHAR *pwszCommandLine, BOOLEAN bRunInteractively)
 {
     ULONG uResult;
     CLIENT_INFO ClientInfo;
@@ -592,22 +592,26 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
 
 #ifdef BUILD_AS_SERVICE
     if (pwszUserName)
+    {
         uResult = CreatePipedProcessAsUser(
-        pwszUserName,
-        DEFAULT_USER_PASSWORD_UNICODE,
-        pwszCommandLine,
-        bRunInteractively,
-        hPipeStdin,
-        hPipeStdout,
-        hPipeStderr,
-        &ClientInfo.hProcess);
+            pwszUserName,
+            DEFAULT_USER_PASSWORD_UNICODE,
+            pwszCommandLine,
+            bRunInteractively,
+            hPipeStdin,
+            hPipeStdout,
+            hPipeStderr,
+            &ClientInfo.hProcess);
+    }
     else
+    {
         uResult = CreatePipedProcessAsCurrentUser(
-        pwszCommandLine,
-        hPipeStdin,
-        hPipeStdout,
-        hPipeStderr,
-        &ClientInfo.hProcess);
+            pwszCommandLine,
+            hPipeStdin,
+            hPipeStdout,
+            hPipeStderr,
+            &ClientInfo.hProcess);
+    }
 #else
     uResult = CreatePipedProcessAsCurrentUser(
         pwszCommandLine,
@@ -658,7 +662,7 @@ ULONG AddClient(int client_id, PWCHAR pwszUserName, PWCHAR pwszCommandLine, BOOL
     return ERROR_SUCCESS;
 }
 
-ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
+ULONG AddExistingClient(int client_id, CLIENT_INFO *pClientInfo)
 {
     ULONG uClientNumber;
     ULONG uResult;
@@ -688,7 +692,7 @@ ULONG AddExistingClient(int client_id, PCLIENT_INFO pClientInfo)
     return ERROR_SUCCESS;
 }
 
-VOID RemoveClientNoLocks(PCLIENT_INFO pClientInfo)
+VOID RemoveClientNoLocks(CLIENT_INFO *pClientInfo)
 {
     if (!pClientInfo || (FREE_CLIENT_SPOT_ID == pClientInfo->client_id))
         return;
@@ -707,7 +711,7 @@ VOID RemoveClientNoLocks(PCLIENT_INFO pClientInfo)
     pClientInfo->bClientIsReady = FALSE;
 }
 
-VOID RemoveClient(PCLIENT_INFO pClientInfo)
+VOID RemoveClient(CLIENT_INFO *pClientInfo)
 {
     EnterCriticalSection(&g_ClientsCriticalSection);
 
@@ -730,7 +734,7 @@ VOID RemoveAllClients()
 }
 
 // must be called with g_ClientsCriticalSection
-ULONG PossiblyHandleTerminatedClientNoLocks(PCLIENT_INFO pClientInfo)
+ULONG PossiblyHandleTerminatedClientNoLocks(CLIENT_INFO *pClientInfo)
 {
     ULONG uResult;
 
@@ -745,7 +749,7 @@ ULONG PossiblyHandleTerminatedClientNoLocks(PCLIENT_INFO pClientInfo)
     return ERROR_SUCCESS;
 }
 
-ULONG PossiblyHandleTerminatedClient(PCLIENT_INFO pClientInfo)
+ULONG PossiblyHandleTerminatedClient(CLIENT_INFO *pClientInfo)
 {
     ULONG uResult;
 
@@ -765,20 +769,20 @@ ULONG PossiblyHandleTerminatedClient(PCLIENT_INFO pClientInfo)
 // pwszCommandLine will be modified (and possibly reallocated)
 // ppwszSourceDomainName will contain source domain (if available) to be set in
 // environment; must be freed by caller
-ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLine, PWCHAR *ppwszSourceDomainName)
+ULONG InterceptRPCRequest(WCHAR *pwszCommandLine, WCHAR **ppwszServiceCommandLine, WCHAR **ppwszSourceDomainName)
 {
-    PWCHAR pwszServiceName = NULL;
-    PWCHAR pwszSourceDomainName = NULL;
-    PWCHAR pwSeparator = NULL;
+    WCHAR *pwszServiceName = NULL;
+    WCHAR *pwszSourceDomainName = NULL;
+    WCHAR *pwSeparator = NULL;
     UCHAR szBuffer[sizeof(WCHAR) * (MAX_PATH + 1)];
     WCHAR wszServiceFilePath[MAX_PATH + 1];
-    PWCHAR pwszRawServiceFilePath = NULL;
-    PWCHAR pwszServiceArgs = NULL;
+    WCHAR *pwszRawServiceFilePath = NULL;
+    WCHAR *pwszServiceArgs = NULL;
     HANDLE hServiceConfigFile;
     ULONG uResult;
     ULONG uBytesRead;
     ULONG uPathLength;
-    PWCHAR pwszServiceCommandLine = NULL;
+    WCHAR *pwszServiceCommandLine = NULL;
 
     if (!pwszCommandLine || !ppwszServiceCommandLine || !ppwszSourceDomainName)
         return ERROR_INVALID_PARAMETER;
@@ -852,7 +856,8 @@ ULONG InterceptRPCRequest(PWCHAR pwszCommandLine, PWCHAR *ppwszServiceCommandLin
         PathAppendW(wszServiceFilePath, L"qubes-rpc");
         PathAppendW(wszServiceFilePath, pwszServiceName);
 
-        hServiceConfigFile = CreateFileW(wszServiceFilePath,               // file to open
+        hServiceConfigFile = CreateFileW(
+            wszServiceFilePath,    // file to open
             GENERIC_READ,          // open for reading
             FILE_SHARE_READ,       // share for reading
             NULL,                  // default security
@@ -944,7 +949,7 @@ ULONG handle_connect_existing(int client_id, int len)
 {
     ULONG uResult;
     char *buf;
-    PCLIENT_INFO pClientInfo;
+    CLIENT_INFO *pClientInfo;
     DWORD dwWritten;
 
     if (!len)
@@ -977,11 +982,11 @@ ULONG handle_exec(int client_id, int len)
 {
     char *buf;
     ULONG uResult;
-    PWCHAR pwszCommand = NULL;
-    PWCHAR pwszUserName = NULL;
-    PWCHAR pwszCommandLine = NULL;
-    PWCHAR pwszServiceCommandLine = NULL;
-    PWCHAR pwszRemoteDomainName = NULL;
+    WCHAR *pwszCommand = NULL;
+    WCHAR *pwszUserName = NULL;
+    WCHAR *pwszCommandLine = NULL;
+    WCHAR *pwszServiceCommandLine = NULL;
+    WCHAR *pwszRemoteDomainName = NULL;
     BOOLEAN bRunInteractively;
 
     buf = malloc(len + 1);
@@ -1051,11 +1056,11 @@ ULONG handle_just_exec(int client_id, int len)
 {
     char *buf;
     ULONG uResult;
-    PWCHAR pwszCommand = NULL;
-    PWCHAR pwszUserName = NULL;
-    PWCHAR pwszCommandLine = NULL;
-    PWCHAR pwszServiceCommandLine = NULL;
-    PWCHAR pwszRemoteDomainName = NULL;
+    WCHAR *pwszCommand = NULL;
+    WCHAR *pwszUserName = NULL;
+    WCHAR *pwszCommandLine = NULL;
+    WCHAR *pwszServiceCommandLine = NULL;
+    WCHAR *pwszRemoteDomainName = NULL;
     HANDLE hProcess;
     BOOLEAN bRunInteractively;
 
@@ -1146,7 +1151,7 @@ ULONG handle_just_exec(int client_id, int len)
 ULONG handle_input(int client_id, int len)
 {
     char *buf;
-    PCLIENT_INFO pClientInfo;
+    CLIENT_INFO *pClientInfo;
     DWORD dwWritten;
 
     // If pClientInfo is NULL after this it means we couldn't find a specified client.
@@ -1186,7 +1191,7 @@ ULONG handle_input(int client_id, int len)
 
 void set_blocked_outerr(int client_id, BOOLEAN bBlockOutput)
 {
-    PCLIENT_INFO pClientInfo;
+    CLIENT_INFO *pClientInfo;
 
     pClientInfo = FindClientById(client_id);
     if (!pClientInfo)
@@ -1335,7 +1340,7 @@ ULONG WatchForEvents()
     unsigned int fired_port;
     ULONG i, uEventNumber, uClientNumber;
     DWORD dwSignaledEvent;
-    PCLIENT_INFO pClientInfo;
+    CLIENT_INFO *pClientInfo;
     DWORD dwExitCode;
     BOOLEAN bVchanIoInProgress;
     ULONG uResult;
@@ -1505,7 +1510,7 @@ ULONG WatchForEvents()
             // When this thread (in this switch) calls RemoveClient() later the g_Clients
             // list will be locked as usual.
 
-            //			lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
+            // lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
             switch (g_HandlesInfo[dwSignaledEvent].bType)
             {
             case HTYPE_VCHAN:
@@ -1751,7 +1756,7 @@ ULONG CheckForXenInterface()
     return ERROR_SUCCESS;
 }
 
-ULONG WINAPI ServiceExecutionThread(PVOID pParam)
+ULONG WINAPI ServiceExecutionThread(void *pParam)
 {
     ULONG uResult;
     HANDLE hTriggerEventsThread;
@@ -1833,17 +1838,17 @@ ULONG Init(HANDLE *phServiceThread)
 }
 
 // This is the entry point for a service module (BUILD_AS_SERVICE defined).
-int __cdecl _tmain(ULONG argc, PTCHAR argv[])
+int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     ULONG uOption;
-    PTCHAR pszParam = NULL;
+    TCHAR *pszParam = NULL;
     TCHAR szUserName[UNLEN + 1];
     TCHAR szFullPath[MAX_PATH + 1];
     DWORD nSize;
     ULONG uResult;
     BOOL bStop;
     TCHAR bCommand;
-    PTCHAR pszAccountName = NULL;
+    TCHAR *pszAccountName = NULL;
 
     SERVICE_TABLE_ENTRY	ServiceTable[] = {
         { SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain },
@@ -1996,7 +2001,7 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     InitializeCriticalSection(&g_VchanCriticalSection);
     InitializeCriticalSection(&g_PipesCriticalSection);
 
-    SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
+    SetConsoleCtrlHandler((HANDLER_ROUTINE *)CtrlHandler, TRUE);
 
     for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
         g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;

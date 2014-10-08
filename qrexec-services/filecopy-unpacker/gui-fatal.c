@@ -10,11 +10,11 @@ typedef LONG NTSTATUS;
 
 extern HANDLE STDERR;
 
-static void produce_message(int icon, const PWCHAR fmt, va_list args)
+static void produce_message(int icon, const WCHAR *fmt, va_list args)
 {
     char *dialog_msg;
     WCHAR buf[1024];
-    PWCHAR pMessage = NULL;
+    WCHAR *pMessage = NULL;
     ULONG cchErrorTextSize;
     ULONG nWritten;
 
@@ -64,7 +64,7 @@ static void produce_message(int icon, const PWCHAR fmt, va_list args)
     LocalFree(pMessage);
 }
 
-void gui_fatal(const PWCHAR fmt, ...)
+void gui_fatal(const WCHAR *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -73,7 +73,7 @@ void gui_fatal(const PWCHAR fmt, ...)
     exit(1);
 }
 
-void gui_nonfatal(const PWCHAR fmt, ...)
+void gui_nonfatal(const WCHAR *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);

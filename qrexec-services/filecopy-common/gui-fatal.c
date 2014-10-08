@@ -20,11 +20,11 @@ void set_error_gui_callbacks(HWND hD, show_error_t cb)
     show_error_cb = cb;
 }
 
-static void produce_message(int icon, const PTCHAR fmt, va_list args)
+static void produce_message(int icon, const TCHAR *fmt, va_list args)
 {
     char *dialog_msg;
     TCHAR buf[1024];
-    PTCHAR pMessage = NULL;
+    TCHAR *pMessage = NULL;
     ULONG cchErrorTextSize;
     ULONG nWritten;
 
@@ -69,7 +69,7 @@ static void produce_message(int icon, const PTCHAR fmt, va_list args)
     LocalFree(pMessage);
 }
 
-void gui_fatal(const PTCHAR fmt, ...)
+void gui_fatal(const TCHAR *fmt, ...)
 {
     va_list args;
     show_error_cb(1);
@@ -79,7 +79,7 @@ void gui_fatal(const PTCHAR fmt, ...)
     exit(1);
 }
 
-void gui_nonfatal(const PTCHAR fmt, ...)
+void gui_nonfatal(const TCHAR *fmt, ...)
 {
     va_list args;
     show_error_cb(1);

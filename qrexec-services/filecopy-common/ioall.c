@@ -25,7 +25,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-void perror_wrapper(char * msg)
+void perror_wrapper(char *msg)
 {
     /* TODO */
 #if 0

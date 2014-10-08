@@ -37,7 +37,7 @@ typedef struct _PIPE_DATA
     DWORD       dwSentBytes;
     OVERLAPPED  olRead;
     CHAR        ReadBuffer[READ_BUFFER_SIZE + 1];
-} PIPE_DATA, *PPIPE_DATA;
+} PIPE_DATA;
 
 typedef struct _CLIENT_INFO
 {
@@ -55,11 +55,11 @@ typedef struct _CLIENT_INFO
     PIPE_DATA	Stdout;
     PIPE_DATA	Stderr;
 
-} CLIENT_INFO, *PCLIENT_INFO;
+} CLIENT_INFO;
 
 ULONG AddExistingClient(
     int client_id,
-    PCLIENT_INFO pClientInfo
+    CLIENT_INFO *pClientInfo
     );
 
 ULONG CreateClientPipes(
@@ -77,9 +77,9 @@ ULONG CloseReadPipeHandles(
 ULONG ReturnData(
     int client_id,
     int type,
-    PVOID pData,
+    void *pData,
     ULONG uDataSize,
-    PULONG puDataWritten
+    ULONG *puDataWritten
     );
 
 ULONG send_exit_code(

@@ -35,10 +35,10 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
 BOOL setClipboard(HWND hWin, HANDLE hInput)
 {
     HANDLE hglb;
-    PWCHAR pwszUtf16, pwszUtf16dest;
+    WCHAR *pwszUtf16, *pwszUtf16dest;
     UCHAR lpStr[MAX_CLIPBOARD_SIZE + 1];
     size_t cchwStr;
-    int  uRead;
+    int uRead;
 
     uRead = ReadUntilEOF(hInput, lpStr, sizeof(lpStr) - 1);
     if (uRead < 0)
@@ -139,7 +139,7 @@ HWND createMainWindow(HINSTANCE hInst)
         NULL);
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLine, int nCmdShow)
+int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *lpCommandLine, int nCmdShow)
 {
     HANDLE hStdIn;
     HWND hWin;

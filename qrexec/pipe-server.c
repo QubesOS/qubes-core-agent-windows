@@ -8,13 +8,13 @@ HANDLE g_hEvents[INSTANCES + 1];
 
 ULONG64	g_uDaemonRequestsCounter = 1;
 
-ULONG CreatePipeSecurityDescriptor(PSECURITY_DESCRIPTOR *ppPipeSecurityDescriptor, PACL *ppACL)
+ULONG CreatePipeSecurityDescriptor(SECURITY_DESCRIPTOR **ppPipeSecurityDescriptor, ACL **ppACL)
 {
-    ULONG	uResult;
-    PSID	pEveryoneSid = NULL;
-    PSID	pAdminSID = NULL;
-    PACL	pACL = NULL;
-    PSECURITY_DESCRIPTOR pSD = NULL;
+    ULONG uResult;
+    SID *pEveryoneSid = NULL;
+    SID *pAdminSID = NULL;
+    ACL *pACL = NULL;
+    SECURITY_DESCRIPTOR *pSD = NULL;
     EXPLICIT_ACCESS	ea[2];
     SID_IDENTIFIER_AUTHORITY SIDAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
 
@@ -43,7 +43,7 @@ ULONG CreatePipeSecurityDescriptor(PSECURITY_DESCRIPTOR *ppPipeSecurityDescripto
     ea[0].grfInheritance = NO_INHERITANCE;
     ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
     ea[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-    ea[0].Trustee.ptstrName = (LPTSTR) pEveryoneSid;
+    ea[0].Trustee.ptstrName = (TCHAR *) pEveryoneSid;
 
     // Create a new ACL that contains the new ACE.
     uResult = SetEntriesInAcl(1, ea, NULL, &pACL);
@@ -56,7 +56,7 @@ ULONG CreatePipeSecurityDescriptor(PSECURITY_DESCRIPTOR *ppPipeSecurityDescripto
     }
 
     // Initialize a security descriptor.
-    pSD = (PSECURITY_DESCRIPTOR) LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
+    pSD = (SECURITY_DESCRIPTOR *) LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
     if (!pSD)
     {
         LocalFree(pACL);
@@ -131,7 +131,6 @@ ULONG ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo, HANDLE hEvent, BOOLEAN 
     return ERROR_SUCCESS;
 }
 
-// ULONG DisconnectAndReconnect(ULONG)
 // This function is called:
 // - when an error occurs;
 // - when the client closes its handle to the pipe;
@@ -213,7 +212,7 @@ ULONG ClosePipeHandles()
     return ERROR_SUCCESS;
 }
 
-ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClientInfo, struct trigger_connect_params *pparams, PCREATE_PROCESS_RESPONSE pCpr)
+ULONG ConnectExisting(int client_id, HANDLE hClientProcess, CLIENT_INFO *pClientInfo, struct trigger_connect_params *pparams, CREATE_PROCESS_RESPONSE *pCpr)
 {
     ULONG uResult;
 
@@ -267,9 +266,9 @@ ULONG ConnectExisting(int client_id, HANDLE hClientProcess, PCLIENT_INFO pClient
 // message.
 ULONG SendParametersToDaemon(ULONG i)
 {
-    HRESULT	hResult;
-    ULONG	uResult;
-    struct	trigger_connect_params	params;
+    HRESULT hResult;
+    ULONG uResult;
+    struct trigger_connect_params params;
 
     if (i >= INSTANCES)
         return ERROR_INVALID_PARAMETER;
@@ -281,6 +280,7 @@ ULONG SendParametersToDaemon(ULONG i)
         sizeof(g_Pipes[i].params.process_fds.ident),
         "%I64x",
         g_uDaemonRequestsCounter++);
+
     if (FAILED(hResult))
     {
         perror2(hResult, "StringCchPrintfA");
@@ -301,7 +301,7 @@ ULONG SendParametersToDaemon(ULONG i)
     return ERROR_SUCCESS;
 }
 
-ULONG FindPipeByIdent(PUCHAR pszIdent, PULONG puPipeNumber)
+ULONG FindPipeByIdent(UCHAR *pszIdent, ULONG *puPipeNumber)
 {
     ULONG i;
 
@@ -320,7 +320,7 @@ ULONG FindPipeByIdent(PUCHAR pszIdent, PULONG puPipeNumber)
     return ERROR_NOT_FOUND;
 }
 
-ULONG ProceedWithExecution(int assigned_client_id, PUCHAR pszIdent)
+ULONG ProceedWithExecution(int assigned_client_id, UCHAR *pszIdent)
 {
     ULONG uPipeNumber;
     ULONG uResult;
@@ -356,7 +356,7 @@ ULONG ProceedWithExecution(int assigned_client_id, PUCHAR pszIdent)
     return ERROR_SUCCESS;
 }
 
-ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
+ULONG WINAPI WatchForTriggerEvents(void *pParam)
 {
     DWORD dwWait, cbRet, cbToWrite, cbRead;
     ULONG i;
@@ -365,8 +365,8 @@ ULONG WINAPI WatchForTriggerEvents(PVOID pParam)
     IO_HANDLES_ARRAY LocalHandles;
     ULONG uClientProcessId;
     SECURITY_ATTRIBUTES sa;
-    PSECURITY_DESCRIPTOR pPipeSecurityDescriptor;
-    PACL pACL;
+    SECURITY_DESCRIPTOR *pPipeSecurityDescriptor;
+    ACL *pACL;
 
     LogDebug("Init\n");
     memset(&g_Pipes, 0, sizeof(g_Pipes));

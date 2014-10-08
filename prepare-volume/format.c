@@ -5,7 +5,7 @@ static DWORD g_FormatStatus = 0;
 static FormatEx_t g_FormatEx = NULL;
 static HMODULE g_fmifsDll = NULL;
 
-static BOOLEAN WINAPI FormatExCallback(FILE_SYSTEM_CALLBACK_COMMAND Command, DWORD Action, PVOID pData)
+static BOOLEAN WINAPI FormatExCallback(FILE_SYSTEM_CALLBACK_COMMAND Command, DWORD Action, void *pData)
 {
     switch (Command)
     {

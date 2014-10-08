@@ -26,7 +26,7 @@ INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
     return FALSE;
 }
 
-void reportError(PTCHAR pszMessage)
+void reportError(TCHAR *pszMessage)
 {
     MessageBox(NULL, pszMessage, TEXT("Qubes"), MB_OK | MB_ICONERROR);
 }
@@ -36,9 +36,9 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
     MSG msg;
     INT_PTR hResult;
     TCHAR szQrexecClientPath[MAX_PATH];
-    PTCHAR pszQrexecClientCmdLine;
+    TCHAR *pszQrexecClientCmdLine;
     size_t cchQrexecClientCmdLine;
-    PTCHAR pSeparator;
+    TCHAR *pSeparator;
     PROCESS_INFORMATION pi;
     STARTUPINFO si;
 
@@ -89,7 +89,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
         return 1;
     }
 
-    if (FAILED(StringCchPrintf(pszQrexecClientCmdLine, cchQrexecClientCmdLine, TEXT("qrexec-client-vm.exe %s %s"), (PTCHAR) hResult, lpCommandLine)))
+    if (FAILED(StringCchPrintf(pszQrexecClientCmdLine, cchQrexecClientCmdLine, TEXT("qrexec-client-vm.exe %s %s"), (TCHAR *) hResult, lpCommandLine)))
     {
         reportError(TEXT("Failed to construct command line"));
         return 1;

@@ -14,16 +14,16 @@ typedef struct _SET_DISK_ATTRIBUTES
     BOOLEAN Persist;
     BOOLEAN RelinquishOwnership;
     BOOLEAN Reserved1[2];
-    ULONGLONG Attributes;
-    ULONGLONG AttributesMask;
+    UINT64 Attributes;
+    UINT64 AttributesMask;
     GUID Owner;
-} SET_DISK_ATTRIBUTES, *PSET_DISK_ATTRIBUTES;
+} SET_DISK_ATTRIBUTES;
 
 // without braces
 PWCHAR DISK_CLASS_GUID = L"4d36e967-e325-11ce-bfc1-08002be10318";
 
 // Returns drive number for a given device name that represents a physical drive.
-BOOL GetPhysicalDriveNumber(IN WCHAR *deviceName, OUT PULONG driveNumber)
+BOOL GetPhysicalDriveNumber(IN WCHAR *deviceName, OUT ULONG *driveNumber)
 {
     STORAGE_DEVICE_NUMBER deviceNumber;
     DWORD returnedSize;
@@ -54,14 +54,14 @@ cleanup:
 }
 
 // Returns disk letter if a given volume is mounted.
-static BOOL VolumeNameToDiskLetter(IN WCHAR *volumeName, OUT PWCHAR diskLetter)
+static BOOL VolumeNameToDiskLetter(IN WCHAR *volumeName, OUT WCHAR *diskLetter)
 {
     WCHAR *mountPoints = NULL;
     WCHAR *mountPoint = NULL;
     DWORD returned = 1024;
     BOOL retval = FALSE;
 
-    mountPoints = (WCHAR*) malloc(returned * sizeof(WCHAR));
+    mountPoints = (WCHAR *) malloc(returned * sizeof(WCHAR));
     ZeroMemory(mountPoints, returned*sizeof(WCHAR));
     if (mountPoints && !GetVolumePathNamesForVolumeName(volumeName, mountPoints, returned, &returned))
     {
@@ -163,11 +163,11 @@ BOOL DriveNumberToVolumeName(IN DWORD driveNumber, OUT WCHAR *volumeName, IN DWO
 }
 
 // Make sure the disk is initialized and partitioned.
-static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT PWCHAR diskLetter)
+static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHAR *diskLetter)
 {
     DWORD requiredSize;
     BYTE partitionBuffer[sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 4 * sizeof(PARTITION_INFORMATION_EX)] = { 0 };
-    PDRIVE_LAYOUT_INFORMATION_EX driveLayout = (PDRIVE_LAYOUT_INFORMATION_EX) partitionBuffer;
+    DRIVE_LAYOUT_INFORMATION_EX *driveLayout = (DRIVE_LAYOUT_INFORMATION_EX *) partitionBuffer;
     SET_DISK_ATTRIBUTES diskAttrs = { 0 };
     CREATE_DISK createDisk;
 
@@ -254,12 +254,12 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT PWCH
 }
 
 // Returns disk letter for private.img, initializes it if needed.
-BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT PWCHAR diskLetter)
+BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT WCHAR *diskLetter)
 {
     HANDLE device;
     DWORD returnedSize;
     BYTE buf[1024] = { 0 };
-    PDRIVE_LAYOUT_INFORMATION_EX layout = (PDRIVE_LAYOUT_INFORMATION_EX) buf;
+    DRIVE_LAYOUT_INFORMATION_EX *layout = (DRIVE_LAYOUT_INFORMATION_EX *) buf;
     GET_LENGTH_INFORMATION lengthInfo;
     WCHAR driveName[32] = { 0 };
     WCHAR volumeName[MAX_PATH] = { 0 };

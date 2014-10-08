@@ -23,7 +23,7 @@ BOOL cancel_operation = FALSE;
 #ifdef DBG
 #define internal_fatal gui_fatal
 #else
-static __inline void internal_fatal(const PTCHAR fmt, ...)
+static __inline void internal_fatal(const TCHAR *fmt, ...)
 {
     gui_fatal(TEXT("Internal error"));
 }
@@ -113,7 +113,7 @@ void wait_for_result()
 
 #define UNIX_EPOCH_OFFSET 11644478640LL
 
-void convertWindowTimeToUnix(PFILETIME srctime, unsigned int *puDstTime, unsigned int *puDstTimeNsec)
+void convertWindowTimeToUnix(FILETIME *srctime, unsigned int *puDstTime, unsigned int *puDstTimeNsec)
 {
     ULARGE_INTEGER tmp;
 
@@ -124,10 +124,10 @@ void convertWindowTimeToUnix(PFILETIME srctime, unsigned int *puDstTime, unsigne
     *puDstTime = (unsigned int) ((tmp.QuadPart / 10000000LL) - UNIX_EPOCH_OFFSET);
 }
 
-void write_headers(struct file_header *hdr, PTCHAR pszFilename)
+void write_headers(struct file_header *hdr, TCHAR *pszFilename)
 {
 #ifdef UNICODE
-    PUCHAR pszFilenameUtf8 = NULL;
+    UCHAR *pszFilenameUtf8 = NULL;
     size_t cbFilenameUtf8;
 
     if (FAILED(ConvertUTF16ToUTF8(pszFilename, &pszFilenameUtf8, &cbFilenameUtf8)))
@@ -154,7 +154,7 @@ void write_headers(struct file_header *hdr, PTCHAR pszFilename)
 #endif
 }
 
-int single_file_processor(PTCHAR pszFilename, DWORD dwAttrs)
+int single_file_processor(TCHAR *pszFilename, DWORD dwAttrs)
 {
     struct file_header hdr;
     HANDLE hInput;
@@ -253,13 +253,13 @@ INT64 getFileSizeByPath(PTCHAR pszFilename)
     return dwFileSize.QuadPart;
 }
 
-INT64 do_fs_walk(PTCHAR pszPath, BOOL bCalcSize)
+INT64 do_fs_walk(TCHAR *pszPath, BOOL bCalcSize)
 {
-    PTCHAR pszCurrentPath;
+    TCHAR *pszCurrentPath;
     size_t cchCurrentPath, cchSearchPath;
     DWORD dwAttrs;
     WIN32_FIND_DATA ent;
-    PTCHAR pszSearchPath;
+    TCHAR *pszSearchPath;
     HANDLE hSearch;
     INT64 size = 0;
 
@@ -340,9 +340,9 @@ void notify_end_and_wait_for_result()
     wait_for_result();
 }
 
-PTCHAR GetAbsolutePath(PTCHAR pszCwd, PTCHAR pszPath)
+PTCHAR GetAbsolutePath(TCHAR *pszCwd, TCHAR *pszPath)
 {
-    PTCHAR pszAbsolutePath;
+    TCHAR *pszAbsolutePath;
     size_t cchAbsolutePath;
 
     if (!PathIsRelative(pszPath))
@@ -365,10 +365,10 @@ PTCHAR GetAbsolutePath(PTCHAR pszCwd, PTCHAR pszPath)
     return pszAbsolutePath;
 }
 
-int __cdecl _tmain(int argc, PTCHAR argv[])
+int __cdecl _tmain(int argc, TCHAR *argv[])
 {
     int i;
-    PTCHAR pszArgumentDirectory, pszArgumentBasename;
+    TCHAR *pszArgumentDirectory, *pszArgumentBasename;
     TCHAR szCwd[MAX_PATH_LENGTH];
 
     STDERR = GetStdHandle(STD_ERROR_HANDLE);

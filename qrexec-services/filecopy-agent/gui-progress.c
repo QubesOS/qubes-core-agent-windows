@@ -34,7 +34,7 @@ HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
     return S_OK;
 }
 
-DWORD doTaskDialogThread(LPVOID lpThreadParameter)
+DWORD doTaskDialogThread(void *lpThreadParameter)
 {
     int nButtonPressed = 0;
     TASKDIALOGCONFIG config = { 0 };

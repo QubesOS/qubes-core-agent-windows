@@ -28,8 +28,8 @@ int write_all(HANDLE fd, void *buf, int size)
 BOOL getClipboard(HWND hWin, HANDLE hOutput)
 {
     HANDLE hglb;
-    PWCHAR lpwstr;
-    PUCHAR lpstr;
+    WCHAR *lpwstr;
+    UCHAR *lpstr;
     size_t cbStr;
     ULONG  uWritten;
 
@@ -79,7 +79,7 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
     return TRUE;
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLine, int nCmdShow)
+int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *lpCommandLine, int nCmdShow)
 {
     HANDLE hStdOut;
 

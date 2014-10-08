@@ -14,7 +14,7 @@
 
 #define MAX_PATH_LONG 32768
 
-DWORD EnablePrivilege(HANDLE token, const PWCHAR privilegeName)
+DWORD EnablePrivilege(HANDLE token, const WCHAR *privilegeName)
 {
     TOKEN_PRIVILEGES tp;
     LUID luid;
@@ -47,7 +47,7 @@ DWORD EnablePrivilege(HANDLE token, const PWCHAR privilegeName)
 }
 
 // Argument: xen/vbd device id that represents private.img
-int wmain(int argc, PWCHAR argv[])
+int wmain(int argc, WCHAR *argv[])
 {
     ULONG xenVbdId;
     ULONG driveNumber;

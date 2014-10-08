@@ -7,9 +7,9 @@
 
 #define XS_TOOLS_PREFIX "qubes-tools/"
 
-BOOL get_current_user(PCHAR *ppUserName)
+BOOL get_current_user(CHAR **ppUserName)
 {
-    PWTS_SESSION_INFOA pSessionInfo;
+    WTS_SESSION_INFOA *pSessionInfo;
     DWORD dSessionCount;
     DWORD i;
     DWORD cbUserName;
@@ -27,7 +27,8 @@ BOOL get_current_user(PCHAR *ppUserName)
     {
         if (pSessionInfo[i].State == WTSActive)
         {
-            if (FAILED(WTSQuerySessionInformationA(WTS_CURRENT_SERVER_HANDLE,
+            if (FAILED(WTSQuerySessionInformationA(
+                WTS_CURRENT_SERVER_HANDLE,
                 pSessionInfo[i].SessionId, WTSUserName,
                 ppUserName,
                 &cbUserName)))
@@ -46,9 +47,9 @@ cleanup:
 }
 
 /* just a helper function, the buffer needs to be at least MAX_PATH+1 length */
-BOOL prepare_exe_path(PTCHAR buffer, PTCHAR exe_name)
+BOOL prepare_exe_path(TCHAR *buffer, TCHAR *exe_name)
 {
-    PTCHAR ptSeparator = NULL;
+    TCHAR *ptSeparator = NULL;
 
     memset(buffer, 0, sizeof(buffer));
     if (!GetModuleFileName(NULL, buffer, MAX_PATH))
@@ -127,7 +128,7 @@ LONG advertise_tools()
     struct xs_handle *xs;
     LONG ret = ERROR_INVALID_FUNCTION;
     BOOL gui_present;
-    PCHAR pszUserName;
+    CHAR *pszUserName;
 
     xs = xs_domain_open();
     if (!xs)

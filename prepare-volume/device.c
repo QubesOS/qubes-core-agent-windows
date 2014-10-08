@@ -30,7 +30,7 @@ static BOOL IsPrivateDisk(IN WCHAR *parentString, IN ULONG privateId)
 }
 
 // Returns physical drive number that represents private.img.
-BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
+BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT ULONG *driveNumber)
 {
     HDEVINFO deviceInfoSet = INVALID_HANDLE_VALUE;
     SP_DEVINFO_DATA deviceInfoData;
@@ -68,7 +68,8 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT PULONG driveNumber)
 
         // Get device's parent.
         ZeroMemory(parentString, sizeof(parentString));
-        if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_Parent, &devPropType, (PBYTE) parentString, sizeof(parentString), &returnedSize, 0))
+        if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_Parent, &devPropType,
+            (BYTE *) parentString, sizeof(parentString), &returnedSize, 0))
         {
             perror("SetupDiGetDeviceProperty(parent)");
             continue;

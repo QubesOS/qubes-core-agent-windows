@@ -41,7 +41,7 @@ typedef UINT16 domid_t;
  * Return allocated port.
  */
 #define IOCTL_EVTCHN_BIND_VIRQ 			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x800, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x800, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 struct ioctl_evtchn_bind_virq
 {
     unsigned int virq;
@@ -52,7 +52,7 @@ struct ioctl_evtchn_bind_virq
  * Return allocated port.
  */
 #define IOCTL_EVTCHN_BIND_INTERDOMAIN			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x801, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x801, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 struct ioctl_evtchn_bind_interdomain
 {
     unsigned int remote_domain, remote_port;
@@ -63,7 +63,7 @@ struct ioctl_evtchn_bind_interdomain
  * Return allocated port.
  */
 #define IOCTL_EVTCHN_BIND_UNBOUND_PORT			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x802, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x802, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 struct ioctl_evtchn_bind_unbound_port
 {
     unsigned int remote_domain;
@@ -73,7 +73,7 @@ struct ioctl_evtchn_bind_unbound_port
  * Unbind previously allocated @port.
  */
 #define IOCTL_EVTCHN_UNBIND				\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x803, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x803, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 struct ioctl_evtchn_unbind
 {
     unsigned int port;
@@ -83,7 +83,7 @@ struct ioctl_evtchn_unbind
  * Notify previously allocated @port.
  */
 #define IOCTL_EVTCHN_NOTIFY				\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x804, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x804, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 struct ioctl_evtchn_notify
 {
     unsigned int port;
@@ -91,7 +91,7 @@ struct ioctl_evtchn_notify
 
 /* Clear and reinitialise the event buffer. Clear error condition. */
 #define IOCTL_EVTCHN_RESET				\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x805, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x805, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 
 /* Restruct this file descriptor so that it can only be applied to a
  * nominated domain.  Once a file descriptor has been restricted it
@@ -100,7 +100,7 @@ struct ioctl_evtchn_notify
  * afterwards, and can be notified as usual.
  */
 #define IOCTL_EVTCHN_RESTRICT_DOMID			\
-	CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x806, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
+    CTL_CODE(FILE_DEVICE_BUS_EXTENDER, 0x806, METHOD_BUFFERED, FILE_READ_DATA | FILE_WRITE_DATA)
 struct ioctl_evtchn_restrict_domid
 {
     domid_t domid;

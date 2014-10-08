@@ -11,7 +11,7 @@ typedef struct _UNICODE_STRING
 #else // MIDL_PASS
     __field_bcount_part(MaximumLength, Length) PWCH   Buffer;
 #endif // MIDL_PASS
-} UNICODE_STRING, *PUNICODE_STRING;
+} UNICODE_STRING;
 
 #define OBJ_INHERIT             0x00000002L
 #define OBJ_PERMANENT           0x00000010L
@@ -24,11 +24,11 @@ typedef struct _OBJECT_ATTRIBUTES
 {
     ULONG Length;
     HANDLE RootDirectory;
-    PUNICODE_STRING ObjectName;
+    UNICODE_STRING *ObjectName;
     ULONG Attributes;
-    PVOID SecurityDescriptor;        // Points to type SECURITY_DESCRIPTOR
-    PVOID SecurityQualityOfService;  // Points to type SECURITY_QUALITY_OF_SERVICE
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+    void *SecurityDescriptor;        // Points to type SECURITY_DESCRIPTOR
+    void *SecurityQualityOfService;  // Points to type SECURITY_QUALITY_OF_SERVICE
+} OBJECT_ATTRIBUTES;
 
 #define InitializeObjectAttributes( p, n, a, r, s ) { \
     (p)->Length = sizeof( OBJECT_ATTRIBUTES );          \
@@ -102,7 +102,7 @@ DEFINE_KNOWN_FOLDER(FOLDERID_Documents, 0xfdd39ad0, 0x238f, 0x46af, 0xad, 0xb4, 
 NTSTATUS NTAPI ZwSetInformationProcess(
     HANDLE ProcessHandle,
     PROCESSINFOCLASS ProcessInformationClass,
-    PVOID pProcessInformation,
+    void *pProcessInformation,
     ULONG ProcessInformationLength
     );
 
@@ -115,22 +115,22 @@ ZwClose(
 NTSTATUS
 NTAPI
 ZwCreateDirectoryObject(
-    PHANDLE DirectoryHandle,
+    HANDLE *DirectoryHandle,
     ACCESS_MASK DesiredAccess,
-    POBJECT_ATTRIBUTES ObjectAttributes
+    OBJECT_ATTRIBUTES *ObjectAttributes
     );
 
 VOID
 NTAPI
 RtlInitUnicodeString(
-    PUNICODE_STRING DestinationString,
+    UNICODE_STRING *DestinationString,
     PCWSTR SourceString
     );
 
 NTSTATUS NTAPI
 ZwCreateSymbolicLinkObject(
-    OUT PHANDLE pLinkHandle,
+    OUT HANDLE *pLinkHandle,
     IN ACCESS_MASK DesiredAccess,
-    IN POBJECT_ATTRIBUTES pObjectAttributes,
-    IN PUNICODE_STRING pLinkTarget
+    IN OBJECT_ATTRIBUTES *pObjectAttributes,
+    IN UNICODE_STRING *pLinkTarget
     );

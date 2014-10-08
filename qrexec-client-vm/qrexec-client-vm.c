@@ -8,7 +8,7 @@
 #include "utf8-conv.h"
 
 ULONG CreatePipedProcessAsCurrentUser(
-    PTCHAR pszCommand,
+    TCHAR *pszCommand,
     BOOLEAN bRunInteractively,
     HANDLE hPipeStdin,
     HANDLE hPipeStdout,
@@ -64,7 +64,7 @@ ULONG CreatePipedProcessAsCurrentUser(
     return ERROR_SUCCESS;
 }
 
-ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
+ULONG SendCreateProcessResponse(HANDLE hPipe, CREATE_PROCESS_RESPONSE *pCpr)
 {
     DWORD cbWritten;
     DWORD cbRead;
@@ -95,7 +95,7 @@ ULONG SendCreateProcessResponse(HANDLE hPipe, PCREATE_PROCESS_RESPONSE pCpr)
     return ERROR_SUCCESS;
 }
 
-int __cdecl _tmain(ULONG argc, PTCHAR argv[])
+int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     HANDLE hPipe;
     BOOL fSuccess = FALSE;
@@ -103,8 +103,8 @@ int __cdecl _tmain(ULONG argc, PTCHAR argv[])
     LPTSTR lpszPipename = TEXT("\\\\.\\pipe\\qrexec_trigger");
     struct trigger_connect_params params;
     ULONG uResult;
-    PUCHAR pszParameter;
-    PTCHAR pszLocalProgram;
+    UCHAR *pszParameter;
+    TCHAR *pszLocalProgram;
     HRESULT hResult;
     IO_HANDLES_ARRAY IoHandles;
     HANDLE hProcess;

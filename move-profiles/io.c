@@ -1,6 +1,6 @@
 #include "io.h"
 
-NTSTATUS FileOpen(OUT PHANDLE file, const IN PWCHAR fileName, IN BOOLEAN write, IN BOOLEAN overwrite, IN BOOLEAN isReparse)
+NTSTATUS FileOpen(OUT HANDLE *file, const IN WCHAR *fileName, IN BOOLEAN write, IN BOOLEAN overwrite, IN BOOLEAN isReparse)
 {
     UNICODE_STRING fileNameU = { 0 };
     IO_STATUS_BLOCK iosb;
@@ -65,7 +65,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileGetAttributes(const IN PWCHAR fileName, OUT PULONG attrs)
+NTSTATUS FileGetAttributes(const IN WCHAR *fileName, OUT ULONG *attrs)
 {
     NTSTATUS status;
     OBJECT_ATTRIBUTES oa;
@@ -92,7 +92,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileSetAttributes(const IN PWCHAR fileName, IN ULONG attrs)
+NTSTATUS FileSetAttributes(const IN WCHAR *fileName, IN ULONG attrs)
 {
     NTSTATUS status;
     OBJECT_ATTRIBUTES oa;
@@ -146,7 +146,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileGetSize(IN HANDLE file, OUT PLONGLONG fileSize)
+NTSTATUS FileGetSize(IN HANDLE file, OUT INT64 *fileSize)
 {
     IO_STATUS_BLOCK iosb;
     FILE_STANDARD_INFORMATION fsi;
@@ -159,7 +159,7 @@ NTSTATUS FileGetSize(IN HANDLE file, OUT PLONGLONG fileSize)
     return status;
 }
 
-NTSTATUS FileGetPosition(IN HANDLE file, OUT PLONGLONG position)
+NTSTATUS FileGetPosition(IN HANDLE file, OUT INT64 *position)
 {
     IO_STATUS_BLOCK iosb;
     FILE_POSITION_INFORMATION fpi;
@@ -172,7 +172,7 @@ NTSTATUS FileGetPosition(IN HANDLE file, OUT PLONGLONG position)
     return status;
 }
 
-NTSTATUS FileSetPosition(IN HANDLE file, IN LONGLONG position)
+NTSTATUS FileSetPosition(IN HANDLE file, IN INT64 position)
 {
     IO_STATUS_BLOCK iosb;
     FILE_POSITION_INFORMATION fpi;
@@ -184,7 +184,7 @@ NTSTATUS FileSetPosition(IN HANDLE file, IN LONGLONG position)
     return status;
 }
 
-NTSTATUS FileRead(IN HANDLE file, OUT PVOID buffer, IN ULONG bufferSize, OUT PULONG readSize)
+NTSTATUS FileRead(IN HANDLE file, OUT void *buffer, IN ULONG bufferSize, OUT ULONG *readSize)
 {
     IO_STATUS_BLOCK iosb;
     NTSTATUS status;
@@ -199,7 +199,7 @@ NTSTATUS FileRead(IN HANDLE file, OUT PVOID buffer, IN ULONG bufferSize, OUT PUL
     return status;
 }
 
-NTSTATUS FileWrite(IN HANDLE file, IN const PVOID buffer, IN ULONG bufferSize, OUT PULONG writtenSize)
+NTSTATUS FileWrite(IN HANDLE file, IN const void *buffer, IN ULONG bufferSize, OUT ULONG *writtenSize)
 {
     IO_STATUS_BLOCK iosb;
     NTSTATUS status;
@@ -216,9 +216,9 @@ NTSTATUS FileWrite(IN HANDLE file, IN const PVOID buffer, IN ULONG bufferSize, O
 }
 
 // Only works within file's volume.
-NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileName, IN BOOLEAN replaceIfExists)
+NTSTATUS FileRename(IN const WCHAR *existingFileName, IN const WCHAR *newFileName, IN BOOLEAN replaceIfExists)
 {
-    PFILE_RENAME_INFORMATION fri;
+    FILE_RENAME_INFORMATION *fri;
     OBJECT_ATTRIBUTES oa;
     IO_STATUS_BLOCK iosb;
     UNICODE_STRING existingFileNameU = { 0 };
@@ -267,7 +267,7 @@ NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileNam
 
     fileNameSize = newFileNameU.Length * sizeof(WCHAR);
 
-    fri = (PFILE_RENAME_INFORMATION) RtlAllocateHeap(g_Heap, HEAP_ZERO_MEMORY, sizeof(FILE_RENAME_INFORMATION) + fileNameSize);
+    fri = (FILE_RENAME_INFORMATION *) RtlAllocateHeap(g_Heap, HEAP_ZERO_MEMORY, sizeof(FILE_RENAME_INFORMATION) + fileNameSize);
 
     if (!fri)
     {
@@ -304,7 +304,7 @@ cleanup:
 
 NTSTATUS FileCopySecurity(IN HANDLE source, IN HANDLE target)
 {
-    PSECURITY_DESCRIPTOR sd = NULL;
+    SECURITY_DESCRIPTOR *sd = NULL;
     ULONG requiredSize = 0;
     NTSTATUS status;
 
@@ -364,13 +364,13 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
+NTSTATUS FileCopy(IN const WCHAR *sourceName, IN const WCHAR *targetName)
 {
     HANDLE fileSource = NULL;
     HANDLE fileTarget = NULL;
-    PBYTE buffer = NULL;
-    LONGLONG fileSize = 0;
-    LONGLONG writtenTotal = 0;
+    BYTE *buffer = NULL;
+    INT64 fileSize = 0;
+    INT64 writtenTotal = 0;
     ULONG readSize = 0;
     ULONG writtenSize = 0;
     NTSTATUS status;
@@ -447,7 +447,7 @@ NTSTATUS FileDelete(IN HANDLE file)
     NTSTATUS status;
     FILE_BASIC_INFORMATION fbi;
     FILE_DISPOSITION_INFORMATION fdi;
-    PREPARSE_DATA_BUFFER rdb = NULL;
+    REPARSE_DATA_BUFFER *rdb = NULL;
     REPARSE_GUID_DATA_BUFFER rgdb = { 0 };
     IO_STATUS_BLOCK iosb;
 
@@ -461,7 +461,7 @@ NTSTATUS FileDelete(IN HANDLE file)
         // Get reparse tag.
 
         // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
-        rdb = RtlAllocateHeap(g_Heap, 0, MAX_PATH_LONG); // don't allocate on stack, deep recursion can be fatal
+        rdb = (REPARSE_DATA_BUFFER *) RtlAllocateHeap(g_Heap, 0, MAX_PATH_LONG); // don't allocate on stack, deep recursion can be fatal
         if (!rdb)
         {
             status = STATUS_NO_MEMORY;
@@ -514,7 +514,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCreateDirectory(IN const PWCHAR path)
+NTSTATUS FileCreateDirectory(IN const WCHAR *path)
 {
     UNICODE_STRING pathU = { 0 };
     NTSTATUS status;
@@ -553,10 +553,10 @@ cleanup:
 }
 
 // sourcePath must be an existing and empty directory.
-NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
+NTSTATUS FileSetSymlink(IN const WCHAR *sourcePath, IN const WCHAR *targetPath)
 {
     BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
-    PREPARSE_DATA_BUFFER rdb = (PREPARSE_DATA_BUFFER) buffer;
+    REPARSE_DATA_BUFFER *rdb = (REPARSE_DATA_BUFFER *) buffer;
     DWORD size, targetSize;
     WCHAR dest[MAX_PATH_LONG];
     NTSTATUS status;
@@ -610,9 +610,9 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
+NTSTATUS FileCopyReparsePoint(IN const WCHAR *sourcePath, IN const WCHAR *targetPath)
 {
-    PREPARSE_DATA_BUFFER rdb = NULL;
+    REPARSE_DATA_BUFFER *rdb = NULL;
     ULONG size;
     WCHAR dest[MAX_PATH_LONG];
     NTSTATUS status;
@@ -731,7 +731,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath, IN BOOLEAN ignoreErrors)
+NTSTATUS FileCopyDirectory(IN const WCHAR *sourcePath, IN const WCHAR *targetPath, IN BOOLEAN ignoreErrors)
 {
     UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
@@ -739,10 +739,10 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
     NTSTATUS status;
     IO_STATUS_BLOCK iosb;
     BOOLEAN firstQuery = TRUE;
-    PFILE_FULL_DIR_INFORMATION dirInfo = NULL, entry;
+    FILE_FULL_DIR_INFORMATION *dirInfo = NULL, *entry;
     HANDLE event = NULL;
-    PWCHAR fullPath = NULL;
-    PWCHAR fullTargetPath = NULL;
+    WCHAR *fullPath = NULL;
+    WCHAR *fullTargetPath = NULL;
 
     if (!RtlDosPathNameToNtPathName_U(sourcePath, &dirNameU, NULL, NULL))
     {
@@ -884,7 +884,7 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
                 break;
 
             // Move to next entry.
-            entry = (PFILE_FULL_DIR_INFORMATION) ((ULONG_PTR) entry + entry->NextEntryOffset);
+            entry = (FILE_FULL_DIR_INFORMATION *) ((ULONG_PTR) entry + entry->NextEntryOffset);
         }
 
         firstQuery = FALSE;
@@ -910,7 +910,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
+NTSTATUS FileDeleteDirectory(IN const WCHAR *path, IN BOOLEAN deleteSelf)
 {
     UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
@@ -918,9 +918,9 @@ NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
     NTSTATUS status;
     IO_STATUS_BLOCK iosb;
     BOOLEAN firstQuery = TRUE;
-    PFILE_FULL_DIR_INFORMATION dirInfo = NULL, entry;
+    FILE_FULL_DIR_INFORMATION *dirInfo = NULL, *entry;
     HANDLE event = NULL;
-    PWCHAR fullPath = NULL;
+    WCHAR *fullPath = NULL;
     ULONG attrs;
 
     if (!RtlDosPathNameToNtPathName_U(path, &dirNameU, NULL, NULL))
@@ -1055,7 +1055,7 @@ NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
                 break;
 
             // Move to next entry.
-            entry = (PFILE_FULL_DIR_INFORMATION) ((ULONG_PTR) entry + entry->NextEntryOffset);
+            entry = (FILE_FULL_DIR_INFORMATION *) ((ULONG_PTR) entry + entry->NextEntryOffset);
         }
 
         firstQuery = FALSE;

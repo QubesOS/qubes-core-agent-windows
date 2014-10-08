@@ -66,8 +66,8 @@ static INT_PTR WINAPI DevNotifyWndProc(
 {
     LRESULT retval = 1;
     static HDEVNOTIFY hDeviceNotify;
-    PDEV_BROADCAST_HDR arrival;
-    PDEV_BROADCAST_VOLUME volume;
+    DEV_BROADCAST_HDR *arrival;
+    DEV_BROADCAST_VOLUME *volume;
 
     switch (message)
     {
@@ -85,17 +85,17 @@ static INT_PTR WINAPI DevNotifyWndProc(
 
     case WM_DEVICECHANGE:
     {
-        PDEV_BROADCAST_DEVICEINTERFACE b = (PDEV_BROADCAST_DEVICEINTERFACE) lParam;
+        DEV_BROADCAST_DEVICEINTERFACE *b = (DEV_BROADCAST_DEVICEINTERFACE *) lParam;
 
         switch (wParam)
         {
         case DBT_DEVICEARRIVAL:
-            arrival = (PDEV_BROADCAST_HDR) lParam;
+            arrival = (DEV_BROADCAST_HDR *) lParam;
             LogDebug("DBT_DEVICEARRIVAL: type %d", arrival->dbch_devicetype);
             if (arrival->dbch_devicetype == DBT_DEVTYP_VOLUME)
             {
                 // New volume mounted.
-                volume = (PDEV_BROADCAST_VOLUME) lParam;
+                volume = (DEV_BROADCAST_VOLUME *) lParam;
                 LogDebug("mask: 0x%x", volume->dbcv_unitmask);
                 // Each bit corresponds to disk letter for the newly mounted volume.
                 g_NewVolumeBitmask = volume->dbcv_unitmask;
@@ -161,7 +161,7 @@ static BOOL InitWindowClass(void)
 }
 
 // param: PWCHAR, new volume's disk letter will be stored there.
-static DWORD WINAPI DevNotifyThread(PVOID param)
+static DWORD WINAPI DevNotifyThread(void *param)
 {
     HWND hWnd;
     DWORD diskIndex = 0;
@@ -195,7 +195,7 @@ static DWORD WINAPI DevNotifyThread(PVOID param)
 
     // Translate bitmask into disk letter.
     BitScanForward(&diskIndex, g_NewVolumeBitmask);
-    *(PWCHAR) param = L'A' + (WCHAR) diskIndex;
+    *(WCHAR *) param = L'A' + (WCHAR) diskIndex;
 
     return 0;
 }

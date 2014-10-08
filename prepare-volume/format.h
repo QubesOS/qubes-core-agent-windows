@@ -41,17 +41,17 @@ typedef enum
 
 typedef BOOLEAN(WINAPI *FILE_SYSTEM_CALLBACK)(
     FILE_SYSTEM_CALLBACK_COMMAND Command,
-    ULONG                        Action,
-    PVOID                        pData
+    ULONG Action,
+    void * pData
     );
 
 typedef void(WINAPI *FormatEx_t)(
-    PWCHAR               DriveRoot,
-    MEDIA_TYPE           MediaType,		// See WinIoCtl.h
-    PWCHAR               FileSystemTypeName,
-    PWCHAR               Label,
-    BOOL                 QuickFormat,
-    ULONG                DesiredUnitAllocationSize,
+    WCHAR *DriveRoot,
+    MEDIA_TYPE MediaType,		// See WinIoCtl.h
+    WCHAR *FileSystemTypeName,
+    WCHAR *Label,
+    BOOL QuickFormat,
+    ULONG DesiredUnitAllocationSize,
     FILE_SYSTEM_CALLBACK Callback
     );
 
