@@ -95,7 +95,6 @@ void actually_recv_file(TCHAR *fname, TCHAR *tempfile, HANDLE tmpfd)
 void recv_file(TCHAR *fname)
 {
     HANDLE tmpfd;
-    int ret;
     TCHAR tempdir[32768];
     TCHAR tempfile[32768];
 

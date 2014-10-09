@@ -185,14 +185,10 @@ cleanup:
 
 int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
-    WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post, session_stat;
+    WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post;
     TCHAR *filename;
-    HANDLE child;
-    TCHAR cmdline[32768];
     int	exitCode = 1, childExitCode;
     SHELLEXECUTEINFO sei;
-    STARTUPINFO si;
-    PROCESS_INFORMATION pi;
     TCHAR *tempDir = NULL;
 
     hStdIn = GetStdHandle(STD_INPUT_HANDLE);

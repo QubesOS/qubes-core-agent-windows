@@ -31,7 +31,6 @@ BOOL getClipboard(HWND hWin, HANDLE hOutput)
     WCHAR *lpwstr;
     UCHAR *lpstr;
     size_t cbStr;
-    ULONG  uWritten;
 
     if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
         return FALSE;

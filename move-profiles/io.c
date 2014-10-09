@@ -557,8 +557,7 @@ NTSTATUS FileSetSymlink(IN const WCHAR *sourcePath, IN const WCHAR *targetPath)
 {
     BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
     REPARSE_DATA_BUFFER *rdb = (REPARSE_DATA_BUFFER *) buffer;
-    DWORD size, targetSize;
-    WCHAR dest[MAX_PATH_LONG];
+    DWORD targetSize;
     NTSTATUS status;
     HANDLE file = NULL;
     IO_STATUS_BLOCK iosb;
@@ -613,12 +612,10 @@ cleanup:
 NTSTATUS FileCopyReparsePoint(IN const WCHAR *sourcePath, IN const WCHAR *targetPath)
 {
     REPARSE_DATA_BUFFER *rdb = NULL;
-    ULONG size;
     WCHAR dest[MAX_PATH_LONG];
     NTSTATUS status;
     HANDLE source = NULL;
     HANDLE target = NULL;
-    OBJECT_ATTRIBUTES oa;
     IO_STATUS_BLOCK iosb;
 
     status = FileOpen(&source, sourcePath, FALSE, FALSE, TRUE);

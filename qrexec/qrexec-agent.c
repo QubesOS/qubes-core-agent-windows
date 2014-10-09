@@ -949,8 +949,6 @@ ULONG handle_connect_existing(int client_id, int len)
 {
     ULONG uResult;
     char *buf;
-    CLIENT_INFO *pClientInfo;
-    DWORD dwWritten;
 
     if (!len)
         return ERROR_SUCCESS;
@@ -1346,7 +1344,6 @@ ULONG WatchForEvents()
     ULONG uResult;
     BOOLEAN bVchanReturnedError;
     BOOLEAN bVchanClientConnected;
-    int client_id;
 
     // This will not block.
     uResult = peer_server_init(REXEC_PORT);

@@ -152,8 +152,6 @@ ULONG CreateLink(WCHAR *pwszTargetDirectory, WCHAR *pwcMappedDriveLetter)
 int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     WCHAR wszIncomingDir[MAX_PATH + 1];
-    ULONG nWritten;
-    WCHAR wcMappedDriveLetter;
     WCHAR *pwszDocuments = NULL;
     HRESULT hResult;
     ULONG uResult;

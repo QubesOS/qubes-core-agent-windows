@@ -71,9 +71,6 @@ LRESULT CALLBACK WindowProc(
     LPARAM lParam    // session ID
     )
 {
-    TCHAR *pszUserName;
-    size_t cbUserName;
-
     switch (Msg)
     {
     case WM_WTSSESSION_CHANGE:

@@ -96,7 +96,6 @@ ULONG CreatePipeSecurityDescriptor(SECURITY_DESCRIPTOR **ppPipeSecurityDescripto
 ULONG ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo, HANDLE hEvent, BOOLEAN *pbPendingIO)
 {
     BOOLEAN	bPendingIO = FALSE;
-    ULONG	uResult;
 
     if (!pbPendingIO)
         return ERROR_INVALID_PARAMETER;
@@ -188,7 +187,6 @@ ULONG DisconnectAndReconnect(ULONG i)
 ULONG ClosePipeHandles()
 {
     ULONG i;
-    ULONG uResult;
 
     for (i = 0; i < INSTANCES; i++)
     {

@@ -33,7 +33,6 @@ void reportError(TCHAR *pszMessage)
 
 int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLine, int nCmdShow)
 {
-    MSG msg;
     INT_PTR hResult;
     TCHAR szQrexecClientPath[MAX_PATH];
     TCHAR *pszQrexecClientCmdLine;

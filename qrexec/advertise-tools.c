@@ -88,7 +88,6 @@ BOOL check_gui_presence()
 BOOL notify_dom0()
 {
     TCHAR szQrxecClientVmPath[MAX_PATH + 1];
-    HANDLE hProcess;
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
 

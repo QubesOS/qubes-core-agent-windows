@@ -134,7 +134,6 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 {
     SERVICE_STATUS_PROCESS ServiceStatus;
     DWORD dwBytesNeeded;
-    ULONG uResult;
     DWORD dwStartTickCount;
     DWORD dwOldCheckPoint;
     DWORD dwWaitTime;
@@ -222,7 +221,6 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
 
 ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrentState, DWORD *pdwExitCode, BOOLEAN *pbNothingToDo)
 {
-    ULONG uResult;
     SERVICE_STATUS Status;
     SERVICE_STATUS_PROCESS ServiceStatus;
     DWORD dwBytesNeeded;
@@ -296,8 +294,6 @@ ULONG InstallService(TCHAR *pszServiceFileName, TCHAR *pszServiceName)
     SC_HANDLE hService;
     SC_HANDLE hScm;
     ULONG uResult;
-    DWORD dwCurrentState;
-    DWORD dwExitCode;
 
     if (!pszServiceFileName || !pszServiceName)
         return ERROR_INVALID_PARAMETER;
@@ -362,7 +358,6 @@ ULONG UninstallService(TCHAR *pszServiceName)
 {
     SC_HANDLE hService;
     SC_HANDLE hScm;
-    SERVICE_STATUS Status;
     ULONG uResult;
     DWORD dwCurrentState;
     DWORD dwExitCode;
