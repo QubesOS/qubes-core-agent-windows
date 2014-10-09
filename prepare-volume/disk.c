@@ -2,6 +2,8 @@
 #include "format.h"
 #include "wait-for-volume.h"
 
+#if !(defined(_MSC_VER) && (_MSC_VER >= 1600))
+
 // Definitions from winioctl.h/ntdddisk.h, with these includes fails to build with DDK
 #define IOCTL_DISK_SET_DISK_ATTRIBUTES      CTL_CODE(IOCTL_DISK_BASE, 0x003d, METHOD_BUFFERED, FILE_READ_ACCESS | FILE_WRITE_ACCESS)
 
@@ -18,6 +20,8 @@ typedef struct _SET_DISK_ATTRIBUTES
     UINT64 AttributesMask;
     GUID Owner;
 } SET_DISK_ATTRIBUTES;
+
+#endif
 
 // without braces
 PWCHAR DISK_CLASS_GUID = L"4d36e967-e325-11ce-bfc1-08002be10318";
