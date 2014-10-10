@@ -12,7 +12,7 @@ int service_main(void);
 
 int set_network_parameters(DWORD ip, DWORD netmask, DWORD gateway, DWORD *outInterfaceIndex)
 {
-    IP_ADAPTER_INFO *pAdapterInfo;
+    IP_ADAPTER_INFO *pAdapterInfo = NULL;
     IP_ADAPTER_INFO *pAdapterInfoCurrent;
     IP_ADDR_STRING *pAddrCurrent;
     MIB_IPINTERFACE_ROW ipInterfaceRow;
@@ -167,9 +167,9 @@ int qubes_setup_network()
 {
     struct xs_handle *xs;
     int interface_index;
-    char *qubes_ip;
-    char *qubes_netmask;
-    char *qubes_gateway;
+    char *qubes_ip = NULL;
+    char *qubes_netmask = NULL;
+    char *qubes_gateway = NULL;
     int ret = 1;
     char cmdline[255];
 

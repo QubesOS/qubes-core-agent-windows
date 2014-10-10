@@ -186,7 +186,7 @@ cleanup:
 int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 {
     WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post;
-    TCHAR *filename;
+    TCHAR *filename = NULL;
     int	exitCode = 1, childExitCode;
     SHELLEXECUTEINFO sei;
     TCHAR *tempDir = NULL;

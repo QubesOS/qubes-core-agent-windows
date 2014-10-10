@@ -8,14 +8,14 @@
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
-int write_all(HANDLE fd, void *buf, int size)
+int write_all(HANDLE fd, void *buf, DWORD size)
 {
-    int written = 0;
+    DWORD written = 0;
     int ret;
 
     while (written < size)
     {
-        if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL))
+        if (!WriteFile(fd, (BYTE *) buf + written, size - written, &ret, NULL))
         {
             perror("WriteFile");
             return 0;
