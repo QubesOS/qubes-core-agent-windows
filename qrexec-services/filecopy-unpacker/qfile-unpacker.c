@@ -1,226 +1,201 @@
 #include <windows.h>
-#include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <Strsafe.h>
 #include <Shlwapi.h>
 #include <shlobj.h>
 #include <Shellapi.h>
-#include <ioall.h>
-#include <gui-fatal.h>
+
+#include "ioall.h"
+#include "filecopy-error.h"
 #include "wdk.h"
 #include "linux.h"
 #include "filecopy.h"
 #include "crc32.h"
 
-HANDLE STDIN = INVALID_HANDLE_VALUE;
-HANDLE STDOUT = INVALID_HANDLE_VALUE;
-HANDLE STDERR = INVALID_HANDLE_VALUE;
+#include "log.h"
+
+HANDLE g_stdin = INVALID_HANDLE_VALUE;
+HANDLE g_stdout = INVALID_HANDLE_VALUE;
+HANDLE g_stderr = INVALID_HANDLE_VALUE;
 
 #define INCOMING_DIR_ROOT L"QubesIncoming"
 
-#ifdef DBG
-#define internal_fatal gui_fatal
-#else
-static __inline void internal_fatal(const WCHAR *fmt, ...)
+int ReceiveFiles();
+
+WCHAR g_mappedDriveLetter = L'\0';
+
+ULONG MapDriveLetter(IN const WCHAR *targetDirectory, OUT WCHAR *driveLetter)
 {
-    gui_fatal(L"Internal error");
-}
-#endif
-
-int do_unpack();
-
-WCHAR g_wcMappedDriveLetter = L'\0';
-
-ULONG CreateLink(WCHAR *pwszTargetDirectory, WCHAR *pwcMappedDriveLetter)
-{
-    UNICODE_STRING DirectoryObjectName;
-    UNICODE_STRING MappedDriveLetter;
-    UNICODE_STRING TargetDirectory;
+    UNICODE_STRING directoryNameU;
+    UNICODE_STRING driveLetterU;
+    UNICODE_STRING targetDirectoryU;
     OBJECT_ATTRIBUTES oa;
-    HANDLE hDirectoryObject;
-    HANDLE hLinkObject;
-    NTSTATUS Status;
-    WCHAR wszMappedDriveLetter[3];
-    WCHAR wszDirectoryObjectName[100];
-    WCHAR wszDevicePath[MAX_PATH];
-    WCHAR wszTargetDirectoryPath[MAX_PATH * 2];	// may be longer than MAX_PATH, but not much
-    WCHAR wszTargetDirectoryDriveLetter[3];
-    HRESULT hResult;
-    ULONG uResult;
-    DWORD dwLogicalDrives;
+    HANDLE directoryObject;
+    HANDLE linkObject;
+    NTSTATUS status;
+    WCHAR driveLetterBuffer[3];
+    WCHAR objectDirectoryName[100];
+    WCHAR devicePath[MAX_PATH];
+    WCHAR targetDirectoryPath[MAX_PATH * 2];	// may be longer than MAX_PATH, but not much
+    WCHAR targetDirectoryDriveLetter[3];
+    HRESULT hresult;
+    DWORD logicalDrives;
     UCHAR i;
 
-    if (!pwszTargetDirectory || !pwcMappedDriveLetter)
+    if (!targetDirectory || !driveLetter)
         return ERROR_INVALID_PARAMETER;
 
-    hResult = StringCchPrintfW(
-        wszDirectoryObjectName,
-        RTL_NUMBER_OF(wszDirectoryObjectName),
+    hresult = StringCchPrintf(
+        objectDirectoryName,
+        RTL_NUMBER_OF(objectDirectoryName),
         L"\\BaseNamedObjects\\qfile-unpacker-%d",
         GetCurrentProcessId());
 
-    if (FAILED(hResult))
+    if (FAILED(hresult))
     {
-        internal_fatal(L"CreateLink(): StringCchPrintfW() failed with error %d\n", hResult);
-        return hResult;
+        return perror2(hresult, "StringCchPrintf");
     }
 
-    hResult = StringCchCopyN(wszTargetDirectoryDriveLetter, RTL_NUMBER_OF(wszTargetDirectoryDriveLetter), pwszTargetDirectory, 2);
-    if (FAILED(hResult))
+    hresult = StringCchCopyN(targetDirectoryDriveLetter, RTL_NUMBER_OF(targetDirectoryDriveLetter), targetDirectory, 2);
+    if (FAILED(hresult))
     {
-        internal_fatal(L"CreateLink(): StringCchCopyN() failed with error %d\n", hResult);
-        return hResult;
+        return perror2(hresult, "StringCchCopyN");
     }
 
-    memset(&wszDevicePath, 0, sizeof(wszDevicePath));
-    if (!QueryDosDevice(wszTargetDirectoryDriveLetter, wszDevicePath, RTL_NUMBER_OF(wszDevicePath)))
+    memset(&devicePath, 0, sizeof(devicePath));
+    if (!QueryDosDevice(targetDirectoryDriveLetter, devicePath, RTL_NUMBER_OF(devicePath)))
     {
-        uResult = GetLastError();
-        internal_fatal(L"CreateLink(): QueryDosDevice() failed with error %d\n", uResult);
-        return uResult;
+        return perror("QueryDosDevice");
     }
 
     // Translate the directory path to a form of \Device\HarddiskVolumeN\path
-    hResult = StringCchPrintfW(
-        wszTargetDirectoryPath,
-        RTL_NUMBER_OF(wszTargetDirectoryPath),
+    hresult = StringCchPrintf(
+        targetDirectoryPath,
+        RTL_NUMBER_OF(targetDirectoryPath),
         L"%s%s",
-        wszDevicePath,
-        (PWCHAR) &pwszTargetDirectory[2]);
+        devicePath,
+        (WCHAR *) &targetDirectory[2]);
 
-    if (FAILED(hResult))
+    if (FAILED(hresult))
     {
-        internal_fatal(L"CreateLink(): StringCchPrintfW() failed with error %d\n", hResult);
-        return hResult;
+        return perror2(hresult, "StringCchPrintf");
     }
 
-    dwLogicalDrives = GetLogicalDrives();
+    logicalDrives = GetLogicalDrives();
     i = 'Z';
-    while ((dwLogicalDrives & (1 << (i - 'A'))) && i)
+    while ((logicalDrives & (1 << (i - 'A'))) && i)
         i--;
 
     if (!i)
     {
-        internal_fatal(L"CreateLink(): Could not find a spare drive letter\n");
+        LogError("Could not find a spare drive letter\n");
         return ERROR_ALREADY_EXISTS;
     }
 
-    memset(&wszMappedDriveLetter, 0, sizeof(wszMappedDriveLetter));
-    wszMappedDriveLetter[0] = i;
-    wszMappedDriveLetter[1] = L':';
+    ZeroMemory(&driveLetterBuffer, sizeof(driveLetterBuffer));
+    driveLetterBuffer[0] = i;
+    driveLetterBuffer[1] = L':';
 
-    RtlInitUnicodeString(&DirectoryObjectName, wszDirectoryObjectName);
-    InitializeObjectAttributes(&oa, &DirectoryObjectName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    RtlInitUnicodeString(&directoryNameU, objectDirectoryName);
+    InitializeObjectAttributes(&oa, &directoryNameU, OBJ_CASE_INSENSITIVE, NULL, NULL);
 
-    Status = ZwCreateDirectoryObject(&hDirectoryObject, DIRECTORY_ALL_ACCESS, &oa);
-    if (!NT_SUCCESS(Status))
+    status = ZwCreateDirectoryObject(&directoryObject, DIRECTORY_ALL_ACCESS, &oa);
+    if (!NT_SUCCESS(status))
     {
-        internal_fatal(L"CreateLink(): ZwCreateDirectoryObject() failed with status 0x%08X\n", Status);
-        return Status;
+        LogError("ZwCreateDirectoryObject failed with status 0x%08X\n", status);
+        return status;
     }
 
-    RtlInitUnicodeString(&MappedDriveLetter, wszMappedDriveLetter);
-    RtlInitUnicodeString(&TargetDirectory, wszTargetDirectoryPath);
-    InitializeObjectAttributes(&oa, &MappedDriveLetter, OBJ_CASE_INSENSITIVE, hDirectoryObject, NULL);
+    RtlInitUnicodeString(&driveLetterU, driveLetterBuffer);
+    RtlInitUnicodeString(&targetDirectoryU, targetDirectoryPath);
+    InitializeObjectAttributes(&oa, &driveLetterU, OBJ_CASE_INSENSITIVE, directoryObject, NULL);
 
-    Status = ZwCreateSymbolicLinkObject(&hLinkObject, 0, &oa, &TargetDirectory);
-    if (!NT_SUCCESS(Status))
+    status = ZwCreateSymbolicLinkObject(&linkObject, 0, &oa, &targetDirectoryU);
+    if (!NT_SUCCESS(status))
     {
-        ZwClose(hDirectoryObject);
-        internal_fatal(L"CreateLink(): ZwCreateSymbolicLinkObject() failed with status 0x%08X\n", Status);
-        return Status;
+        ZwClose(directoryObject);
+        LogError("ZwCreateSymbolicLinkObject failed with status 0x%08X\n", status);
+        return status;
     }
 
-#pragma prefast(suppress:28132, "sizeof(hDirectoryObject) is the correct size of a HANDLE")
-    Status = ZwSetInformationProcess(GetCurrentProcess(), ProcessDeviceMap, &hDirectoryObject, sizeof(hDirectoryObject));
-    if (!NT_SUCCESS(Status))
+    status = ZwSetInformationProcess(GetCurrentProcess(), ProcessDeviceMap, &directoryObject, sizeof(directoryObject));
+    if (!NT_SUCCESS(status))
     {
-        internal_fatal(L"CreateLink(): ZwSetInformationProcess() failed with status 0x%08X\n", Status);
-        ZwClose(hLinkObject);
-        ZwClose(hDirectoryObject);
-        return Status;
+        LogError("ZwSetInformationProcess failed with status 0x%08X\n", status);
+        ZwClose(linkObject);
+        ZwClose(directoryObject);
+        return status;
     }
 
-    *pwcMappedDriveLetter = wszMappedDriveLetter[0];
+    *driveLetter = driveLetterBuffer[0];
 
-    //	ZwClose(hLinkObject);
-    //	ZwClose(hDirectoryObject);
     return ERROR_SUCCESS;
 }
 
-int __cdecl _tmain(ULONG argc, TCHAR *argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    WCHAR wszIncomingDir[MAX_PATH + 1];
-    WCHAR *pwszDocuments = NULL;
-    HRESULT hResult;
-    ULONG uResult;
-    WCHAR wszRemoteDomainName[MAX_PATH];
+    WCHAR incomingDir[MAX_PATH + 1];
+    WCHAR *documentsPath = NULL;
+    HRESULT hresult;
+    ULONG errorCode;
+    WCHAR remoteDomainName[MAX_PATH];
 
-    STDERR = GetStdHandle(STD_ERROR_HANDLE);
-    if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE)
+    g_stderr = GetStdHandle(STD_ERROR_HANDLE);
+    if (g_stderr == NULL || g_stderr == INVALID_HANDLE_VALUE)
     {
-        internal_fatal(L"Failed to get STDERR handle");
-        exit(1);
+        return perror("GetStdHandle(STD_ERROR_HANDLE)");
     }
 
-    STDIN = GetStdHandle(STD_INPUT_HANDLE);
-    if (STDIN == NULL || STDIN == INVALID_HANDLE_VALUE)
+    g_stdin = GetStdHandle(STD_INPUT_HANDLE);
+    if (g_stdin == NULL || g_stdin == INVALID_HANDLE_VALUE)
     {
-        internal_fatal(L"Failed to get STDIN handle");
-        exit(1);
+        return perror("GetStdHandle(STD_INPUT_HANDLE)");
     }
 
-    STDOUT = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (STDOUT == NULL || STDOUT == INVALID_HANDLE_VALUE)
+    g_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (g_stdout == NULL || g_stdout == INVALID_HANDLE_VALUE)
     {
-        internal_fatal(L"Failed to get STDOUT handle");
-        exit(1);
+        return perror("GetStdHandle(STD_OUTPUT_HANDLE)");
     }
 
-    if (!GetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", wszRemoteDomainName, RTL_NUMBER_OF(wszRemoteDomainName)))
+    if (!GetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", remoteDomainName, RTL_NUMBER_OF(remoteDomainName)))
     {
-        uResult = GetLastError();
-        internal_fatal(L"Failed to get a remote domain name, GetEnvironmentVariable() failed with error %d\n", uResult);
-        exit(1);
+        return perror("GetEnvironmentVariable(QREXEC_REMOTE_DOMAIN)");
     }
 
-    hResult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &pwszDocuments);
-    if (FAILED(hResult))
+    hresult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &documentsPath);
+    if (FAILED(hresult))
     {
-        internal_fatal(L"Failed to get a path to My Documents, SHGetKnownFolderPath() failed with error 0x%x\n", hResult);
-        exit(1);
+        return perror2(hresult, "SHGetKnownFolderPath");
     }
 
-    hResult = StringCchPrintf(
-        wszIncomingDir,
-        RTL_NUMBER_OF(wszIncomingDir),
+    hresult = StringCchPrintf(
+        incomingDir,
+        RTL_NUMBER_OF(incomingDir),
         L"%s\\%s\\%s",
-        pwszDocuments,
+        documentsPath,
         INCOMING_DIR_ROOT,
-        wszRemoteDomainName);
+        remoteDomainName);
 
-    CoTaskMemFree(pwszDocuments);
+    CoTaskMemFree(documentsPath);
 
-    if (FAILED(hResult))
+    if (FAILED(hresult))
     {
-        internal_fatal(L"Failed to print an incoming directory path, StringCchPrintf() failed with error %d\n", hResult);
-        exit(1);
+        return perror2(hresult, "StringCchPrintf");
     }
 
-    uResult = SHCreateDirectoryEx(NULL, wszIncomingDir, NULL);
-    if (ERROR_SUCCESS != uResult && ERROR_ALREADY_EXISTS != uResult)
+    errorCode = SHCreateDirectoryEx(NULL, incomingDir, NULL);
+    if (ERROR_SUCCESS != errorCode && ERROR_ALREADY_EXISTS != errorCode)
     {
-        internal_fatal(L"Failed to create an incoming directory path, SHCreateDirectoryEx() failed with error %d\n", uResult);
-        exit(1);
+        return perror2(hresult, "SHCreateDirectoryEx");
     }
 
-    uResult = CreateLink(wszIncomingDir, &g_wcMappedDriveLetter);
-    if (ERROR_SUCCESS != uResult)
+    errorCode = MapDriveLetter(incomingDir, &g_mappedDriveLetter);
+    if (ERROR_SUCCESS != errorCode)
     {
-        internal_fatal(L"Failed to map a drive letter to the incoming directory path, CreateLink() failed with error %d\n", uResult);
-        exit(1);
+        return perror2(errorCode, "MapDriveLetter");
     }
 
-    return do_unpack();
+    return ReceiveFiles();
 }

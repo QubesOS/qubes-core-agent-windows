@@ -1,10 +1,4 @@
 #pragma once
-enum
-{
-    PROGRESS_FLAG_NORMAL,
-    PROGRESS_FLAG_INIT,
-    PROGRESS_FLAG_DONE,
-    PROGRESS_FLAG_ERROR
-};
+#include "filecopy.h"
 
-void do_notify_progress(long long written, int flag);
+void UpdateProgress(IN UINT64 written, IN FC_PROGRESS_TYPE progressType);

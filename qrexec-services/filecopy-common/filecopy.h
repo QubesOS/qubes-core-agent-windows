@@ -1,4 +1,5 @@
-#define FILECOPY_SPOOL "/home/user/.filecopyspool"
+#pragma once
+
 #define FILECOPY_VMNAME_SIZE 32
 #define PROGRESS_NOTIFY_DELTA (1*1000*1000)
 #define MAX_PATH_LENGTH 16384
@@ -38,14 +39,23 @@ struct result_header_ext
     char last_name[0];
 };
 
-enum
+typedef enum _FC_COPY_STATUS
 {
     COPY_FILE_OK,
     COPY_FILE_READ_EOF,
     COPY_FILE_READ_ERROR,
     COPY_FILE_WRITE_ERROR
-};
+} FC_COPY_STATUS;
 
-int copy_file(HANDLE outfd, HANDLE infd, long long size, unsigned long *crc32);
-char *copy_file_status_to_str(int status);
-void set_size_limit(long long new_bytes_limit, long long new_files_limit);
+typedef enum _FC_PROGRESS_TYPE
+{
+    PROGRESS_TYPE_NORMAL,
+    PROGRESS_TYPE_INIT,
+    PROGRESS_TYPE_DONE,
+    PROGRESS_TYPE_ERROR
+} FC_PROGRESS_TYPE;
+
+typedef void(*fNotifyProgressCallback)(DWORD size, FC_PROGRESS_TYPE progressType);
+
+FC_COPY_STATUS FcCopyFile(IN HANDLE output, IN HANDLE input, IN UINT64 size, OUT UINT32 *crc32 OPTIONAL, IN fNotifyProgressCallback progressCallback OPTIONAL);
+char *FcStatusToString(IN FC_COPY_STATUS status);

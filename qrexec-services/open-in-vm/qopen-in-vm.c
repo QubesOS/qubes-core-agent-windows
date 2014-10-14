@@ -1,28 +1,28 @@
 #include <Windows.h>
 #include <stdio.h>
-#include <tchar.h>
 #include <strsafe.h>
 #include <string.h>
-#include <malloc.h>
 #include <stdlib.h>
-#include <ioall.h>
-#include <gui-fatal.h>
+
+#include "ioall.h"
+#include "filecopy-error.h"
 #include "dvm2.h"
+
 #include "utf8-conv.h"
 
-void send_file(TCHAR *fname)
+void SendFile(IN const WCHAR *filePath)
 {
-    TCHAR *base, *base1, *base2;
-    UCHAR *baseUTF8;
-    UCHAR basePadded[DVM_FILENAME_SIZE];
-    HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    HANDLE fd = CreateFile(fname, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    const WCHAR *base, *base1, *base2;
+    char *baseUtf8;
+    char basePadded[DVM_FILENAME_SIZE];
+    HANDLE stdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE file = CreateFile(filePath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if (fd == INVALID_HANDLE_VALUE)
-        gui_fatal(TEXT("open %s"), fname);
+    if (file == INVALID_HANDLE_VALUE)
+        FcReportError(GetLastError(), TRUE, L"open '%s'", filePath);
 
-    base1 = _tcsrchr(fname, TEXT('\\'));
-    base2 = _tcsrchr(fname, TEXT('/'));
+    base1 = wcsrchr(filePath, L'\\');
+    base2 = wcsrchr(filePath, L'/');
 
     if (base2 > base1)
     {
@@ -35,99 +35,81 @@ void send_file(TCHAR *fname)
         base++;
     }
     else
-        base = fname;
+        base = filePath;
 
-#ifdef UNICODE
-    if (FAILED(ConvertUTF16ToUTF8(base, &baseUTF8, NULL)))
-        gui_fatal(TEXT("Failed convert filename to UTF8"));
-#else
-    baseUTF8 = base;
-#endif
+    if (ERROR_SUCCESS != ConvertUTF16ToUTF8(base, &baseUtf8, NULL))
+        FcReportError(GetLastError(), TRUE, L"Failed to convert filename '%s' to UTF8", base);
 
-    if (strlen(baseUTF8) >= DVM_FILENAME_SIZE)
-        baseUTF8 += strlen(baseUTF8) - DVM_FILENAME_SIZE + 1;
+    if (strlen(baseUtf8) >= DVM_FILENAME_SIZE)
+        baseUtf8 += strlen(baseUtf8) - DVM_FILENAME_SIZE + 1;
 
-    memset(basePadded, 0, sizeof(basePadded));
-    StringCbCopyA(basePadded, sizeof(basePadded), baseUTF8);
+    ZeroMemory(basePadded, sizeof(basePadded));
+    StringCbCopyA(basePadded, sizeof(basePadded), baseUtf8);
 
-#ifdef UNICODE
-    free(baseUTF8);
-#endif
+    free(baseUtf8);
 
-    if (!write_all(hStdOut, basePadded, DVM_FILENAME_SIZE))
-        gui_fatal(TEXT("send filename to dispVM"));
+    if (!FcWriteBuffer(stdOut, basePadded, DVM_FILENAME_SIZE))
+        FcReportError(GetLastError(), TRUE, L"send filename to dispVM");
 
-    if (!copy_fd_all(hStdOut, fd))
-        gui_fatal(TEXT("send file to dispVM"));
+    if (!FcCopyUntilEof(stdOut, file))
+        FcReportError(GetLastError(), TRUE, L"send file to dispVM");
 
-    CloseHandle(fd);
+    CloseHandle(file);
     fprintf(stderr, "File sent\n");
-    CloseHandle(hStdOut);
+    CloseHandle(stdOut);
 }
 
-int copy_and_return_nonemptiness(HANDLE tmpfd)
+void ReceiveFile(IN const WCHAR *fileName)
 {
-    LARGE_INTEGER size;
-    HANDLE hStdIn = GetStdHandle(STD_INPUT_HANDLE);
+    HANDLE tempFile;
+    WCHAR tempDirPath[32768];
+    WCHAR tempFilePath[32768];
+    LARGE_INTEGER fileSize;
+    HANDLE stdIn = GetStdHandle(STD_INPUT_HANDLE);
 
-    if (!copy_fd_all(tmpfd, hStdIn))
-        gui_fatal(TEXT("receiving file from dispVM"));
-
-    if (!GetFileSizeEx(tmpfd, &size))
-        gui_fatal(TEXT("GetFileSizeEx"));
-
-    CloseHandle(tmpfd);
-    return size.QuadPart > 0;
-}
-
-void actually_recv_file(TCHAR *fname, TCHAR *tempfile, HANDLE tmpfd)
-{
-    if (!copy_and_return_nonemptiness(tmpfd))
+    // prepare temporary path
+    if (!GetTempPath(RTL_NUMBER_OF(tempDirPath), tempDirPath))
     {
-        DeleteFile(tempfile);
+        FcReportError(GetLastError(), TRUE, L"Failed to get temp dir");
+    }
+
+    if (!GetTempFileName(tempDirPath, L"qvm", 0, tempFilePath))
+    {
+        FcReportError(GetLastError(), TRUE, L"Failed to get temp file");
+    }
+
+    // create temp file
+    tempFile = CreateFile(tempFilePath, GENERIC_WRITE, 0, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (tempFile == INVALID_HANDLE_VALUE)
+        FcReportError(GetLastError(), TRUE, L"Failed to open temp file");
+
+    if (!FcCopyUntilEof(tempFile, stdIn))
+        FcReportError(GetLastError(), TRUE, L"receiving file from dispVM");
+
+    if (!GetFileSizeEx(tempFile, &fileSize))
+        FcReportError(GetLastError(), TRUE, L"GetFileSizeEx");
+
+    CloseHandle(tempFile);
+
+    if (fileSize.QuadPart == 0)
+    {
+        DeleteFile(tempFilePath);
         return;
     }
 
-    if (!MoveFileEx(tempfile, fname, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
-        gui_fatal(TEXT("rename"));
+    if (!MoveFileEx(tempFilePath, fileName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
+        FcReportError(GetLastError(), TRUE, L"rename");
 }
 
-void recv_file(TCHAR *fname)
-{
-    HANDLE tmpfd;
-    TCHAR tempdir[32768];
-    TCHAR tempfile[32768];
-
-    if (!GetTempPath(RTL_NUMBER_OF(tempdir), tempdir))
-    {
-        gui_fatal(TEXT("Failed to get temp dir"));
-    }
-
-    if (!GetTempFileName(tempdir, TEXT("qvm"), 0, tempfile))
-    {
-        gui_fatal(TEXT("Failed to get temp file"));
-    }
-
-    tmpfd = CreateFile(tempfile, GENERIC_WRITE, 0, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (tmpfd == INVALID_HANDLE_VALUE)
-    {
-        gui_fatal(TEXT("Failed to open temp file"));
-    }
-    actually_recv_file(fname, tempfile, tmpfd);
-}
-
-void talk_to_daemon(TCHAR *fname)
-{
-    send_file(fname);
-    recv_file(fname);
-}
-
-int __cdecl _tmain(ULONG argc, TCHAR *argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
     if (argc != 2)
-        gui_fatal(TEXT("OpenInVM - no file given?"));
+        FcReportError(ERROR_BAD_ARGUMENTS, TRUE, L"OpenInVM - no file given?");
 
     fprintf(stderr, "OpenInVM starting\n");
-    talk_to_daemon(argv[1]);
+
+    SendFile(argv[1]);
+    ReceiveFile(argv[1]);
+
     return 0;
 }

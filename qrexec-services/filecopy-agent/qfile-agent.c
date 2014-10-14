@@ -1,68 +1,61 @@
 #include <windows.h>
-#include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <Strsafe.h>
 #include <Shlwapi.h>
 #include <Shellapi.h>
-#include <ioall.h>
-#include <linux.h>
-#include <gui-fatal.h>
-#include "gui-progress.h"
+
 #include "filecopy.h"
+#include "ioall.h"
+#include "linux.h"
+#include "filecopy-error.h"
+#include "gui-progress.h"
 #include "crc32.h"
+
+#include "log.h"
 #include "utf8-conv.h"
 
-HANDLE STDIN = INVALID_HANDLE_VALUE;
-HANDLE STDOUT = INVALID_HANDLE_VALUE;
-HANDLE STDERR = INVALID_HANDLE_VALUE;
+HANDLE g_stdin = INVALID_HANDLE_VALUE;
+HANDLE g_stdout = INVALID_HANDLE_VALUE;
+HANDLE g_stderr = INVALID_HANDLE_VALUE;
 
-INT64 total_size = 0;
-BOOL cancel_operation = FALSE;
+INT64 g_totalSize = 0;
+BOOL g_cancelOperation = FALSE;
+UINT32 g_crc32 = 0;
 
-#ifdef DBG
-#define internal_fatal gui_fatal
-#else
-static __inline void internal_fatal(const TCHAR *fmt, ...)
+static BOOL WriteWithCrc(IN HANDLE output, IN const void *buffer, IN DWORD size)
 {
-    gui_fatal(TEXT("Internal error"));
-}
-#endif
-
-unsigned long crc32_sum;
-int write_all_with_crc(HANDLE hOutput, void *pBuf, int sSize)
-{
-    crc32_sum = Crc32_ComputeBuf(crc32_sum, pBuf, sSize);
-    return write_all(hOutput, pBuf, sSize);
+    g_crc32 = Crc32_ComputeBuf(g_crc32, buffer, size);
+    return FcWriteBuffer(output, buffer, size);
 }
 
-void notify_progress(int size, int flag)
+static void NotifyProgress(IN DWORD size, IN FC_PROGRESS_TYPE progressType)
 {
-    static long long total_written = 0;
-    static long long prev_total = 0;
+    static UINT64 cbWrittenTotal = 0;
+    static UINT64 cbPreviousTotal = 0;
 
-    total_written += size;
-    if (total_written > prev_total + PROGRESS_NOTIFY_DELTA
-        || (flag != PROGRESS_FLAG_NORMAL))
+    cbWrittenTotal += size;
+    if (cbWrittenTotal > cbPreviousTotal + PROGRESS_NOTIFY_DELTA || (progressType != PROGRESS_TYPE_NORMAL))
     {
-        do_notify_progress(total_written, flag);
-        prev_total = total_written;
+        UpdateProgress(cbWrittenTotal, progressType);
+        cbPreviousTotal = cbWrittenTotal;
     }
 }
 
-void wait_for_result()
+static void WaitForResult(void)
 {
     struct result_header hdr;
     struct result_header_ext hdr_ext;
-    char last_filename[MAX_PATH + 1];
-    char last_filename_prefix[] = "; Last file: ";
+    char lastFilename[MAX_PATH + 1];
+    char lastFilenamePrefix[] = "; Last file: ";
 
-    if (!read_all(STDIN, &hdr, sizeof(hdr)))
+    if (!FcReadBuffer(g_stdin, &hdr, sizeof(hdr)))
     {
+        LogError("FcReadBuffer failed");
         exit(1);	// hopefully remote has produced error message
     }
 
-    if (!read_all(STDIN, &hdr_ext, sizeof(hdr_ext)))
+    if (!FcReadBuffer(g_stdin, &hdr_ext, sizeof(hdr_ext)))
     {
         // remote used old result_header struct
         hdr_ext.last_namelen = 0;
@@ -74,147 +67,134 @@ void wait_for_result()
         hdr_ext.last_namelen = MAX_PATH;
     }
 
-    if (!read_all(STDIN, last_filename, hdr_ext.last_namelen))
+    if (!FcReadBuffer(g_stdin, lastFilename, hdr_ext.last_namelen))
     {
         fprintf(stderr, "Failed to get last filename\n");
+        LogError("Failed to get last filename");
         hdr_ext.last_namelen = 0;
     }
 
-    last_filename[hdr_ext.last_namelen] = '\0';
+    lastFilename[hdr_ext.last_namelen] = '\0';
 
     if (!hdr_ext.last_namelen)
+    {
         /* set prefix to empty string */
-        last_filename_prefix[0] = '\0';
+        lastFilenamePrefix[0] = '\0';
+    }
 
     if (hdr.error_code != 0)
     {
         switch (hdr.error_code)
         {
         case EEXIST:
-            gui_fatal(TEXT("File copy: not overwriting existing file. Clean incoming dir, and retry copy%hs%hs"),
-                last_filename_prefix, last_filename);
+            FcReportError(ERROR_ALREADY_EXISTS, TRUE, L"File copy: not overwriting existing file. Clean incoming dir, and retry copy%hs%hs", lastFilenamePrefix, lastFilename);
             break;
         case EINVAL:
-            gui_fatal(TEXT("File copy: Corrupted data from packer%hs%hs"),
-                last_filename_prefix, last_filename);
+            FcReportError(ERROR_INVALID_DATA, TRUE, L"File copy: Corrupted data from packer%hs%hs", lastFilenamePrefix, lastFilename);
             break;
         default:
-            gui_fatal(TEXT("File copy: %hs%hs%hs"),
-                strerror(hdr.error_code),
-                last_filename_prefix, last_filename);
+            FcReportError(ERROR_UNIDENTIFIED_ERROR, TRUE, L"File copy: %hs%hs%hs", strerror(hdr.error_code), lastFilenamePrefix, lastFilename);
         }
     }
 
-    if (hdr.crc32 != crc32_sum)
+    if (hdr.crc32 != g_crc32)
     {
-        gui_fatal(TEXT("File transfer failed: checksum mismatch"));
+        FcReportError(ERROR_INVALID_DATA, TRUE, L"File transfer failed: checksum mismatch");
     }
 }
 
 #define UNIX_EPOCH_OFFSET 11644478640LL
 
-void convertWindowTimeToUnix(FILETIME *srctime, unsigned int *puDstTime, unsigned int *puDstTimeNsec)
+static void WindowTimeToUnix(IN FILETIME *windowsTime, OUT unsigned int *unixTime, OUT unsigned int *unixTimeNsec)
 {
     ULARGE_INTEGER tmp;
 
-    tmp.LowPart = srctime->dwLowDateTime;
-    tmp.HighPart = srctime->dwHighDateTime;
+    tmp.LowPart = windowsTime->dwLowDateTime;
+    tmp.HighPart = windowsTime->dwHighDateTime;
 
-    *puDstTimeNsec = (unsigned int) ((tmp.QuadPart % 10000000LL) * 100LL);
-    *puDstTime = (unsigned int) ((tmp.QuadPart / 10000000LL) - UNIX_EPOCH_OFFSET);
+    *unixTimeNsec = (unsigned int) ((tmp.QuadPart % 10000000LL) * 100LL);
+    *unixTime = (unsigned int) ((tmp.QuadPart / 10000000LL) - UNIX_EPOCH_OFFSET);
 }
 
-void write_headers(struct file_header *hdr, TCHAR *pszFilename)
+static void WriteHeaders(IN struct file_header *hdr, IN const WCHAR *fileName)
 {
-#ifdef UNICODE
-    UCHAR *pszFilenameUtf8 = NULL;
-    size_t cbFilenameUtf8;
+    char *fileNameUtf8 = NULL;
+    size_t cbFileNameUtf8;
 
-    if (FAILED(ConvertUTF16ToUTF8(pszFilename, &pszFilenameUtf8, &cbFilenameUtf8)))
-        gui_fatal(TEXT("Cannot convert path '%s' to UTF-8"), pszFilename);
+    if (ERROR_SUCCESS != ConvertUTF16ToUTF8(fileName, &fileNameUtf8, &cbFileNameUtf8))
+        FcReportError(GetLastError(), TRUE, L"Cannot convert path '%s' to UTF-8", fileName);
 
-    hdr->namelen = cbFilenameUtf8;
+    hdr->namelen = cbFileNameUtf8;
 
-    if (!write_all_with_crc(STDOUT, hdr, sizeof(*hdr))
-        || !write_all_with_crc(STDOUT, pszFilenameUtf8, hdr->namelen))
+    if (!WriteWithCrc(g_stdout, hdr, sizeof(*hdr)) || !WriteWithCrc(g_stdout, fileNameUtf8, hdr->namelen))
     {
-        wait_for_result();
+        WaitForResult();
         exit(1);
     }
-    free(pszFilenameUtf8);
-#else
-    hdr->namelen = _tcslen(pszFilename);
-
-    if (!write_all_with_crc(STDOUT, hdr, sizeof(*hdr))
-        || !write_all_with_crc(STDOUT, pszFilename, hdr->namelen))
-    {
-        wait_for_result();
-        exit(1);
-    }
-#endif
+    free(fileNameUtf8);
 }
 
-int single_file_processor(TCHAR *pszFilename, DWORD dwAttrs)
+static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
 {
     struct file_header hdr;
-    HANDLE hInput;
-    FILETIME atime, mtime;
+    HANDLE input;
+    FILETIME accessTime, modificationTime;
 
-    if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY)
+    if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         hdr.mode = 0755 | 0040000;
     else
         hdr.mode = 0644 | 0100000;
 
     // FILE_FLAG_BACKUP_SEMANTICS required to access directories
-    hInput = CreateFile(pszFilename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (hInput == INVALID_HANDLE_VALUE)
-        gui_fatal(TEXT("Cannot open file %s"), pszFilename);
+    input = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (input == INVALID_HANDLE_VALUE)
+        FcReportError(GetLastError(), TRUE, L"Cannot open file '%s'", fileName);
 
     /* FIXME: times are already retrieved by FindFirst/NextFile */
-    if (!GetFileTime(hInput, NULL, &atime, &mtime))
+    if (!GetFileTime(input, NULL, &accessTime, &modificationTime))
     {
-        CloseHandle(hInput);
-        gui_fatal(TEXT("Cannot get file %s time"), pszFilename);
+        FcReportError(GetLastError(), TRUE, L"Cannot get time of file '%s'", fileName);
+        CloseHandle(input);
     }
-    convertWindowTimeToUnix(&atime, &hdr.atime, &hdr.atime_nsec);
-    convertWindowTimeToUnix(&mtime, &hdr.mtime, &hdr.mtime_nsec);
 
-    if ((dwAttrs & FILE_ATTRIBUTE_DIRECTORY) == 0)
+    WindowTimeToUnix(&accessTime, &hdr.atime, &hdr.atime_nsec);
+    WindowTimeToUnix(&modificationTime, &hdr.mtime, &hdr.mtime_nsec);
+
+    if ((fileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
     { /* FIXME: symlink */
-        int ret;
+        FC_COPY_STATUS copyResult;
         LARGE_INTEGER size;
 
-        if (!GetFileSizeEx(hInput, &size))
+        if (!GetFileSizeEx(input, &size))
         {
-            CloseHandle(hInput);
-            gui_fatal(TEXT("Cannot get file %s size"), pszFilename);
+            FcReportError(GetLastError(), TRUE, L"Cannot get size of file '%s'", fileName);
+            CloseHandle(input);
         }
 
         hdr.filelen = size.QuadPart;
-        write_headers(&hdr, pszFilename);
-        ret = copy_file(STDOUT, hInput, hdr.filelen, &crc32_sum);
+        WriteHeaders(&hdr, fileName);
+        copyResult = FcCopyFile(g_stdout, input, hdr.filelen, &g_crc32, NotifyProgress);
 
         // if COPY_FILE_WRITE_ERROR, hopefully remote will produce a message
-        if (ret != COPY_FILE_OK)
+        if (copyResult != COPY_FILE_OK)
         {
-            if (ret != COPY_FILE_WRITE_ERROR)
+            if (copyResult != COPY_FILE_WRITE_ERROR)
             {
-                CloseHandle(hInput);
-                gui_fatal(TEXT("Copying file %s: %hs"), pszFilename,
-                    copy_file_status_to_str(ret));
+                FcReportError(GetLastError(), TRUE, L"Error copying file '%s': %hs", fileName, FcStatusToString(copyResult));
+                CloseHandle(input);
             }
             else
             {
-                wait_for_result();
+                WaitForResult();
                 exit(1);
             }
         }
     }
 
-    if (dwAttrs & FILE_ATTRIBUTE_DIRECTORY)
+    if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
     {
         hdr.filelen = 0;
-        write_headers(&hdr, pszFilename);
+        WriteHeaders(&hdr, fileName);
     }
 
     /* TODO */
@@ -223,227 +203,228 @@ int single_file_processor(TCHAR *pszFilename, DWORD dwAttrs)
     {
         char name[st->st_size + 1];
         if (readlink(pwszFilename, name, sizeof(name)) != st->st_size)
-            gui_fatal(L"readlink %s", pwszFilename);
+            GuiFatal(L"readlink %s", pwszFilename);
         hdr.filelen = st->st_size + 1;
         write_headers(&hdr, pwszFilename);
-        if (!write_all_with_crc(1, name, st->st_size + 1))
+        if (!WriteWithCrc(1, name, st->st_size + 1))
             exit(1);
     }
 #endif
-    CloseHandle(hInput);
-    return 0;
+    CloseHandle(input);
 }
 
-INT64 getFileSizeByPath(PTCHAR pszFilename)
+static INT64 GetFileSizeByPath(IN const WCHAR *filePath)
 {
-    HANDLE hFile;
-    LARGE_INTEGER dwFileSize;
+    HANDLE file;
+    LARGE_INTEGER fileSize;
 
-    hFile = CreateFile(pszFilename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
-        gui_fatal(TEXT("Cannot open file %s"), pszFilename);
+    file = CreateFile(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    if (file == INVALID_HANDLE_VALUE)
+        FcReportError(GetLastError(), TRUE, L"Cannot open file '%s'L 0x%x", filePath, GetLastError());
 
-    if (!GetFileSizeEx(hFile, &dwFileSize))
+    if (!GetFileSizeEx(file, &fileSize))
     {
-        CloseHandle(hFile);
-        gui_fatal(TEXT("Cannot get file size of %s"), pszFilename);
+        CloseHandle(file);
+        FcReportError(GetLastError(), TRUE, L"Cannot get file size of '%s'", filePath);
     }
 
-    CloseHandle(hFile);
-    return dwFileSize.QuadPart;
+    CloseHandle(file);
+    return fileSize.QuadPart;
 }
 
-INT64 do_fs_walk(TCHAR *pszPath, BOOL bCalcSize)
+static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSize)
 {
-    TCHAR *pszCurrentPath;
+    WCHAR *currentPath;
     size_t cchCurrentPath, cchSearchPath;
-    DWORD dwAttrs;
-    WIN32_FIND_DATA ent;
-    TCHAR *pszSearchPath;
-    HANDLE hSearch;
+    DWORD attributes;
+    WIN32_FIND_DATA findData;
+    WCHAR *searchPath;
+    HANDLE searchHandle;
     INT64 size = 0;
 
-    if ((dwAttrs = GetFileAttributes(pszPath)) == INVALID_FILE_ATTRIBUTES)
-        gui_fatal(TEXT("Cannot get attributes of %s"), pszPath);
+    if ((attributes = GetFileAttributes(directoryPath)) == INVALID_FILE_ATTRIBUTES)
+        FcReportError(GetLastError(), TRUE, L"Cannot get attributes of '%s'", directoryPath);
 
-    if (!bCalcSize)
-        single_file_processor(pszPath, dwAttrs);
+    if (!calculateSize)
+        ProcessSingleFile(directoryPath, attributes);
 
-    if (!(dwAttrs & FILE_ATTRIBUTE_DIRECTORY))
+    if (!(attributes & FILE_ATTRIBUTE_DIRECTORY))
     {
-        if (bCalcSize)
-            return getFileSizeByPath(pszPath);
+        if (calculateSize)
+            return GetFileSizeByPath(directoryPath);
         else
             return 0;
     }
 
-    cchSearchPath = _tcslen(pszPath) + 3;
-    pszSearchPath = malloc(sizeof(TCHAR)*cchSearchPath);
+    cchSearchPath = wcslen(directoryPath) + 3;
+    searchPath = malloc(sizeof(WCHAR)*cchSearchPath);
 
-    if (!pszSearchPath)
-        internal_fatal(TEXT("malloc at %d"), __LINE__);
-
-    if (FAILED(StringCchPrintf(pszSearchPath, cchSearchPath, TEXT("%s\\*"), pszPath)))
-        internal_fatal(TEXT("StringCchPrintf at %d"), __LINE__);
-
-    hSearch = FindFirstFile(pszSearchPath, &ent);
-
-    if (hSearch == INVALID_HANDLE_VALUE)
+    if (!searchPath)
     {
-        LONG ret = GetLastError();
-        if (ret == ERROR_FILE_NOT_FOUND)
-            // empty directory
+        FcReportError(ERROR_OUTOFMEMORY, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
+    }
+
+    if (FAILED(StringCchPrintf(searchPath, cchSearchPath, L"%s\\*", directoryPath)))
+        FcReportError(ERROR_BAD_PATHNAME, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
+
+    searchHandle = FindFirstFile(searchPath, &findData);
+
+    if (searchHandle == INVALID_HANDLE_VALUE)
+    {
+        DWORD status = GetLastError();
+        if (status == ERROR_FILE_NOT_FOUND) // empty directory
             return 0;
-        gui_fatal(TEXT("Cannot list directory %s"), pszPath);
+        FcReportError(status, TRUE, L"Cannot list directory '%s'", directoryPath);
     }
 
     do
     {
-        if (!_tcscmp(ent.cFileName, TEXT(".")) || !_tcscmp(ent.cFileName, TEXT("..")))
+        if (!wcscmp(findData.cFileName, L".") || !wcscmp(findData.cFileName, L".."))
             continue;
 
-        cchCurrentPath = _tcslen(pszPath) + _tcslen(ent.cFileName) + 2;
-        pszCurrentPath = malloc(sizeof(TCHAR)*cchCurrentPath);
+        cchCurrentPath = wcslen(directoryPath) + wcslen(findData.cFileName) + 2;
+        currentPath = malloc(sizeof(WCHAR)*cchCurrentPath);
 
-        if (!pszCurrentPath)
-            internal_fatal(TEXT("malloc at %d"), __LINE__);
+        if (!currentPath)
+            FcReportError(ERROR_OUTOFMEMORY, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
 
         // use forward slash here to send it also to the other end
-        if (FAILED(StringCchPrintf(pszCurrentPath, cchCurrentPath, TEXT("%s/%s"), pszPath, ent.cFileName)))
-            internal_fatal(TEXT("StringCchPrintf at %d"), __LINE__);
+        if (FAILED(StringCchPrintf(currentPath, cchCurrentPath, L"%s/%s", directoryPath, findData.cFileName)))
+            FcReportError(ERROR_BAD_PATHNAME, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
 
-        size += do_fs_walk(pszCurrentPath, bCalcSize);
-        free(pszCurrentPath);
+        size += ProcessDirectory(currentPath, calculateSize);
+        free(currentPath);
 
-        if (cancel_operation)
+        if (g_cancelOperation)
             break;
-    } while (FindNextFile(hSearch, &ent));
+    } while (FindNextFile(searchHandle, &findData));
 
-    FindClose(hSearch);
+    FindClose(searchHandle);
     // directory metadata is resent; this makes the code simple,
     // and the atime/mtime is set correctly at the second time
-    if (!bCalcSize)
-        single_file_processor(pszPath, dwAttrs);
+    if (!calculateSize)
+        ProcessSingleFile(directoryPath, attributes);
     return size;
 }
 
-void notify_end_and_wait_for_result()
+static void NotifyEnAandWaitForResult(void)
 {
-    struct file_header end_hdr;
+    struct file_header endHeader;
 
     /* nofity end of transfer */
-    memset(&end_hdr, 0, sizeof(end_hdr));
-    end_hdr.namelen = 0;
-    end_hdr.filelen = 0;
-    write_all_with_crc(STDOUT, &end_hdr, sizeof(end_hdr));
+    ZeroMemory(&endHeader, sizeof(endHeader));
+    endHeader.namelen = 0;
+    endHeader.filelen = 0;
+    WriteWithCrc(g_stdout, &endHeader, sizeof(endHeader));
 
-    wait_for_result();
+    WaitForResult();
 }
 
-PTCHAR GetAbsolutePath(TCHAR *pszCwd, TCHAR *pszPath)
+static WCHAR *GetAbsolutePath(IN const WCHAR *currentDirectory, IN const WCHAR *path)
 {
-    TCHAR *pszAbsolutePath;
+    WCHAR *absolutePath;
     size_t cchAbsolutePath;
 
-    if (!PathIsRelative(pszPath))
-        return _tcsdup(pszPath);
+    if (!PathIsRelative(path))
+        return _wcsdup(path);
 
-    cchAbsolutePath = _tcslen(pszCwd) + _tcslen(pszPath) + 2;
-    pszAbsolutePath = malloc(sizeof(TCHAR)*cchAbsolutePath);
+    cchAbsolutePath = wcslen(currentDirectory) + wcslen(path) + 2;
+    absolutePath = malloc(sizeof(WCHAR)*cchAbsolutePath);
 
-    if (!pszAbsolutePath)
+    if (!absolutePath)
     {
         return NULL;
     }
 
-    if (FAILED(StringCchPrintf(pszAbsolutePath, cchAbsolutePath, TEXT("%s\\%s"), pszCwd, pszPath)))
+    if (FAILED(StringCchPrintf(absolutePath, cchAbsolutePath, L"%s\\%s", currentDirectory, path)))
     {
-        free(pszAbsolutePath);
+        free(absolutePath);
+        LogError("StringCchPrintf failed, currentDirectory='%s', path='%s'", currentDirectory, path);
         return NULL;
     }
 
-    return pszAbsolutePath;
+    return absolutePath;
 }
 
-int __cdecl _tmain(int argc, TCHAR *argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
     int i;
-    TCHAR *pszArgumentDirectory, *pszArgumentBasename;
-    TCHAR szCwd[MAX_PATH_LENGTH];
+    WCHAR *directory, *baseName;
+    WCHAR currentDirectory[MAX_PATH_LENGTH];
 
-    STDERR = GetStdHandle(STD_ERROR_HANDLE);
+    g_stderr = GetStdHandle(STD_ERROR_HANDLE);
 
-    if (STDERR == NULL || STDERR == INVALID_HANDLE_VALUE)
+    if (g_stderr == NULL || g_stderr == INVALID_HANDLE_VALUE)
     {
-        internal_fatal(TEXT("Failed to get STDERR handle"));
+        FcReportError(GetLastError(), TRUE, L"Failed to get STDERR handle");
         exit(1);
     }
 
-    STDIN = GetStdHandle(STD_INPUT_HANDLE);
+    g_stdin = GetStdHandle(STD_INPUT_HANDLE);
 
-    if (STDIN == NULL || STDIN == INVALID_HANDLE_VALUE)
+    if (g_stdin == NULL || g_stdin == INVALID_HANDLE_VALUE)
     {
-        internal_fatal(TEXT("Failed to get STDIN handle"));
+        FcReportError(GetLastError(), TRUE, L"Failed to get STDIN handle");
         exit(1);
     }
 
-    STDOUT = GetStdHandle(STD_OUTPUT_HANDLE);
+    g_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 
-    if (STDOUT == NULL || STDOUT == INVALID_HANDLE_VALUE)
+    if (g_stdout == NULL || g_stdout == INVALID_HANDLE_VALUE)
     {
-        internal_fatal(TEXT("Failed to get STDOUT handle"));
+        FcReportError(GetLastError(), TRUE, L"Failed to get STDOUT handle");
         exit(1);
     }
 
-    notify_progress(0, PROGRESS_FLAG_INIT);
-    crc32_sum = 0;
+    NotifyProgress(0, PROGRESS_TYPE_INIT);
+    g_crc32 = 0;
 
-    if (!GetCurrentDirectory(RTL_NUMBER_OF(szCwd), szCwd))
+    if (!GetCurrentDirectory(RTL_NUMBER_OF(currentDirectory), currentDirectory))
     {
-        internal_fatal(TEXT("Failed to get current directory"));
+        FcReportError(GetLastError(), TRUE, L"Failed to get current directory");
         exit(1);
     }
 
     // calculate total size for progressbar purpose
-    total_size = 0;
+    g_totalSize = 0;
 
     for (i = 1; i < argc; i++)
     {
-        if (cancel_operation)
+        if (g_cancelOperation)
             break;
         // do not change dir, as don't care about form of the path here
-        total_size += do_fs_walk(argv[i], TRUE);
+        g_totalSize += ProcessDirectory(argv[i], TRUE);
     }
 
     for (i = 1; i < argc; i++)
     {
-        if (cancel_operation)
+        if (g_cancelOperation)
             break;
 
-        pszArgumentDirectory = GetAbsolutePath(szCwd, argv[i]);
+        directory = GetAbsolutePath(currentDirectory, argv[i]);
 
-        if (!pszArgumentDirectory)
+        if (!directory)
         {
-            gui_fatal(TEXT("GetAbsolutePath %s"), argv[i]);
+            FcReportError(ERROR_BAD_PATHNAME, TRUE, L"GetAbsolutePath '%s'", argv[i]);
         }
 
         // absolute path has at least one character
-        if (PathGetCharType(pszArgumentDirectory[_tcslen(pszArgumentDirectory) - 1]) & GCT_SEPARATOR)
-            pszArgumentDirectory[_tcslen(pszArgumentDirectory) - 1] = L'\0';
+        if (PathGetCharType(directory[wcslen(directory) - 1]) & GCT_SEPARATOR)
+            directory[wcslen(directory) - 1] = L'\0';
 
-        pszArgumentBasename = _tcsdup(pszArgumentDirectory);
-        PathStripPath(pszArgumentBasename);
-        PathRemoveFileSpec(pszArgumentDirectory);
+        baseName = _wcsdup(directory);
+        PathStripPath(baseName);
+        PathRemoveFileSpec(directory);
 
-        if (!SetCurrentDirectory(pszArgumentDirectory))
-            gui_fatal(TEXT("chdir to %s"), pszArgumentDirectory);
+        if (!SetCurrentDirectory(directory))
+            FcReportError(GetLastError(), TRUE, L"SetCurrentDirectory(%s)", directory);
 
-        do_fs_walk(pszArgumentBasename, FALSE);
-        free(pszArgumentDirectory);
-        free(pszArgumentBasename);
+        ProcessDirectory(baseName, FALSE);
+        free(directory);
+        free(baseName);
     }
 
-    notify_end_and_wait_for_result();
-    notify_progress(0, PROGRESS_FLAG_DONE);
+    NotifyEnAandWaitForResult();
+    NotifyProgress(0, PROGRESS_TYPE_DONE);
     return 0;
 }

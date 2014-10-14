@@ -1,30 +1,31 @@
 #include <windows.h>
-#include <tchar.h>
 #include <commctrl.h>
-#include "gui-fatal.h"
+
+#include "filecopy-error.h"
 #include "gui-progress.h"
 
-extern INT64 total_size;
-extern BOOL cancel_operation;
+#include "log.h"
 
-HWND hDialog = NULL;
-HANDLE hProgressWindowThread;
+extern INT64 g_totalSize;
+extern BOOL g_cancelOperation;
 
-HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
-    WPARAM wParam, LPARAM lParam, LONG_PTR dwRefData)
+HWND g_progressDialog = NULL;
+HANDLE g_progressWindowThread = NULL;
+
+static HRESULT CALLBACK TaskDialogCallbackProc(IN HWND window, IN UINT notification, IN WPARAM wParam, IN LPARAM lParam, IN LONG_PTR context)
 {
-    switch (uNotification)
+    switch (notification)
     {
     case TDN_CREATED:
-        hDialog = hwnd;
+        g_progressDialog = window;
         break;
     case TDN_DESTROYED:
-        hDialog = NULL;
+        g_progressDialog = NULL;
         break;
     case TDN_BUTTON_CLICKED:
         if (wParam == IDCANCEL)
         {
-            cancel_operation = TRUE;
+            g_cancelOperation = TRUE;
             return S_FALSE;
         }
         // IDOK -> close dialog
@@ -34,9 +35,9 @@ HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification,
     return S_OK;
 }
 
-DWORD doTaskDialogThread(void *lpThreadParameter)
+static DWORD TaskDialogThread(IN void *param)
 {
-    int nButtonPressed = 0;
+    int buttonPressed = 0;
     TASKDIALOGCONFIG config = { 0 };
 
     config.cbSize = sizeof(config);
@@ -44,72 +45,69 @@ DWORD doTaskDialogThread(void *lpThreadParameter)
     config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
     config.dwFlags = TDF_SHOW_PROGRESS_BAR;
     config.pszMainIcon = NULL;
-    config.pszMainInstruction = TEXT("Sending files");
-    config.pszContent = TEXT("Sending files, please wait");
+    config.pszMainInstruction = L"Sending files";
+    config.pszContent = L"Sending files, please wait";
     config.pButtons = NULL;
     config.cButtons = 0;
     config.pfCallback = TaskDialogCallbackProc;
 
-    // TODO: call it in separate thread
-    TaskDialogIndirect(&config, &nButtonPressed, NULL, NULL);
-    switch (nButtonPressed)
-    {
-    case IDOK:
-        break; // the user pressed button 0 (change password).
-    case IDCANCEL:
-        break; // user canceled the dialog
-    default:
-        break; // should never happen
-    }
+    TaskDialogIndirect(&config, &buttonPressed, NULL, NULL);
+
     return 0;
 }
 
-void switch_progressbar_to_red(int red)
+static void SetProgressbarColor(IN BOOL errorOccured)
 {
-    if (red)
-        do_notify_progress(0, PROGRESS_FLAG_ERROR);
+    if (errorOccured)
+        UpdateProgress(0, PROGRESS_TYPE_ERROR);
     else
-        do_notify_progress(0, PROGRESS_FLAG_NORMAL);
+        UpdateProgress(0, PROGRESS_TYPE_NORMAL);
 }
 
-void createProgressWindow()
+static void CreateProgressWindow(void)
 {
-    hProgressWindowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) doTaskDialogThread, NULL, 0, NULL);
-    if (!hProgressWindowThread)
+    g_progressWindowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TaskDialogThread, NULL, 0, NULL);
+    if (!g_progressWindowThread)
     {
-        // TODO: error handler
+        perror("CreateThread");
+        return;
     }
-    set_error_gui_callbacks(hDialog, switch_progressbar_to_red);
+
+    FcSetErrorCallback(g_progressDialog, SetProgressbarColor);
 }
 
-void do_notify_progress(long long written, int flag)
+void UpdateProgress(IN UINT64 written, IN FC_PROGRESS_TYPE progressType)
 {
-    switch (flag)
+    switch (progressType)
     {
-    case PROGRESS_FLAG_INIT:
-        createProgressWindow();
+    case PROGRESS_TYPE_INIT:
+        CreateProgressWindow();
         break;
-    case PROGRESS_FLAG_NORMAL:
-        if (hDialog)
+
+    case PROGRESS_TYPE_NORMAL:
+        if (g_progressDialog)
         {
             if (written)
-                SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_POS, (WPARAM) (100LL * written / total_size), 0);
+                SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_POS, (WPARAM) (100ULL * written / g_totalSize), 0);
             else
-                SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM) PBST_NORMAL, 0);
+                SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM) PBST_NORMAL, 0);
         }
         break;
-    case PROGRESS_FLAG_DONE:
-        if (hDialog)
-            SendNotifyMessage(hDialog, TDM_CLICK_BUTTON, IDOK, 0);
-        if (hProgressWindowThread)
+
+    case PROGRESS_TYPE_DONE:
+        if (g_progressDialog)
+            SendNotifyMessage(g_progressDialog, TDM_CLICK_BUTTON, IDOK, 0);
+
+        if (g_progressWindowThread)
         {
-            WaitForSingleObject(hProgressWindowThread, 1000);
-            CloseHandle(hProgressWindowThread);
+            WaitForSingleObject(g_progressWindowThread, 1000);
+            CloseHandle(g_progressWindowThread);
         }
         break;
-    case PROGRESS_FLAG_ERROR:
-        if (hDialog)
-            SendNotifyMessage(hDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM) PBST_ERROR, 0);
+
+    case PROGRESS_TYPE_ERROR:
+        if (g_progressDialog)
+            SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM) PBST_ERROR, 0);
         break;
     }
 }

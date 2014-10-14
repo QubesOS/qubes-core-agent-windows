@@ -1,57 +1,55 @@
 #include <Windows.h>
-#include <tchar.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <Strsafe.h>
 #include <Shellapi.h>
 #include <rpc.h>
-#include <ioall.h>
-#include "dvm2.h"
-#include "utf8-conv.h"
+
 #include "ioall.h"
+#include "dvm2.h"
 
-HANDLE hStdIn = INVALID_HANDLE_VALUE;
-HANDLE hStdOut = INVALID_HANDLE_VALUE;
+#include "log.h"
+#include "utf8-conv.h"
 
-BOOL get_tempdir(TCHAR **pBuf, size_t *pcchBuf)
+HANDLE g_stdIn = INVALID_HANDLE_VALUE;
+HANDLE g_stdOut = INVALID_HANDLE_VALUE;
+
+BOOL GetTempDirectory(OUT WCHAR **dirPath, OUT size_t *cchDirPath)
 {
     BOOL retval = FALSE;
-    int size = 0, size_all = 0;
-    TCHAR *pTmpBuf = NULL;
-    TCHAR *pDstBuf = NULL;
+    size_t cchPath = 0, cchSubdirPath = 0;
+    WCHAR *subdirPath = NULL;
     UUID uuid;
-    TCHAR subdir[64] = { 0 };
+    WCHAR *subdirName = NULL;
 
+    // subdir will be a uuid
     if (UuidCreate(&uuid) != RPC_S_OK)
         goto cleanup;
 
-    // there is no UuidToString version that operates on TCHARs
-    if (FAILED(StringCchPrintf(subdir, RTL_NUMBER_OF(subdir), TEXT("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\\"),
-        uuid.Data1, uuid.Data2, uuid.Data3,
-        uuid.Data4[0], uuid.Data4[1],
-        uuid.Data4[2], uuid.Data4[3], uuid.Data4[4], uuid.Data4[5], uuid.Data4[6], uuid.Data4[7])))
+    if (RPC_S_OK != UuidToString(&uuid, &subdirName))
     {
+        LogError("UuidToString failed");
         goto cleanup;
     }
 
-    size = GetTempPath(0, NULL);
-    if (!size)
+    cchPath = GetTempPath(0, NULL);
+    if (!cchPath)
         goto cleanup;
 
-    size_all = size + _tcslen(subdir);
-    pTmpBuf = (TCHAR*) malloc(size_all * sizeof(TCHAR));
-    if (!pTmpBuf)
+    cchSubdirPath = cchPath + wcslen(subdirName);
+    subdirPath = (WCHAR*) malloc(cchSubdirPath * sizeof(WCHAR));
+    if (!subdirPath)
         goto cleanup;
 
-    size = GetTempPath(size, pTmpBuf);
-    if (!size)
+    cchPath = GetTempPath(cchPath, subdirPath);
+    if (!cchPath)
         goto cleanup;
 
-    if (FAILED(StringCchCat(pTmpBuf, size_all, subdir)))
+    if (FAILED(StringCchCat(subdirPath, cchSubdirPath, subdirName)))
         goto cleanup;
 
-    if (!CreateDirectory(pTmpBuf, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
+    if (!CreateDirectory(subdirPath, NULL) && GetLastError() != ERROR_ALREADY_EXISTS)
     {
         fprintf(stderr, "Failed to create tmp subdir: 0x%x\n", GetLastError());
         goto cleanup;
@@ -63,83 +61,90 @@ BOOL get_tempdir(TCHAR **pBuf, size_t *pcchBuf)
 
 cleanup:
     if (!retval)
-        free(pTmpBuf);
+    {
+        free(subdirPath);
+        RpcStringFree(&subdirName);
+    }
 
-    *pBuf = pTmpBuf;
-    *pcchBuf = size_all;
+    *dirPath = subdirPath;
+    *cchDirPath = cchSubdirPath;
     return retval;
 }
 
-TCHAR *get_filename(TCHAR **tmpname)
+// returns base file name
+WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
 {
-    char buf[DVM_FILENAME_SIZE + 1];
-    TCHAR *basename;
-    TCHAR *retname;
-    size_t basename_len, retname_len, tmpname_len;
+    char fileNameUtf8[DVM_FILENAME_SIZE + 1];
+    WCHAR *fileName;
+    WCHAR *fullPath;
+    size_t cchFileName, cchFullPath, cchTempDirPath;
     int i;
 
-    if (!read_all(hStdIn, buf, DVM_FILENAME_SIZE))
+    // read file name from stdin
+    if (!FcReadBuffer(g_stdIn, fileNameUtf8, DVM_FILENAME_SIZE))
     {
         fprintf(stderr, "Failed get filename: 0x%x\n", GetLastError());
         return NULL;
     }
 
-    buf[DVM_FILENAME_SIZE] = 0;
-    if (strchr(buf, '/'))
+    fileNameUtf8[DVM_FILENAME_SIZE] = 0;
+    if (strchr(fileNameUtf8, '/'))
     {
         fprintf(stderr, "filename contains /");
         return NULL;
     }
 
-    if (strchr(buf, '\\'))
+    if (strchr(fileNameUtf8, '\\'))
     {
         fprintf(stderr, "filename contains \\");
         return NULL;
     }
 
-    for (i = 0; i < DVM_FILENAME_SIZE && buf[i] != 0; i++)
+    for (i = 0; i < DVM_FILENAME_SIZE && fileNameUtf8[i] != 0; i++)
     {
         // replace some characters with _ (eg mimeopen have problems with some of them)
-        if (strchr(" !?\"#$%^&*()[]<>;`~", buf[i]))
-            buf[i] = '_';
+        if (strchr(" !?\"#$%^&*()[]<>;`~", fileNameUtf8[i]))
+            fileNameUtf8[i] = '_';
     }
 
-    if (FAILED(ConvertUTF8ToUTF16(buf, &basename, &basename_len)))
+    // convert to utf16
+    if (ERROR_SUCCESS != ConvertUTF8ToUTF16(fileNameUtf8, &fileName, &cchFileName))
     {
-        fprintf(stderr, "Invalid filename\n");
+        fprintf(stderr, "Invalid file name\n");
         return NULL;
     }
 
-    if (!get_tempdir(tmpname, &tmpname_len))
+    if (!GetTempDirectory(tempDirPath, &cchTempDirPath))
     {
-        free(basename);
+        free(fileName);
         fprintf(stderr, "Failed to get tmpdir\n");
         return NULL;
     }
 
-    retname_len = tmpname_len + basename_len + 1;
-    retname = malloc(sizeof(TCHAR) * retname_len);
+    cchFullPath = cchTempDirPath + cchFileName + 1;
+    fullPath = malloc(sizeof(WCHAR) * cchFullPath);
 
-    StringCchPrintf(retname, retname_len, TEXT("%s%s"), *tmpname, basename);
-    free(basename);
-    return retname;
+    StringCchPrintf(fullPath, cchFullPath, L"%s%s", *tempDirPath, fileName);
+    free(fileName);
+    return fullPath;
 }
 
-BOOL copy_file(TCHAR *filename)
+BOOL ReceiveFile(IN const WCHAR *localFilePath)
 {
     BOOL retval = FALSE;
-    HANDLE fd = CreateFile(filename, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE localFile = CreateFile(localFilePath, GENERIC_WRITE, 0, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if (fd == INVALID_HANDLE_VALUE)
+    if (localFile == INVALID_HANDLE_VALUE)
     {
         if (GetLastError() == ERROR_FILE_EXISTS)
             fprintf(stderr, "File already exists, cleanup temp directory\n");
         else
-            fprintf(stderr, "Failed to create file %s: 0x%x\n", filename, GetLastError());
+            fprintf(stderr, "Failed to create file '%s': 0x%x\n", localFilePath, GetLastError());
+
         goto cleanup;
     }
 
-    if (!copy_fd_all(fd, hStdIn))
+    if (!FcCopyUntilEof(localFile, g_stdIn))
     {
         fprintf(stderr, "Failed to read/write file: 0x%x\n", GetLastError());
         goto cleanup;
@@ -148,28 +153,28 @@ BOOL copy_file(TCHAR *filename)
     retval = TRUE;
 
 cleanup:
-    CloseHandle(fd);
+    CloseHandle(localFile);
     return retval;
 }
 
-BOOL send_file_back(TCHAR *filename)
+BOOL SendFile(IN const WCHAR *localFilePath)
 {
     BOOL retval = FALSE;
-    HANDLE fd = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE localFile = CreateFile(localFilePath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if (fd == INVALID_HANDLE_VALUE)
+    if (localFile == INVALID_HANDLE_VALUE)
     {
-        fprintf(stderr, "Failed to open file %s: 0x%x\n", filename, GetLastError());
+        fprintf(stderr, "Failed to open file '%s': 0x%x\n", localFilePath, GetLastError());
         goto cleanup;
     }
 
-    if (hStdOut == INVALID_HANDLE_VALUE)
+    if (g_stdOut == INVALID_HANDLE_VALUE)
     {
         fprintf(stderr, "Failed to open STDOUT: 0x%x\n", GetLastError());
         goto cleanup;
     }
 
-    if (!copy_fd_all(hStdOut, fd))
+    if (!FcCopyUntilEof(g_stdOut, localFile))
     {
         fprintf(stderr, "Failed read/write file: 0x%x\n", GetLastError());
         goto cleanup;
@@ -178,70 +183,69 @@ BOOL send_file_back(TCHAR *filename)
     retval = TRUE;
 
 cleanup:
-    CloseHandle(fd);
-    CloseHandle(hStdOut);
+    CloseHandle(localFile);
+    CloseHandle(g_stdOut);
     return retval;
 }
 
-int __cdecl _tmain(ULONG argc, TCHAR *argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    WIN32_FILE_ATTRIBUTE_DATA stat_pre, stat_post;
-    TCHAR *filename = NULL;
+    WIN32_FILE_ATTRIBUTE_DATA attributesPre, attributesPost;
+    WCHAR *filePath = NULL;
     int	exitCode = 1, childExitCode;
     SHELLEXECUTEINFO sei;
-    TCHAR *tempDir = NULL;
+    WCHAR *tempDir = NULL;
 
-    hStdIn = GetStdHandle(STD_INPUT_HANDLE);
-    if (hStdIn == INVALID_HANDLE_VALUE)
+    g_stdIn = GetStdHandle(STD_INPUT_HANDLE);
+    if (g_stdIn == INVALID_HANDLE_VALUE)
     {
-        exitCode = GetLastError();
+        exitCode = perror("GetStdHandle(STD_INPUT_HANDLE)");
         fprintf(stderr, "Failed to open STDIN: 0x%x\n", exitCode);
         goto cleanup;
     }
 
-    hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hStdOut == INVALID_HANDLE_VALUE)
+    g_stdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (g_stdOut == INVALID_HANDLE_VALUE)
     {
-        exitCode = GetLastError();
+        exitCode = perror("GetStdHandle(STD_OUTPUT_HANDLE)");
         fprintf(stderr, "Failed to open STDOUT: 0x%x\n", exitCode);
         goto cleanup;
     }
 
-    filename = get_filename(&tempDir);
-    if (!copy_file(filename))
+    filePath = GetTempFilePath(&tempDir);
+    if (!ReceiveFile(filePath))
         goto cleanup;
 
-    if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &stat_pre))
+    if (!GetFileAttributesEx(filePath, GetFileExInfoStandard, &attributesPre))
     {
-        exitCode = GetLastError();
-        fprintf(stderr, "ERROR stat pre: 0x%x\n", exitCode);
+        exitCode = perror("GetFileAttributesEx pre");
+        fprintf(stderr, "Failed to get file attributes pre: 0x%x\n", exitCode);
         goto cleanup;
     }
 
     sei.cbSize = sizeof(sei);
-    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-#ifdef UNICODE
-    sei.fMask |= SEE_MASK_UNICODE;
-#endif
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_UNICODE;
     sei.hwnd = NULL;
-    sei.lpVerb = TEXT("open");
-    sei.lpFile = filename;
+    sei.lpVerb = L"open";
+    sei.lpFile = filePath;
     sei.lpParameters = NULL;
     sei.lpDirectory = NULL;
     sei.nShow = SW_SHOW;
     sei.hProcess = NULL;
 
-    if (FAILED(ShellExecuteEx(&sei)))
+    LogDebug("Opening '%s'", filePath);
+
+    if (!ShellExecuteEx(&sei))
     {
-        exitCode = GetLastError();
+        exitCode = perror("ShellExecuteEx");
         fprintf(stderr, "Editor startup failed: 0x%x\n", exitCode);
         goto cleanup;
     }
 
     if (sei.hProcess == NULL)
     {
-        fprintf(stderr, "Don't know how to wait for editor finish, exiting\n");
-        exitCode = ERROR_SUCCESS;
+        fprintf(stderr, "Failed to start editor process\n");
+        exitCode = ERROR_UNIDENTIFIED_ERROR;
         goto cleanup;
     }
 
@@ -250,7 +254,7 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 
     if (!GetExitCodeProcess(sei.hProcess, &childExitCode))
     {
-        exitCode = GetLastError();
+        exitCode = perror("GetExitCodeProcess");
         fprintf(stderr, "Cannot get editor exit code: 0x%x\n", exitCode);
         goto cleanup;
     }
@@ -260,26 +264,30 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 
     if (childExitCode != 0)
     {
-        fprintf(stderr, "Editor failed: %d\n", childExitCode);
+        LogError("Process exit code: 0x%x", childExitCode);
+        fprintf(stderr, "Editor failed: 0x%x\n", childExitCode);
         exitCode = childExitCode;
         goto cleanup;
     }
 
-    if (!GetFileAttributesEx(filename, GetFileExInfoStandard, &stat_post))
+    if (!GetFileAttributesEx(filePath, GetFileExInfoStandard, &attributesPost))
     {
-        exitCode = GetLastError();
-        fprintf(stderr, "ERROR stat post: 0x%x\n", exitCode);
+        exitCode = perror("GetFileAttributesEx post");
+        fprintf(stderr, "Failed to get file attributes post: 0x%x\n", exitCode);
         goto cleanup;
     }
 
-    if (stat_pre.ftLastWriteTime.dwLowDateTime != stat_post.ftLastWriteTime.dwLowDateTime ||
-        stat_pre.ftLastWriteTime.dwHighDateTime != stat_post.ftLastWriteTime.dwHighDateTime)
-        send_file_back(filename);
+    // send file if it changed
+    if (attributesPre.ftLastWriteTime.dwLowDateTime != attributesPost.ftLastWriteTime.dwLowDateTime ||
+        attributesPre.ftLastWriteTime.dwHighDateTime != attributesPost.ftLastWriteTime.dwHighDateTime)
+    {
+        SendFile(filePath);
+    }
 
     exitCode = ERROR_SUCCESS;
 
 cleanup:
-    DeleteFile(filename);
+    DeleteFile(filePath);
     RemoveDirectory(tempDir);
     return exitCode;
 }

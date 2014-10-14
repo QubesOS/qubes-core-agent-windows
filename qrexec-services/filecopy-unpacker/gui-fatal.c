@@ -8,7 +8,7 @@
 
 typedef LONG NTSTATUS;
 
-extern HANDLE STDERR;
+extern HANDLE g_stderr;
 
 static void produce_message(int icon, const WCHAR *fmt, va_list args)
 {
@@ -53,10 +53,10 @@ static void produce_message(int icon, const WCHAR *fmt, va_list args)
         return;
     }
 
-    if (STDERR != INVALID_HANDLE_VALUE)
+    if (g_stderr != INVALID_HANDLE_VALUE)
     {
         // message for qrexec log in dom0
-        WriteFile(STDERR, buf, wcslen(buf) * sizeof(WCHAR), &nWritten, NULL);
+        WriteFile(g_stderr, buf, wcslen(buf) * sizeof(WCHAR), &nWritten, NULL);
     }
 
     MessageBoxW(NULL, buf, L"Qubes file copy error", MB_OK | icon);

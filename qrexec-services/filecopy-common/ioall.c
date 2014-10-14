@@ -21,86 +21,95 @@
 
 #include <windows.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <fcntl.h>
-#include <errno.h>
 
-void perror_wrapper(char *msg)
+#include "log.h"
+
+BOOL FcWriteBuffer(IN HANDLE file, IN const void *buffer, IN DWORD bufferSize)
 {
-    /* TODO */
-#if 0
-    lprintf_err(GetLastError(), msg);
-#endif
-}
+    DWORD cbWrittenTotal = 0;
+    DWORD cbWritten;
 
-int write_all(HANDLE fd, void *buf, int size)
-{
-    int written = 0;
-    int ret;
-
-    while (written < size)
+    while (cbWrittenTotal < bufferSize)
     {
-        if (!WriteFile(fd, (char *) buf + written, size - written, &ret, NULL))
+        if (!WriteFile(file, (BYTE *) buffer + cbWrittenTotal, bufferSize - cbWrittenTotal, &cbWritten, NULL))
         {
-            perror_wrapper("write");
-            return 0;
+            perror("WriteFile");
+            return FALSE;
         }
-        written += ret;
+        cbWrittenTotal += cbWritten;
     }
-    //      fprintf(stderr, "sent %d bytes\n", size);
-    return 1;
+    return TRUE;
 }
 
-int read_all(HANDLE fd, void *buf, int size)
+BOOL FcReadBuffer(IN HANDLE file, OUT void *buffer, IN DWORD bufferSize)
 {
-    int got_read = 0;
-    int ret;
+    DWORD cbReadTotal = 0;
+    DWORD cbRead;
 
-    while (got_read < size)
+    while (cbReadTotal < bufferSize)
     {
-        if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL))
+        if (!ReadFile(file, (BYTE *) buffer + cbReadTotal, bufferSize - cbReadTotal, &cbRead, NULL))
         {
-            perror_wrapper("read");
-            return 0;
+            perror("ReadFile");
+            return FALSE;
         }
 
-        if (ret == 0)
+        if (cbRead == 0)
         {
-            errno = 0;
             fprintf(stderr, "EOF\n");
-            return 0;
+            return FALSE;
         }
 
-        got_read += ret;
+        cbReadTotal += cbRead;
     }
-    //      fprintf(stderr, "read %d bytes\n", size);
-    return 1;
+    return TRUE;
 }
 
-int copy_fd_all(HANDLE fdout, HANDLE fdin)
+// Returns number of bytes read.
+DWORD FcReadUntilEof(IN HANDLE input, OUT void *buffer, IN DWORD bufferSize)
 {
-    int ret;
-    char buf[4096];
+    DWORD cbReadTotal = 0;
+    DWORD cbRead;
 
-    for (;;)
+    while (cbReadTotal < bufferSize)
     {
-        if (!ReadFile(fdin, buf, sizeof(buf), &ret, NULL))
+        if (!ReadFile(input, (BYTE *) buffer + cbReadTotal, bufferSize - cbReadTotal, &cbRead, NULL))
+        {
+            return cbReadTotal;
+        }
+        if (cbRead == 0)
+        {
+            return cbReadTotal;
+        }
+        cbReadTotal += cbRead;
+    }
+    return cbReadTotal;
+}
+
+BOOL FcCopyUntilEof(IN HANDLE output, IN HANDLE input)
+{
+    DWORD cb;
+    BYTE buffer[4096];
+
+    while (TRUE)
+    {
+        if (!ReadFile(input, buffer, sizeof(buffer), &cb, NULL))
         {
             // PIPE returns ERROR_BROKEN_PIPE instead of 0-bytes read on EOF
             if (GetLastError() == ERROR_BROKEN_PIPE)
                 break;
-            perror_wrapper("read");
-            return 0;
+
+            perror("ReadFile");
+            return FALSE;
         }
 
-        if (!ret)
+        if (cb == 0)
             break;
 
-        if (!write_all(fdout, buf, ret))
+        if (!FcWriteBuffer(output, buffer, cb))
         {
-            perror_wrapper("write");
-            return 0;
+            return FALSE;
         }
     }
-    return 1;
+    return TRUE;
 }

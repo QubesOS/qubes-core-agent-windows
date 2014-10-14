@@ -1,8 +1,9 @@
 #include <windows.h>
-#include <tchar.h>
 #include <Shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
+
+#include "ioall.h"
 #include "utf8-conv.h"
 #include "log.h"
 
@@ -10,90 +11,68 @@
 
 #define MAX_CLIPBOARD_SIZE 65000
 
-int ReadUntilEOF(HANDLE fd, void *buf, int size)
+BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
 {
-    int got_read = 0;
-    int ret;
+    HANDLE clipData;
+    WCHAR *text, *textLocked;
+    char inputText[MAX_CLIPBOARD_SIZE + 1] = { 0 };
+    size_t cchText;
+    DWORD cbRead;
 
-    while (got_read < size)
-    {
-        if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL))
-        {
-            if (GetLastError() == ERROR_BROKEN_PIPE)
-                return got_read;
-            return -1;
-        }
-        if (ret == 0)
-        {
-            return got_read;
-        }
-        got_read += ret;
-    }
-    return got_read;
-}
-
-BOOL setClipboard(HWND hWin, HANDLE hInput)
-{
-    HANDLE hglb;
-    WCHAR *pwszUtf16, *pwszUtf16dest;
-    UCHAR lpStr[MAX_CLIPBOARD_SIZE + 1];
-    size_t cchwStr;
-    int uRead;
-
-    uRead = ReadUntilEOF(hInput, lpStr, sizeof(lpStr) - 1);
-    if (uRead < 0)
+    cbRead = FcReadUntilEof(inputFile, inputText, sizeof(inputText) - 1);
+    if (cbRead == 0)
     {
         perror("ReadUntilEOF");
         return FALSE;
     }
 
-    lpStr[uRead] = '\0';
+    inputText[cbRead] = '\0';
 
-    if (FAILED(ConvertUTF8ToUTF16(lpStr, &pwszUtf16, &cchwStr)))
+    if (ERROR_SUCCESS != ConvertUTF8ToUTF16(inputText, &text, &cchText))
     {
         perror("ConvertUTF8ToUTF16");
         return FALSE;
     }
 
-    hglb = GlobalAlloc(GMEM_MOVEABLE, (cchwStr + 1) * sizeof(WCHAR));
-    if (!hglb)
+    clipData = GlobalAlloc(GMEM_MOVEABLE, (cchText + 1) * sizeof(WCHAR));
+    if (!clipData)
     {
         perror("GlobalAlloc");
         return FALSE;
     }
 
-    pwszUtf16dest = GlobalLock(hglb);
-    if (!pwszUtf16dest)
+    textLocked = GlobalLock(clipData);
+    if (!textLocked)
     {
         perror("GlobalLock");
-        GlobalFree(hglb);
+        GlobalFree(clipData);
         return FALSE;
     }
 
-    memcpy(pwszUtf16dest, pwszUtf16, (cchwStr + 1) * sizeof(WCHAR));
-    free(pwszUtf16);
+    memcpy(textLocked, text, (cchText + 1) * sizeof(WCHAR));
+    free(text);
 
-    GlobalUnlock(hglb);
+    GlobalUnlock(clipData);
 
-    if (!OpenClipboard(hWin))
+    if (!OpenClipboard(window))
     {
         perror("OpenClipboard");
-        GlobalFree(hglb);
+        GlobalFree(clipData);
         return FALSE;
     }
 
     if (!EmptyClipboard())
     {
         perror("EmptyClipboard");
-        GlobalFree(hglb);
+        GlobalFree(clipData);
         CloseClipboard();
         return FALSE;
     }
 
-    if (!SetClipboardData(CLIPBOARD_FORMAT, hglb))
+    if (!SetClipboardData(CLIPBOARD_FORMAT, clipData))
     {
         perror("SetClipboardData");
-        GlobalFree(hglb);
+        GlobalFree(clipData);
         CloseClipboard();
         return FALSE;
     }
@@ -102,26 +81,26 @@ BOOL setClipboard(HWND hWin, HANDLE hInput)
     return TRUE;
 }
 
-HWND createMainWindow(HINSTANCE hInst)
+HWND CreateMainWindow(IN HINSTANCE instance)
 {
     WNDCLASSEX wc;
-    ATOM windowClass;
+    ATOM windowClassAtom;
 
     wc.cbSize = sizeof(wc);
     wc.style = 0;
     wc.lpfnWndProc = (WNDPROC) DefWindowProc;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
-    wc.hInstance = hInst;
+    wc.hInstance = instance;
     wc.hIcon = NULL;
     wc.hCursor = NULL;
     wc.hbrBackground = (HBRUSH) COLOR_WINDOW;
     wc.lpszMenuName = NULL;
-    wc.lpszClassName = TEXT("MainWindowClass");
+    wc.lpszClassName = L"MainWindowClass";
     wc.hIconSm = NULL;
 
-    windowClass = RegisterClassEx(&wc);
-    if (!windowClass)
+    windowClassAtom = RegisterClassEx(&wc);
+    if (!windowClassAtom)
     {
         perror("RegisterClassEx");
         return NULL;
@@ -129,42 +108,40 @@ HWND createMainWindow(HINSTANCE hInst)
 
     return CreateWindow(
         wc.lpszClassName, /* class */
-        TEXT("Qubes clipboard service"), /* name */
+        L"Qubes clipboard service", /* name */
         WS_OVERLAPPEDWINDOW, /* style */
         CW_USEDEFAULT, CW_USEDEFAULT, /* x,y */
         10, 10, /* w, h */
         HWND_MESSAGE, /* parent */
         NULL, /* menu */
-        hInst, /* instance */
+        instance, /* instance */
         NULL);
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *lpCommandLine, int nCmdShow)
+int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *commandLine, int showFlags)
 {
-    HANDLE hStdIn;
-    HWND hWin;
+    HANDLE stdIn;
+    HWND window;
 
-    hStdIn = GetStdHandle(STD_INPUT_HANDLE);
-    if (hStdIn == INVALID_HANDLE_VALUE)
+    stdIn = GetStdHandle(STD_INPUT_HANDLE);
+    if (stdIn == INVALID_HANDLE_VALUE)
     {
-        perror("GetStdHandle");
-        return 1;
+        return perror("GetStdHandle");
     }
 
-    hWin = createMainWindow(hInst);
-    if (!hWin)
+    window = CreateMainWindow(instance);
+    if (!window)
     {
-        perror("createMainWindow");
-        return 1;
+        return perror("createMainWindow");
     }
 
-    if (!setClipboard(hWin, hStdIn))
+    if (!ReadClipboardText(window, stdIn))
     {
-        return 1;
+        return GetLastError();
     }
 
-    DestroyWindow(hWin);
-    UnregisterClass(TEXT("MainWindowClass"), hInst);
+    DestroyWindow(window);
+    UnregisterClass(L"MainWindowClass", instance);
 
     return 0;
 }

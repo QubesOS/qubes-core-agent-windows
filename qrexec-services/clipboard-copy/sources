@@ -10,6 +10,7 @@ C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 
 INCLUDES=$(INCLUDES); \
                     $(SDK_INC_PATH)\..\ddk; \
+                    ..\filecopy-common; \
                     ..\include; \
                     ..\..\include; \
                     $(QUBES_INCLUDES);
@@ -20,5 +21,6 @@ TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \
         $(SDK_LIB_PATH)\user32.lib \
         $(SDK_LIB_PATH)\shlwapi.lib \
+        ..\libs\*\filecopy-common.lib \
         $(QUBES_LIBS)\windows-utils.lib \
         $(SDK_LIB_PATH)\userenv.lib

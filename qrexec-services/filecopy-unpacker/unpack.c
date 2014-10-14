@@ -1,323 +1,294 @@
 #include <windows.h>
-#include <tchar.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <Strsafe.h>
 #include <Shlwapi.h>
 #include <Shellapi.h>
-#include <ioall.h>
-#include <gui-fatal.h>
+
+#include "ioall.h"
+#include "filecopy-error.h"
 #include "linux.h"
 #include "filecopy.h"
 #include "crc32.h"
 #include "utf8-conv.h"
 
-char untrusted_namebuf[MAX_PATH_LENGTH];
-long long bytes_limit = 0;
-long long files_limit = 0;
-long long total_bytes = 0;
-long long total_files = 0;
+char g_untrustedName[MAX_PATH_LENGTH];
+INT64 g_bytesLimit = 0;
+INT64 g_filesLimit = 0;
+INT64 g_totalBytesReceived = 0;
+INT64 g_totalFilesReceived = 0;
+ULONG g_crc32 = 0;
 
-extern	HANDLE STDIN;
-extern	HANDLE STDOUT;
-extern	WCHAR g_wcMappedDriveLetter;
+extern HANDLE g_stdin;
+extern HANDLE g_stdout;
+extern WCHAR g_mappedDriveLetter;
 
-#ifdef DBG
-#define internal_fatal gui_fatal
-#else
-static __inline void internal_fatal(const WCHAR *fmt, ...)
+void SetSizeLimit(IN INT64 bytesLimit, IN INT64 filesLimit)
 {
-    gui_fatal(L"Internal error");
-}
-#endif
-
-void notify_progress(int p1, int p2)
-{
+    g_bytesLimit = bytesLimit;
+    g_filesLimit = filesLimit;
 }
 
-void set_size_limit(long long new_bytes_limit, long long new_files_limit)
+BOOL ReadWithCrc(IN HANDLE input, OUT void *buffer, IN DWORD bufferSize)
 {
-    bytes_limit = new_bytes_limit;
-    files_limit = new_files_limit;
-}
+    BOOL ret;
 
-unsigned long crc32_sum = 0;
-int read_all_with_crc(HANDLE fd, void *buf, int size)
-{
-    int ret;
-
-    ret = read_all(fd, buf, size);
+    ret = FcReadBuffer(input, buffer, bufferSize);
     if (ret)
-        crc32_sum = Crc32_ComputeBuf(crc32_sum, buf, size);
+        g_crc32 = Crc32_ComputeBuf(g_crc32, buffer, bufferSize);
 
     return ret;
 }
 
-void send_status_and_crc(int status, char *last_filename)
+void SendStatusAndCrc(IN UINT32 statusCode, IN const char *lastFileName OPTIONAL)
 {
-    struct result_header hdr;
-    struct result_header_ext hdr_ext;
+    struct result_header header;
+    struct result_header_ext headerExt;
 
-    hdr.error_code = status;
-    hdr.crc32 = crc32_sum;
-    write_all(STDOUT, &hdr, sizeof(hdr));
-
-    if (last_filename)
+    header.error_code = statusCode;
+    header.crc32 = g_crc32;
+    if (!FcWriteBuffer(g_stdout, &header, sizeof(header)))
     {
-        hdr_ext.last_namelen = strlen(last_filename);
-        write_all(STDOUT, &hdr_ext, sizeof(hdr_ext));
-        write_all(STDOUT, last_filename, hdr_ext.last_namelen);
+
+    }
+
+    if (lastFileName)
+    {
+        headerExt.last_namelen = strlen(lastFileName);
+        FcWriteBuffer(g_stdout, &headerExt, sizeof(headerExt));
+        FcWriteBuffer(g_stdout, lastFileName, headerExt.last_namelen);
     }
 }
 
-void do_exit(int code, char *last_filename)
+void SendStatusAndExit(IN UINT32 statusCode, IN const char *lastFileName)
 {
-    if (code == LEGAL_EOF)
-        code = 0;
+    if (statusCode == LEGAL_EOF)
+        statusCode = 0;
 
-    send_status_and_crc(code, last_filename);
-    CloseHandle(STDOUT);
-    exit(code == 0);
+    SendStatusAndCrc(statusCode, lastFileName);
+    CloseHandle(g_stdout);
+    exit(statusCode);
 }
 
-/*
-void fix_times_and_perms(struct file_header *untrusted_hdr,
-char *untrusted_name)
+void ProcessRegularFile(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
 {
-struct timeval times[2] =
-{ {untrusted_hdr->atime, untrusted_hdr->atime_nsec / 1000},
-{untrusted_hdr->mtime,
-untrusted_hdr->mtime_nsec / 1000}
-};
-if (chmod(untrusted_name, untrusted_hdr->mode & 07777))
-do_exit(errno);
-if (utimes(untrusted_name, times))
-do_exit(errno);
-}
-*/
+    FC_COPY_STATUS copyStatus;
+    ULONG errorCode;
+    HANDLE outputFile;
+    WCHAR *untrustedFileName = NULL;
+    WCHAR trustedFilePath[MAX_PATH + 1];
+    HRESULT hresult;
 
-void process_one_file_reg(struct file_header *untrusted_hdr, char *untrusted_name)
-{
-    int	ret;
-    ULONG uResult;
-    HANDLE fdout;
-    WCHAR *pszUtf16UntrustedName = NULL;
-    WCHAR wszTrustedFilePath[MAX_PATH + 1];
-    HRESULT hResult;
+    errorCode = ConvertUTF8ToUTF16(untrustedNameUtf8, &untrustedFileName, NULL);
+    if (ERROR_SUCCESS != errorCode)
+        SendStatusAndExit(EINVAL, NULL);
 
-    uResult = ConvertUTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName, NULL);
-    if (ERROR_SUCCESS != uResult)
-        do_exit(EINVAL, NULL);
-
-    hResult = StringCchPrintfW(
-        wszTrustedFilePath,
-        RTL_NUMBER_OF(wszTrustedFilePath),
+    hresult = StringCchPrintf(
+        trustedFilePath,
+        RTL_NUMBER_OF(trustedFilePath),
         L"%c:\\%s",
-        g_wcMappedDriveLetter,
-        pszUtf16UntrustedName);
-    free(pszUtf16UntrustedName);
+        g_mappedDriveLetter,
+        untrustedFileName);
 
-    if (FAILED(hResult))
-        do_exit(EINVAL, untrusted_name);
+    free(untrustedFileName);
 
-    fdout = CreateFileW(wszTrustedFilePath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, 0, NULL);	/* safe because of chroot */
-    if (INVALID_HANDLE_VALUE == fdout)
+    if (FAILED(hresult))
+        SendStatusAndExit(EINVAL, untrustedNameUtf8);
+
+    outputFile = CreateFile(trustedFilePath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, 0, NULL);	/* safe because of chroot */
+    if (INVALID_HANDLE_VALUE == outputFile)
     {
         // maybe some more complete error code translation needed here, but
         // anyway qfile-agent will handle only those listed below
         if (GetLastError() == ERROR_FILE_EXISTS)
-            do_exit(EEXIST, untrusted_name);
+            SendStatusAndExit(EEXIST, untrustedNameUtf8);
         else if (GetLastError() == ERROR_ACCESS_DENIED)
-            do_exit(EACCES, untrusted_name);
+            SendStatusAndExit(EACCES, untrustedNameUtf8);
         else
-            do_exit(EIO, untrusted_name);
+            SendStatusAndExit(EIO, untrustedNameUtf8);
     }
 
-    total_bytes += untrusted_hdr->filelen;
-    if (bytes_limit && total_bytes > bytes_limit)
-        do_exit(EDQUOT, untrusted_name);
+    g_totalBytesReceived += untrustedHeader->filelen;
+    if (g_bytesLimit && g_totalBytesReceived > g_bytesLimit)
+        SendStatusAndExit(EDQUOT, untrustedNameUtf8);
 
-    ret = copy_file(fdout, STDIN, untrusted_hdr->filelen, &crc32_sum);
-    if (ret != COPY_FILE_OK)
+    // receive file data from stdin
+    copyStatus = FcCopyFile(outputFile, g_stdin, untrustedHeader->filelen, &g_crc32, NULL);
+    if (copyStatus != COPY_FILE_OK)
     {
-        do_exit(EIO, untrusted_name);
+        SendStatusAndExit(EIO, untrustedNameUtf8);
     }
 
-    CloseHandle(fdout);
-    //	fix_times_and_perms(untrusted_hdr, untrusted_name);
+    CloseHandle(outputFile);
 }
 
-void process_one_file_dir(struct file_header *untrusted_hdr, char *untrusted_name)
+void ProcessDirectory(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
 {
-    // fix perms only when the directory is sent for the second time
-    // it allows to transfer r.x directory contents, as we create it rwx initially
-    ULONG uResult;
-    WCHAR *pszUtf16UntrustedName = NULL;
-    WCHAR wszTrustedDirectoryPath[MAX_PATH + 1];
-    HRESULT hResult;
+    ULONG errorCode;
+    WCHAR *untrustedDirectoryName = NULL;
+    WCHAR trustedDirectoryPath[MAX_PATH + 1];
+    HRESULT hresult;
 
-    uResult = ConvertUTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName, NULL);
-    if (ERROR_SUCCESS != uResult)
-        do_exit(EINVAL, NULL);
+    errorCode = ConvertUTF8ToUTF16(untrustedNameUtf8, &untrustedDirectoryName, NULL);
+    if (ERROR_SUCCESS != errorCode)
+        SendStatusAndExit(EINVAL, NULL);
 
-    hResult = StringCchPrintfW(
-        wszTrustedDirectoryPath,
-        RTL_NUMBER_OF(wszTrustedDirectoryPath),
+    hresult = StringCchPrintf(
+        trustedDirectoryPath,
+        RTL_NUMBER_OF(trustedDirectoryPath),
         L"%c:\\%s",
-        g_wcMappedDriveLetter,
-        pszUtf16UntrustedName);
-    free(pszUtf16UntrustedName);
+        g_mappedDriveLetter,
+        untrustedDirectoryName);
+    free(untrustedDirectoryName);
 
-    if (FAILED(hResult))
-        do_exit(EINVAL, untrusted_name);
+    if (FAILED(hresult))
+        SendStatusAndExit(EINVAL, untrustedNameUtf8);
 
-    if (!CreateDirectory(wszTrustedDirectoryPath, NULL))
+    if (!CreateDirectory(trustedDirectoryPath, NULL))
     {	/* safe because of chroot */
-        uResult = GetLastError();
-        if (ERROR_ALREADY_EXISTS != uResult)
-            do_exit(ENOTDIR, untrusted_name);
+        errorCode = GetLastError();
+        if (ERROR_ALREADY_EXISTS != errorCode)
+            SendStatusAndExit(ENOTDIR, untrustedNameUtf8);
     }
-
-    //	fix_times_and_perms(untrusted_hdr, untrusted_name);
 }
 
-void process_one_file_link(struct file_header *untrusted_hdr, char *untrusted_name)
+void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
 {
-    char untrusted_content[MAX_PATH_LENGTH];
-    unsigned int filelen;
-    WCHAR *pszUtf16UntrustedName = NULL;
-    WCHAR wszTrustedFilePath[MAX_PATH + 1];
-    WCHAR *pwszUntrustedLinkTargetPath = NULL;
-    WCHAR wszUntrustedLinkTargetAbsolutePath[MAX_PATH + 1];
-    BOOLEAN bResult;
-    HRESULT hResult;
-    ULONG uResult;
-    BOOLEAN	bTargetIsFile = FALSE; /* default to directory links */
+    char untrustedLinkTargetPathUtf8[MAX_PATH_LENGTH];
+    DWORD linkTargetSize;
+    WCHAR *untrustedName = NULL;
+    WCHAR trustedFilePath[MAX_PATH + 1];
+    WCHAR *untrustedLinkTargetPath = NULL;
+    WCHAR untrustedLinkTargetAbsolutePath[MAX_PATH + 1];
+    BOOL success;
+    HRESULT hresult;
+    ULONG errorCode;
+    BOOL targetIsFile = FALSE; /* default to directory links */
 
-    uResult = ConvertUTF8ToUTF16(untrusted_name, &pszUtf16UntrustedName, NULL);
-    if (ERROR_SUCCESS != uResult)
-        do_exit(EINVAL, NULL);
+    errorCode = ConvertUTF8ToUTF16(untrustedNameUtf8, &untrustedName, NULL);
+    if (ERROR_SUCCESS != errorCode)
+        SendStatusAndExit(EINVAL, NULL);
 
-    hResult = StringCchPrintfW(
-        wszTrustedFilePath,
-        RTL_NUMBER_OF(wszTrustedFilePath),
+    hresult = StringCchPrintf(
+        trustedFilePath,
+        RTL_NUMBER_OF(trustedFilePath),
         L"%c:\\%s",
-        g_wcMappedDriveLetter,
-        pszUtf16UntrustedName);
+        g_mappedDriveLetter,
+        untrustedName);
 
-    free(pszUtf16UntrustedName);
+    free(untrustedName);
 
-    if (FAILED(hResult))
-        do_exit(EINVAL, untrusted_name);
+    if (FAILED(hresult))
+        SendStatusAndExit(EINVAL, untrustedNameUtf8);
 
-    if (untrusted_hdr->filelen > MAX_PATH - 1)
-        do_exit(ENAMETOOLONG, untrusted_name);
+    if (untrustedHeader->filelen > MAX_PATH - 1)
+        SendStatusAndExit(ENAMETOOLONG, untrustedNameUtf8);
 
-    filelen = (int) untrusted_hdr->filelen;	// sanitized above
-    if (!read_all_with_crc(STDIN, untrusted_content, filelen))
-        do_exit(EIO, untrusted_name);
+    linkTargetSize = (DWORD) untrustedHeader->filelen; // sanitized above
+    if (!ReadWithCrc(g_stdin, untrustedLinkTargetPathUtf8, linkTargetSize))
+        SendStatusAndExit(EIO, untrustedNameUtf8);
 
-    untrusted_content[filelen] = 0;
+    untrustedLinkTargetPathUtf8[linkTargetSize] = 0;
 
-    uResult = ConvertUTF8ToUTF16(untrusted_content, &pwszUntrustedLinkTargetPath, NULL);
-    if (ERROR_SUCCESS != uResult)
-        do_exit(EINVAL, untrusted_name);
+    errorCode = ConvertUTF8ToUTF16(untrustedLinkTargetPathUtf8, &untrustedLinkTargetPath, NULL);
+    if (ERROR_SUCCESS != errorCode)
+        SendStatusAndExit(EINVAL, untrustedNameUtf8);
 
     /* TODO? sanitize link target path in any way? we don't allow to override
      * existing files, so this shouldn't be a problem to leave it alone */
 
     /* try to determine if link target is a file or directory */
-    if (PathIsRelative(pwszUntrustedLinkTargetPath))
+    if (PathIsRelative(untrustedLinkTargetPath))
     {
-        WCHAR wszTempPath[MAX_PATH + 1];
+        WCHAR tempPath[MAX_PATH + 1];
 
-        hResult = StringCchPrintfW(
-            wszTempPath,
-            RTL_NUMBER_OF(wszTempPath),
+        hresult = StringCchPrintfW(
+            tempPath,
+            RTL_NUMBER_OF(tempPath),
             L"%c:\\%s",
-            g_wcMappedDriveLetter,
-            pwszUntrustedLinkTargetPath);
+            g_mappedDriveLetter,
+            untrustedLinkTargetPath);
 
-        *(PathFindFileName(wszTempPath)) = L'\0';
-        if (!PathCombine(wszUntrustedLinkTargetAbsolutePath, wszTempPath, pwszUntrustedLinkTargetPath))
+        *(PathFindFileName(tempPath)) = L'\0';
+        if (!PathCombine(untrustedLinkTargetAbsolutePath, tempPath, untrustedLinkTargetPath))
         {
-            free(pwszUntrustedLinkTargetPath);
-            do_exit(EINVAL, untrusted_name);
+            free(untrustedLinkTargetPath);
+            SendStatusAndExit(EINVAL, untrustedNameUtf8);
         }
 
-        if (PathFileExists(wszUntrustedLinkTargetAbsolutePath) && !PathIsDirectory(wszUntrustedLinkTargetAbsolutePath))
+        if (PathFileExists(untrustedLinkTargetAbsolutePath) && !PathIsDirectory(untrustedLinkTargetAbsolutePath))
         {
-            bTargetIsFile = TRUE;
+            targetIsFile = TRUE;
         }
     }
     else
     {
-        free(pwszUntrustedLinkTargetPath);
+        free(untrustedLinkTargetPath);
         /* deny absolute links */
-        do_exit(EPERM, untrusted_name);
+        SendStatusAndExit(EPERM, untrustedNameUtf8);
     }
 
-    bResult = CreateSymbolicLink(wszTrustedFilePath, pwszUntrustedLinkTargetPath,
-        bTargetIsFile ? 0x0 : SYMBOLIC_LINK_FLAG_DIRECTORY);
+    success = CreateSymbolicLink(trustedFilePath, untrustedLinkTargetPath,
+        targetIsFile ? 0 : SYMBOLIC_LINK_FLAG_DIRECTORY);
 
-    free(pwszUntrustedLinkTargetPath);
+    free(untrustedLinkTargetPath);
 
-    if (!bResult)
+    if (!success)
     {
         if (GetLastError() == ERROR_FILE_EXISTS)
-            do_exit(EEXIST, untrusted_name);
+            SendStatusAndExit(EEXIST, untrustedNameUtf8);
         else if (GetLastError() == ERROR_ACCESS_DENIED)
-            do_exit(EACCES, untrusted_name);
+            SendStatusAndExit(EACCES, untrustedNameUtf8);
         else if (GetLastError() == ERROR_PRIVILEGE_NOT_HELD)
-            do_exit(EACCES, untrusted_name);
+            SendStatusAndExit(EACCES, untrustedNameUtf8);
         else
-            do_exit(EIO, untrusted_name);
+            SendStatusAndExit(EIO, untrustedNameUtf8);
     }
 }
 
-void process_one_file(struct file_header *untrusted_hdr)
+void ProcessEntry(IN const struct file_header *untrustedHeader)
 {
-    unsigned int namelen;
+    UINT32 nameSize;
 
-    if (untrusted_hdr->namelen > MAX_PATH_LENGTH - 1)
-        do_exit(ENAMETOOLONG, NULL);
+    if (untrustedHeader->namelen > MAX_PATH_LENGTH - 1)
+        SendStatusAndExit(ENAMETOOLONG, NULL);
 
-    namelen = untrusted_hdr->namelen;	/* sanitized above */
-    if (!read_all_with_crc(STDIN, untrusted_namebuf, namelen))
-        do_exit(LEGAL_EOF, NULL);	// hopefully remote has produced error message
+    nameSize = untrustedHeader->namelen;	/* sanitized above */
+    if (!ReadWithCrc(g_stdin, g_untrustedName, nameSize))
+        SendStatusAndExit(LEGAL_EOF, NULL);	// hopefully remote has produced error message
 
-    untrusted_namebuf[namelen] = 0;
-    if (S_ISREG(untrusted_hdr->mode))
-        process_one_file_reg(untrusted_hdr, untrusted_namebuf);
-    else if (S_ISLNK(untrusted_hdr->mode))
-        process_one_file_link(untrusted_hdr, untrusted_namebuf);
-    else if (S_ISDIR(untrusted_hdr->mode))
-        process_one_file_dir(untrusted_hdr, untrusted_namebuf);
+    g_untrustedName[nameSize] = 0;
+    if (S_ISREG(untrustedHeader->mode))
+        ProcessRegularFile(untrustedHeader, g_untrustedName);
+    else if (S_ISLNK(untrustedHeader->mode))
+        ProcessLink(untrustedHeader, g_untrustedName);
+    else if (S_ISDIR(untrustedHeader->mode))
+        ProcessDirectory(untrustedHeader, g_untrustedName);
     else
-        do_exit(EINVAL, untrusted_namebuf);
+        SendStatusAndExit(EINVAL, g_untrustedName);
 }
 
-int do_unpack()
+int ReceiveFiles(void)
 {
-    struct file_header untrusted_hdr;
+    struct file_header untrustedHeader;
 
     /* initialize checksum */
-    crc32_sum = 0;
-    while (read_all_with_crc(STDIN, &untrusted_hdr, sizeof untrusted_hdr))
+    g_crc32 = 0;
+    while (ReadWithCrc(g_stdin, &untrustedHeader, sizeof untrustedHeader))
     {
         /* check for end of transfer marker */
-        if (untrusted_hdr.namelen == 0)
+        if (untrustedHeader.namelen == 0)
         {
             errno = 0;
             break;
         }
 
-        process_one_file(&untrusted_hdr);
-        total_files++;
+        ProcessEntry(&untrustedHeader);
+        g_totalFilesReceived++;
 
-        if (files_limit && total_files > files_limit)
-            do_exit(EDQUOT, untrusted_namebuf);
+        if (g_filesLimit && g_totalFilesReceived > g_filesLimit)
+            SendStatusAndExit(EDQUOT, g_untrustedName);
     }
-    send_status_and_crc(errno, NULL);
+    SendStatusAndCrc(errno, NULL);
     return errno;
 }

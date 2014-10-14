@@ -1,21 +1,21 @@
-TARGETNAME=filecopy-common
-TARGETTYPE=LIBRARY
-TARGETPATH=..\libs
+TARGETNAME = filecopy-common
+TARGETTYPE = LIBRARY
+TARGETPATH = ..\libs
 
-#BUILD_PASS0_PRODUCES=evtchn
+USE_MSVCRT = 1
 
-USE_MSVCRT=1
-
-DLLDEF=filecopy_common.def
+DLLDEF = filecopy_common.def
 C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
-                    $(DDK_INC_PATH)\wdm; \
-                    ..\..\include;\
+INCLUDES = $(INCLUDES); \
+    $(DDK_INC_PATH)\wdm; \
+    ..\..\include; \
+    $(QUBES_INCLUDES);
 
-SOURCES=ioall.c copy-file.c crc32.c gui-fatal.c
+SOURCES = ioall.c filecopy.c crc32.c filecopy-error.c
 
-TARGETLIBS=\
-        $(SDK_LIB_PATH)\setupapi.lib     \
-        $(SDK_LIB_PATH)\kernel32.lib    \
-        $(SDK_LIB_PATH)\advapi32.lib
+TARGETLIBS = \
+    $(SDK_LIB_PATH)\setupapi.lib \
+    $(SDK_LIB_PATH)\kernel32.lib \
+    $(SDK_LIB_PATH)\advapi32.lib \
+    $(QUBES_LIBS)\windows-utils.lib

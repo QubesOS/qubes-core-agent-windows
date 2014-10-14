@@ -1,113 +1,108 @@
 #include <Windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <tchar.h>
 #include <Wtsapi32.h>
-#include <utf8-conv.h>
 #include <Shlwapi.h>
 
-TCHAR *pszExpectedUser;
-BOOL bFound = FALSE;
+#include "utf8-conv.h"
+#include "log.h"
 
-BOOL CheckSession(DWORD	dSessionId)
+TCHAR *g_expectedUser;
+BOOL g_sessionFound = FALSE;
+
+BOOL CheckSession(DWORD	sessionId)
 {
-    TCHAR *pszUserName;
+    WCHAR *userName;
     DWORD cbUserName;
 
-    if (FAILED(WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE, dSessionId, WTSUserName, &pszUserName, &cbUserName)))
+    if (!WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE, sessionId, WTSUserName, &userName, &cbUserName))
     {
-        fprintf(stderr, "WTSQuerySessionInformation failed: 0x%x\n", GetLastError());
+        perror("WTSQuerySessionInformation");
         return FALSE;
     }
 
-#ifdef DBG
-# ifdef UNICODE
-    fprintf(stderr, "Found session: %S\n", pszUserName);
-# else
-    fprintf(stderr, "Found session: %s\n", pszUserName);
-# endif
-#endif
+    LogDebug("Found session: %s", userName);
 
-    if (_tcscmp(pszUserName, pszExpectedUser) == 0)
+    if (wcscmp(userName, g_expectedUser) == 0)
     {
-        bFound = TRUE;
+        g_sessionFound = TRUE;
     }
 
-    WTSFreeMemory(pszUserName);
-    return bFound;
+    WTSFreeMemory(userName);
+    return g_sessionFound;
 }
 
-BOOL CheckIfUserLoggedIn()
+BOOL CheckIfUserLoggedIn(void)
 {
-    WTS_SESSION_INFO *pSessionInfo;
-    DWORD dSessionCount;
-    DWORD i;
+    WTS_SESSION_INFO *sessionInfo;
+    DWORD sessionCount;
+    DWORD sessionIndex;
 
-    if (FAILED(WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dSessionCount)))
+    if (!WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessionInfo, &sessionCount))
     {
-        fprintf(stderr, "Failed to enumerate sessions: 0x%x\n", GetLastError());
+        perror("WTSEnumerateSessions");
         return FALSE;
     }
 
-    for (i = 0; i < dSessionCount; i++)
+    for (sessionIndex = 0; sessionIndex < sessionCount; sessionIndex++)
     {
-        if (pSessionInfo[i].State == WTSActive)
+        if (sessionInfo[sessionIndex].State == WTSActive)
         {
-            if (CheckSession(pSessionInfo[i].SessionId))
+            if (CheckSession(sessionInfo[sessionIndex].SessionId))
             {
-                bFound = TRUE;
+                g_sessionFound = TRUE;
             }
         }
     }
 
-    WTSFreeMemory(pSessionInfo);
-    return bFound;
+    WTSFreeMemory(sessionInfo);
+    return g_sessionFound;
 }
 
 LRESULT CALLBACK WindowProc(
-    HWND hWnd,       // handle to window
-    UINT Msg,        // WM_WTSSESSION_CHANGE
+    HWND window,     // handle to window
+    UINT message,    // WM_WTSSESSION_CHANGE
     WPARAM wParam,   // session state change event
     LPARAM lParam    // session ID
     )
 {
-    switch (Msg)
+    switch (message)
     {
     case WM_WTSSESSION_CHANGE:
         if (wParam == WTS_SESSION_LOGON)
         {
             if (CheckSession((DWORD) lParam))
-                bFound = TRUE;
+                g_sessionFound = TRUE;
         }
         return TRUE;
 
     default:
-        return DefWindowProc(hWnd, Msg, wParam, lParam);
+        return DefWindowProc(window, message, wParam, lParam);
     }
 
     return FALSE;
 }
 
-HWND createMainWindow(HINSTANCE hInst)
+HWND CreateMainWindow(HINSTANCE instance)
 {
     WNDCLASSEX wc;
-    ATOM windowClass;
+    ATOM windowClassAtom;
 
     wc.cbSize = sizeof(wc);
     wc.style = 0;
     wc.lpfnWndProc = (WNDPROC) WindowProc;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
-    wc.hInstance = hInst;
+    wc.hInstance = instance;
     wc.hIcon = NULL;
     wc.hCursor = NULL;
     wc.hbrBackground = (HBRUSH) COLOR_WINDOW;
     wc.lpszMenuName = NULL;
-    wc.lpszClassName = TEXT("MainWindowClass");
+    wc.lpszClassName = L"MainWindowClass";
     wc.hIconSm = NULL;
 
-    windowClass = RegisterClassEx(&wc);
-    if (!windowClass)
+    windowClassAtom = RegisterClassEx(&wc);
+    if (!windowClassAtom)
     {
         return NULL;
     }
@@ -120,11 +115,11 @@ HWND createMainWindow(HINSTANCE hInst)
         10, 10, /* w, h */
         HWND_MESSAGE, /* parent */
         NULL, /* menu */
-        hInst, /* instance */
+        instance, /* instance */
         NULL);
 }
 
-int ReadUntilEOF(HANDLE fd, void *buf, int size)
+int FcReadUntilEof(HANDLE fd, void *buf, int size)
 {
     int got_read = 0;
     int ret;
@@ -145,11 +140,10 @@ int ReadUntilEOF(HANDLE fd, void *buf, int size)
 
         got_read += ret;
     }
-    //      fprintf(stderr, "read %d bytes\n", size);
     return got_read;
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLine, int nCmdShow)
+int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLine, int nCmdShow)
 {
     HWND hMainWindow;
     size_t cbExpectedUserUtf8;
@@ -158,10 +152,10 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
     HANDLE hStdIn;
 
     // first try command parameter
-    pszExpectedUser = PathGetArgs(pszCommandLine);
+    g_expectedUser = PathGetArgs(pszCommandLine);
 
     // if none was given, read from stdin
-    if (!pszExpectedUser || pszExpectedUser[0] == TEXT('\0'))
+    if (!g_expectedUser || g_expectedUser[0] == TEXT('\0'))
     {
         hStdIn = GetStdHandle(STD_INPUT_HANDLE);
         if (hStdIn == INVALID_HANDLE_VALUE)
@@ -170,7 +164,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
             return 1;
         }
 
-        cbExpectedUserUtf8 = ReadUntilEOF(hStdIn, pszExpectedUserUtf8, sizeof(pszExpectedUserUtf8));
+        cbExpectedUserUtf8 = FcReadUntilEof(hStdIn, pszExpectedUserUtf8, sizeof(pszExpectedUserUtf8));
         if (cbExpectedUserUtf8 <= 0 || cbExpectedUserUtf8 >= sizeof(pszExpectedUserUtf8))
         {
             fprintf(stderr, "Failed to read the user name\n");
@@ -187,18 +181,18 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
         pszExpectedUserUtf8[cbExpectedUserUtf8] = '\0';
 
 #ifdef UNICODE
-        if (FAILED(ConvertUTF8ToUTF16(pszExpectedUserUtf8, &pszExpectedUser, &cchExpectedUser)))
+        if (FAILED(ConvertUTF8ToUTF16(pszExpectedUserUtf8, &g_expectedUser, &cchExpectedUser)))
         {
             fprintf(stderr, "Failed to convert the user name to UTF16\n");
             return 1;
         }
 #else
-        pszExpectedUser = pszExpectedUserUtf8;
+        g_expectedUser = pszExpectedUserUtf8;
         cchExpectedUser = cbExpectedUserUtf8;
 #endif
     }
 
-    hMainWindow = createMainWindow(hInst);
+    hMainWindow = CreateMainWindow(hInst);
 
     if (hMainWindow == INVALID_HANDLE_VALUE)
     {
@@ -213,7 +207,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
         return 1;
     }
 
-    bFound = FALSE;
+    g_sessionFound = FALSE;
     if (!CheckIfUserLoggedIn())
     {
         BOOL	bRet;
@@ -221,9 +215,9 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
 
 #ifdef DBG
 # ifdef UNICODE
-        fprintf(stderr, "Waiting for user %S\n", pszExpectedUser);
+        fprintf(stderr, "Waiting for user %S\n", g_expectedUser);
 # else
-        fprintf(stderr, "Waiting for user %s\n", pszExpectedUser);
+        fprintf(stderr, "Waiting for user %s\n", g_expectedUser);
 # endif
 #endif
         while ((bRet = GetMessage(&msg, hMainWindow, 0, 0)) != 0)
@@ -238,7 +232,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
             }
-            if (bFound)
+            if (g_sessionFound)
                 break;
         }
     }
@@ -248,7 +242,7 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLi
 
 #ifdef UNICODE
     if (cchExpectedUser)
-        free(pszExpectedUser);
+        free(g_expectedUser);
 #endif
     return 0;
 }

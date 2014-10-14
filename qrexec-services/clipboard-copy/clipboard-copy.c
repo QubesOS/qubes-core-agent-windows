@@ -1,94 +1,78 @@
 #include <windows.h>
-#include <tchar.h>
 #include <Shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
+
+#include "ioall.h"
 #include "utf8-conv.h"
 #include "log.h"
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
-int write_all(HANDLE fd, void *buf, DWORD size)
+BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
 {
-    DWORD written = 0;
-    int ret;
-
-    while (written < size)
-    {
-        if (!WriteFile(fd, (BYTE *) buf + written, size - written, &ret, NULL))
-        {
-            perror("WriteFile");
-            return 0;
-        }
-        written += ret;
-    }
-    return 1;
-}
-
-BOOL getClipboard(HWND hWin, HANDLE hOutput)
-{
-    HANDLE hglb;
-    WCHAR *lpwstr;
-    UCHAR *lpstr;
-    size_t cbStr;
+    HANDLE clipData;
+    WCHAR *clipText;
+    UCHAR *clipTextUtf8;
+    size_t cbTextUtf8;
 
     if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
         return FALSE;
 
-    if (!OpenClipboard(hWin))
+    if (!OpenClipboard(window))
     {
         perror("OpenClipboard");
         return FALSE;
     }
 
-    hglb = GetClipboardData(CLIPBOARD_FORMAT);
-    if (!hglb)
+    clipData = GetClipboardData(CLIPBOARD_FORMAT);
+    if (!clipData)
     {
         perror("GetClipboardData");
         CloseClipboard();
         return FALSE;
     }
 
-    lpwstr = GlobalLock(hglb);
-    if (!lpwstr)
+    clipText = GlobalLock(clipData);
+    if (!clipText)
     {
         perror("GlobalLock");
         CloseClipboard();
         return FALSE;
     }
 
-    if (FAILED(ConvertUTF16ToUTF8(lpwstr, &lpstr, &cbStr)))
+    if (FAILED(ConvertUTF16ToUTF8(clipText, &clipTextUtf8, &cbTextUtf8)))
     {
         perror("ConvertUTF16ToUTF8");
-        GlobalUnlock(hglb);
+        GlobalUnlock(clipData);
         CloseClipboard();
         return FALSE;
     }
 
-    if (!write_all(hOutput, lpstr, cbStr))
+    if (!FcWriteBuffer(outputFile, clipTextUtf8, cbTextUtf8))
     {
         LogError("write failed");
-        GlobalUnlock(hglb);
+        GlobalUnlock(clipData);
         CloseClipboard();
         return FALSE;
     }
 
-    GlobalUnlock(hglb);
+    GlobalUnlock(clipData);
     CloseClipboard();
     return TRUE;
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *lpCommandLine, int nCmdShow)
+int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *commandLine, int showFlags)
 {
-    HANDLE hStdOut;
+    HANDLE stdOut;
 
-    hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hStdOut == INVALID_HANDLE_VALUE)
+    stdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (stdOut == INVALID_HANDLE_VALUE)
     {
         perror("GetStdHandle");
         return 1;
     }
-    if (!getClipboard(NULL, hStdOut))
+    if (!WriteClipboardText(NULL, stdOut))
     {
         return 1;
     }
