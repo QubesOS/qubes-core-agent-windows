@@ -55,8 +55,8 @@
               </Component>
               <Component Id='AskVMClientWrapper' Guid='b5700d68-2ceb-4764-9e4b-11ae33b2d05b'>
                 <File Id='ask_vm_and_run.exe' Name='ask-vm-and-run.exe' DiskId='1' Source='ask-vm-and-run\bin\$(var.ARCHDIR)\ask-vm-and-run.exe' KeyPath="no">
-                  <Shortcut Id='qfile_sendto_shortcut' Name='Copy to other AppVM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\qfile-agent.exe"' Advertise="no"/>
-                  <Shortcut Id='qopen_sendto_shortcut' Name='Edit in VM' Directory='SendToFolder' Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
+                  <Shortcut Id='file_sendto_shortcut' Name='Copy to other AppVM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\file-sender.exe"' Advertise="no"/>
+                  <Shortcut Id='open_sendto_shortcut' Name='Edit in VM' Directory='SendToFolder' Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
                 </File>
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
                 <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-filecopy-wrapper-installed" Type="integer" Value="1" KeyPath="yes"/>
@@ -96,8 +96,8 @@
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
               <Component Id='QrexecServices' Guid='2543621b-2d67-4726-9a3b-7a1c471a1e19'>
-                <File Id='qfile_agent.exe' Name='qfile-agent.exe' DiskId='1' Source='qrexec-services\filecopy-agent\bin\$(var.ARCHDIR)\qfile-agent.exe' KeyPath="yes"/>
-                <File Id='qfile_unpacker.exe' Name='qfile-unpacker.exe' DiskId='1' Source='qrexec-services\filecopy-unpacker\bin\$(var.ARCHDIR)\qfile-unpacker.exe' KeyPath="no"/>
+                <File Id='file_sender.exe' Name='file-sender.exe' DiskId='1' Source='qrexec-services\file-sender\bin\$(var.ARCHDIR)\file-sender.exe' KeyPath="yes"/>
+                <File Id='file_receiver.exe' Name='file-receiver.exe' DiskId='1' Source='qrexec-services\file-receiver\bin\$(var.ARCHDIR)\file-receiver.exe' KeyPath="no"/>
                 <File Id='clipboard_copy.exe' Name='clipboard-copy.exe' DiskId='1' Source='qrexec-services\clipboard-copy\bin\$(var.ARCHDIR)\clipboard-copy.exe' KeyPath="no"/>
                 <File Id='clipboard_paste.exe' Name='clipboard-paste.exe' DiskId='1' Source='qrexec-services\clipboard-paste\bin\$(var.ARCHDIR)\clipboard-paste.exe' KeyPath="no"/>
                 <File Id='vm_file_editor.exe' Name='vm-file-editor.exe' DiskId='1' Source='qrexec-services\vm-file-editor\bin\$(var.ARCHDIR)\vm-file-editor.exe' KeyPath="no"/>

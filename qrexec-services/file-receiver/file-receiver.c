@@ -49,7 +49,7 @@ ULONG MapDriveLetter(IN const WCHAR *targetDirectory, OUT WCHAR *driveLetter)
     hresult = StringCchPrintf(
         objectDirectoryName,
         RTL_NUMBER_OF(objectDirectoryName),
-        L"\\BaseNamedObjects\\qfile-unpacker-%d",
+        L"\\BaseNamedObjects\\filecopy-unpacker-%d",
         GetCurrentProcessId());
 
     if (FAILED(hresult))

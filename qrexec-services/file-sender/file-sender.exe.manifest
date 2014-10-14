@@ -11,7 +11,7 @@
   </compatibility>
 
   <assemblyIdentity type="win32" 
-                    name="qfile-agent.app" 
+                    name="file-sender.app" 
                     version="6.0.0.0" 
   />
   <dependency>

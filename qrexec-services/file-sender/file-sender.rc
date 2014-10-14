@@ -22,11 +22,11 @@ BEGIN
         BLOCK "000904b0"
         BEGIN
             VALUE "CompanyName", "Invisible Things Lab"
-            VALUE "FileDescription", "QFile agent"
+            VALUE "FileDescription", "Qubes File Sender"
             VALUE "FileVersion", "1, 0, 0, 0"
-            VALUE "InternalName", "qfile_agent"
+            VALUE "InternalName", "file-sender"
             VALUE "LegalCopyright", "See individual source files"
-            VALUE "OriginalFilename", "qfile_agent.exe"
+            VALUE "OriginalFilename", "file-sender.exe"
             VALUE "ProductName", "Qubes OS"
             VALUE "ProductVersion", "1, 0, 0, 0"
         END
@@ -36,10 +36,3 @@ BEGIN
         VALUE "Translation", 0x9, 1200
     END
 END
-
-// Must reference a manifest for visual styles and elevation
-// Oh, and it must happen here, or MinGW will ignore it!
-#if defined(__MINGW32__) || defined(__CYGWIN__)
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "qrexec_agent.exe.manifest"
-#endif
-

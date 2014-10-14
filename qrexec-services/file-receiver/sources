@@ -1,4 +1,4 @@
-TARGETNAME = qfile-agent
+TARGETNAME = file-receiver
 TARGETTYPE = PROGRAM
 TARGETPATH = bin
 
@@ -8,21 +8,20 @@ USE_MSVCRT = 1
 UMENTRY = wmain
 C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
+INCLUDES = $(INCLUDES); \
     $(SDK_INC_PATH)\..\ddk; \
     ..\filecopy-common; \
     ..\..\include; \
     $(QUBES_INCLUDES);
     
-SOURCES = qfile-agent.c gui-progress.c qfile-agent.rc
-
-SXS_APPLICATION_MANIFEST=qfile-agent.exe.manifest
+SOURCES = file-receiver.c gui-fatal.c unpack.c
 
 TARGETLIBS = \
     $(SDK_LIB_PATH)\kernel32.lib \
+    $(SDK_LIB_PATH)\ntdll.lib \
     $(SDK_LIB_PATH)\Shlwapi.lib \
     $(SDK_LIB_PATH)\User32.lib \
+    $(SDK_LIB_PATH)\ole32.lib \
     ..\libs\*\filecopy-common.lib \
     $(QUBES_LIBS)\windows-utils.lib \
-    $(SDK_LIB_PATH)\Shell32.lib \
-    $(SDK_LIB_PATH)\Comctl32.lib
+    $(SDK_LIB_PATH)\Shell32.lib
