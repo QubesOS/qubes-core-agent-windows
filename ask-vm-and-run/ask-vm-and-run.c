@@ -1,21 +1,24 @@
 #include <windows.h>
-#include <tchar.h>
 #include <Shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
 #include "resource.h"
 
-INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+#include "log.h"
+
+#define QREXEC_CLIENT_VM L"qrexec-client-vm.exe"
+
+INT_PTR CALLBACK InputBoxProc(IN HWND hwnd, IN UINT message, IN WPARAM wParam, IN LPARAM lParam)
 {
-    TCHAR szInput[128];
+    WCHAR input[128];
 
     if (message == WM_COMMAND)
     {
         switch (LOWORD(wParam))
         {
         case IDOK:
-            GetWindowText(GetDlgItem(hwnd, IDC_INPUT), szInput, RTL_NUMBER_OF(szInput));
-            EndDialog(hwnd, (INT_PTR) _tcsdup(szInput));
+            GetWindowText(GetDlgItem(hwnd, IDC_INPUT), input, RTL_NUMBER_OF(input));
+            EndDialog(hwnd, (INT_PTR) _wcsdup(input));
             return TRUE;
         case IDCANCEL:
             EndDialog(hwnd, 0);
@@ -26,29 +29,30 @@ INT_PTR CALLBACK inputBoxProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lPa
     return FALSE;
 }
 
-void reportError(TCHAR *pszMessage)
+void ReportError(IN const WCHAR *message)
 {
-    MessageBox(NULL, pszMessage, TEXT("Qubes"), MB_OK | MB_ICONERROR);
+    MessageBox(NULL, message, L"Qubes", MB_OK | MB_ICONERROR);
 }
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLine, int nCmdShow)
+int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, LPTSTR commandLine, int showState)
 {
-    INT_PTR hResult;
-    TCHAR szQrexecClientPath[MAX_PATH];
-    TCHAR *pszQrexecClientCmdLine;
+    INT_PTR result;
+    WCHAR qrexecClientPath[MAX_PATH] = { 0 };
+    WCHAR *qrexecClientCmdLine;
     size_t cchQrexecClientCmdLine;
-    TCHAR *pSeparator;
+    WCHAR *pathSeparator;
     PROCESS_INFORMATION pi;
-    STARTUPINFO si;
+    STARTUPINFO si = { 0 };
+    DWORD status;
 
-    hResult = DialogBox(
-        hInst, // application instance
+    result = DialogBox(
+        instance, // application instance
         MAKEINTRESOURCE(IDD_INPUTBOX), // dialog box resource
         NULL, // owner window
-        inputBoxProc // dialog box window procedure
+        InputBoxProc // dialog box window procedure
         );
 
-    switch (hResult)
+    switch (result)
     {
     case 0:
         // cancel
@@ -59,49 +63,52 @@ int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPTSTR lpCommandLin
     }
 
     // build RPC service config file path
-    memset(szQrexecClientPath, 0, sizeof(szQrexecClientPath));
-    if (!GetModuleFileName(NULL, szQrexecClientPath, RTL_NUMBER_OF(szQrexecClientPath)))
+    if (!GetModuleFileName(NULL, qrexecClientPath, RTL_NUMBER_OF(qrexecClientPath)))
     {
-        reportError(TEXT("Failed to get qrexec-client-vm.exe path"));
-        return 1;
+        status = perror("GetModuleFileName");
+        ReportError(L"Failed to get " QREXEC_CLIENT_VM L" path");
+        return status;
     }
 
     // cut off file name (qrexec_agent.exe)
-    pSeparator = _tcsrchr(szQrexecClientPath, TEXT('\\'));
-    if (!pSeparator)
+    pathSeparator = wcsrchr(qrexecClientPath, L'\\');
+    if (!pathSeparator)
     {
-        reportError(TEXT("Cannot find dir containing qrexec-client-vm.exe"));
-        return 1;
+        LogError("Bad executable path");
+        ReportError(L"Cannot find dir containing " QREXEC_CLIENT_VM);
+        return ERROR_BAD_PATHNAME;
     }
 
     // Leave trailing backslash
-    pSeparator++;
-    *pSeparator = TEXT('\0');
-    PathAppend(szQrexecClientPath, TEXT("qrexec-client-vm.exe"));
+    pathSeparator++;
+    *pathSeparator = L'\0';
+    PathAppend(qrexecClientPath, QREXEC_CLIENT_VM);
 
-    cchQrexecClientCmdLine = _tcslen(TEXT("qrexec-client-vm.exe")) + _tcslen((PTCHAR) hResult) + _tcslen(lpCommandLine) + 3;
-    pszQrexecClientCmdLine = malloc(cchQrexecClientCmdLine*sizeof(TCHAR));
+    cchQrexecClientCmdLine = wcslen(QREXEC_CLIENT_VM) + wcslen((WCHAR *) result) + wcslen(commandLine) + 3;
+    qrexecClientCmdLine = malloc(cchQrexecClientCmdLine * sizeof(WCHAR));
 
-    if (!pszQrexecClientCmdLine)
+    if (!qrexecClientCmdLine)
     {
-        reportError(TEXT("out of memory"));
-        return 1;
+        LogError("malloc failed");
+        ReportError(L"Out of memory");
+        return ERROR_NOT_ENOUGH_MEMORY;
     }
 
-    if (FAILED(StringCchPrintf(pszQrexecClientCmdLine, cchQrexecClientCmdLine, TEXT("qrexec-client-vm.exe %s %s"), (TCHAR *) hResult, lpCommandLine)))
+    if (FAILED(StringCchPrintf(qrexecClientCmdLine, cchQrexecClientCmdLine, QREXEC_CLIENT_VM L" %s %s", (WCHAR *) result, commandLine)))
     {
-        reportError(TEXT("Failed to construct command line"));
-        return 1;
+        LogError("Failed to construct command line");
+        ReportError(L"Failed to construct command line");
+        return ERROR_BAD_PATHNAME;
     }
 
-    memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
 
-    if (!CreateProcess(szQrexecClientPath, pszQrexecClientCmdLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+    if (!CreateProcess(qrexecClientPath, qrexecClientCmdLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
     {
-        reportError(TEXT("Failed to execute qrexec-client-vm.exe"));
-        return 1;
+        status = perror("CreateProcess");
+        ReportError(L"Failed to execute qrexec-client-vm.exe");
+        return status;
     }
 
-    return 0;
+    return ERROR_SUCCESS;
 }

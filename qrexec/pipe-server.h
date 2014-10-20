@@ -17,7 +17,7 @@ typedef enum {
 
 #define INSTANCES	4
 #define PIPE_TIMEOUT	5000
-#define IO_HANDLES_ARRAY_SIZE	sizeof(IO_HANDLES_ARRAY)
+#define IO_HANDLES_SIZE	sizeof(IO_HANDLES)
 
 typedef struct {
 	OVERLAPPED	oOverlapped;
@@ -28,7 +28,7 @@ typedef struct {
 	struct	trigger_connect_params	params;
 
 	CLIENT_INFO	ClientInfo;
-	IO_HANDLES_ARRAY	RemoteHandles;
+	IO_HANDLES	RemoteHandles;
 
 	HANDLE	hClientProcess;
 	CREATE_PROCESS_RESPONSE	CreateProcessResponse;

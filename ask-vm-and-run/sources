@@ -1,29 +1,28 @@
-TARGETNAME=ask-vm-and-run
-TARGETTYPE=PROGRAM
-TARGETPATH=bin
+TARGETNAME = ask-vm-and-run
+TARGETTYPE = PROGRAM
+TARGETPATH = bin
 
-
-UMTYPE=windows
-USE_MSVCRT=1
+UMTYPE = windows
+USE_MSVCRT = 1
 
 UMENTRY = wwinmain
-C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
-                    $(SDK_INC_PATH)\..\ddk; \
-                    ..\include; \
+INCLUDES = $(INCLUDES); \
+    $(SDK_INC_PATH)\..\ddk; \
+    ..\include; \
+    $(QUBES_INCLUDES);
 
-SOURCES=ask-vm-and-run.c inputbox.rc
+SOURCES = ask-vm-and-run.c inputbox.rc
 
-TARGETLIBS=\
-        $(SDK_LIB_PATH)\kernel32.lib \
-        $(SDK_LIB_PATH)\user32.lib \
-        $(SDK_LIB_PATH)\setupapi.lib \
-        $(SDK_LIB_PATH)\wtsapi32.lib \
-        $(SDK_LIB_PATH)\userenv.lib \
-        $(SDK_LIB_PATH)\advapi32.lib \
-        $(SDK_LIB_PATH)\netapi32.lib \
-        $(SDK_LIB_PATH)\Comctl32.lib \
-        $(SDK_LIB_PATH)\Shlwapi.lib
-
-
+TARGETLIBS = \
+    $(SDK_LIB_PATH)\kernel32.lib \
+    $(SDK_LIB_PATH)\user32.lib \
+    $(SDK_LIB_PATH)\setupapi.lib \
+    $(SDK_LIB_PATH)\wtsapi32.lib \
+    $(SDK_LIB_PATH)\userenv.lib \
+    $(SDK_LIB_PATH)\advapi32.lib \
+    $(SDK_LIB_PATH)\netapi32.lib \
+    $(SDK_LIB_PATH)\Comctl32.lib \
+    $(SDK_LIB_PATH)\Shlwapi.lib \
+    $(QUBES_LIBS)\windows-utils.lib

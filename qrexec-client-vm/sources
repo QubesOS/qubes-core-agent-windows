@@ -1,22 +1,24 @@
-TARGETNAME=qrexec-client-vm
-TARGETTYPE=PROGRAM
-TARGETPATH=bin
+TARGETNAME = qrexec-client-vm
+TARGETTYPE = PROGRAM
+TARGETPATH = bin
 
-
-UMTYPE=console
-USE_MSVCRT=1
+UMTYPE = console
+USE_MSVCRT = 1
 
 UMENTRY = wmain
-C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
-                    $(SDK_INC_PATH)\..\ddk; \
-                    ..\include; \
-                    $(QUBES_INCLUDES);
+INCLUDES = $(INCLUDES); \
+    $(SDK_INC_PATH)\..\ddk; \
+    ..\include; \
+    $(QUBES_INCLUDES);
 
-SOURCES=qrexec-client-vm.c
+SOURCES = qrexec-client-vm.c
 
-TARGETLIBS=\
-            $(SDK_LIB_PATH)\kernel32.lib \
-            $(SDK_LIB_PATH)\shlwapi.lib \
-            $(QUBES_LIBS)\windows-utils.lib
+TARGETLIBS = \
+    $(SDK_LIB_PATH)\kernel32.lib \
+    $(SDK_LIB_PATH)\user32.lib \
+    $(SDK_LIB_PATH)\userenv.lib \
+    $(SDK_LIB_PATH)\shlwapi.lib \
+    $(SDK_LIB_PATH)\wtsapi32.lib \
+    $(QUBES_LIBS)\windows-utils.lib

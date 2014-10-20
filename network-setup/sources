@@ -1,31 +1,30 @@
-TARGETNAME=qubes-network-setup
-TARGETTYPE=PROGRAM
-TARGETPATH=bin
+TARGETNAME = qubes-network-setup
+TARGETTYPE = PROGRAM
+TARGETPATH = bin
 
-
-UMTYPE=console
-USE_MSVCRT=1
+UMTYPE = console
+USE_MSVCRT = 1
 
 UMENTRY = wmain
 
 C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
-                    $(SDK_INC_PATH)\..\ddk; \
-                    ..\include; \
-                    $(QUBES_INCLUDES);
+INCLUDES = $(INCLUDES); \
+    $(SDK_INC_PATH)\..\ddk; \
+    ..\include; \
+    $(QUBES_INCLUDES);
 
-SOURCES=qubes-network-setup.c service.c
+SOURCES = qubes-network-setup.c service.c
 
-TARGETLIBS=\
-		   $(SDK_LIB_PATH)\setupapi.lib \
-		   $(SDK_LIB_PATH)\kernel32.lib \
-		   $(SDK_LIB_PATH)\shlwapi.lib \
-		   $(SDK_LIB_PATH)\shell32.lib \
-		   $(SDK_LIB_PATH)\IPHLPAPI.lib \
-		   $(SDK_LIB_PATH)\ws2_32.lib \
-		   $(QUBES_LIBS)\gntmem.lib \
-		   $(QUBES_LIBS)\evtchn.lib \
-		   $(QUBES_LIBS)\libxs.lib \
-		   $(QUBES_LIBS)\libvchan.lib \
-		   $(QUBES_LIBS)\windows-utils.lib
+TARGETLIBS = \
+    $(SDK_LIB_PATH)\setupapi.lib \
+    $(SDK_LIB_PATH)\kernel32.lib \
+    $(SDK_LIB_PATH)\shlwapi.lib \
+    $(SDK_LIB_PATH)\shell32.lib \
+    $(SDK_LIB_PATH)\IPHLPAPI.lib \
+    $(SDK_LIB_PATH)\ws2_32.lib \
+    $(QUBES_LIBS)\gntmem.lib \
+    $(QUBES_LIBS)\evtchn.lib \
+    $(QUBES_LIBS)\libxs.lib \
+    $(QUBES_LIBS)\libvchan.lib \
+    $(QUBES_LIBS)\windows-utils.lib

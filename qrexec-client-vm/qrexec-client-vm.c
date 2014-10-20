@@ -1,173 +1,104 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <tchar.h>
 #include <strsafe.h>
 #include "qrexec.h"
 #include "log.h"
+#include "exec.h"
 #include "utf8-conv.h"
 
-ULONG CreatePipedProcessAsCurrentUser(
-    TCHAR *pszCommand,
-    BOOLEAN bRunInteractively,
-    HANDLE hPipeStdin,
-    HANDLE hPipeStdout,
-    HANDLE hPipeStderr,
-    HANDLE *phProcess)
-{
-    PROCESS_INFORMATION	pi;
-    STARTUPINFO	si;
-    BOOLEAN	bInheritHandles;
-
-    if (!pszCommand || !phProcess)
-        return ERROR_INVALID_PARAMETER;
-
-    *phProcess = INVALID_HANDLE_VALUE;
-
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-
-    bInheritHandles = FALSE;
-
-    if (INVALID_HANDLE_VALUE != hPipeStdin &&
-        INVALID_HANDLE_VALUE != hPipeStdout &&
-        INVALID_HANDLE_VALUE != hPipeStderr)
-    {
-        si.dwFlags = STARTF_USESTDHANDLES;
-        si.hStdInput = hPipeStdin;
-        si.hStdOutput = hPipeStdout;
-        si.hStdError = hPipeStderr;
-
-        bInheritHandles = TRUE;
-    }
-
-    if (!CreateProcess(
-        NULL,
-        pszCommand,
-        NULL,
-        NULL,
-        bInheritHandles, // inherit handles if IO is piped
-        0,
-        NULL,
-        NULL,
-        &si,
-        &pi))
-    {
-        return perror("CreateProcess");
-    }
-
-    LogDebug("pid %d\n", pi.dwProcessId);
-
-    *phProcess = pi.hProcess;
-    CloseHandle(pi.hThread);
-
-    return ERROR_SUCCESS;
-}
-
-ULONG SendCreateProcessResponse(HANDLE hPipe, CREATE_PROCESS_RESPONSE *pCpr)
+ULONG SendCreateProcessResponse(IN HANDLE pipe, IN CREATE_PROCESS_RESPONSE *response)
 {
     DWORD cbWritten;
     DWORD cbRead;
 
-    if (!pCpr)
+    if (!response)
         return ERROR_INVALID_PARAMETER;
 
     if (!WriteFile(
-        hPipe,
-        pCpr,
-        sizeof(CREATE_PROCESS_RESPONSE),
+        pipe,
+        response,
+        sizeof(*response),
         &cbWritten,
         NULL))
     {
         return perror("WriteFile");
     }
 
-    if (CPR_TYPE_HANDLE == pCpr->bType)
+    if (CPR_TYPE_HANDLE == response->ResponseType)
     {
         LogDebug("Waiting for the server to read the handle, duplicate it and close the pipe\n");
 
         // Issue a blocking dummy read that will finish when the server disconnects the pipe
         // after the process handle duplication is complete. We have to wait here because for
         // the handle to be duplicated successfully this process must be present.
-        ReadFile(hPipe, &cbWritten, 1, &cbRead, NULL);
+        ReadFile(pipe, &cbWritten, 1, &cbRead, NULL);
     }
 
     return ERROR_SUCCESS;
 }
 
-int __cdecl _tmain(ULONG argc, TCHAR *argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    HANDLE hPipe;
-    BOOL fSuccess = FALSE;
-    DWORD cbRead, cbWritten, dwMode;
-    LPTSTR lpszPipename = TEXT("\\\\.\\pipe\\qrexec_trigger");
-    struct trigger_connect_params params;
-    ULONG uResult;
-    UCHAR *pszParameter;
-    TCHAR *pszLocalProgram;
-    HRESULT hResult;
-    IO_HANDLES_ARRAY IoHandles;
-    HANDLE hProcess;
-    CREATE_PROCESS_RESPONSE CreateProcessResponse;
+    HANDLE agentPipe;
+    BOOL success = FALSE;
+    DWORD cbRead, cbWritten, pipeMode;
+    LPTSTR pipeName = L"\\\\.\\pipe\\qrexec_trigger";
+    struct trigger_connect_params connectParams = { 0 };
+    ULONG status;
+    UCHAR *argumentUtf8;
+    WCHAR *localProgram;
+    HRESULT hresult;
+    IO_HANDLES ioHandles;
+    HANDLE process;
+    CREATE_PROCESS_RESPONSE createProcessResponse;
 
     if (argc < 4)
     {
-        _tprintf(TEXT("usage: %s target_vmname program_ident local_program [local program arguments]\n"), argv[0]);
-        return 1;
+        wprintf(L"usage: %s target_vmname program_ident local_program [local program arguments]\n", argv[0]);
+        return ERROR_INVALID_PARAMETER;
     }
 
     // Prepare the parameter structure containing the first two arguments.
-    memset(&params, 0, sizeof(params));
-
-#ifdef UNICODE
-    pszParameter = NULL;
-    uResult = ConvertUTF16ToUTF8(argv[2], &pszParameter, NULL);
-    if (ERROR_SUCCESS != uResult)
+    argumentUtf8 = NULL;
+    status = ConvertUTF16ToUTF8(argv[2], &argumentUtf8, NULL); // local program
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ConvertUTF16ToUTF8");
-    }
-#else
-    pszParameter = argv[2];
-#endif
-
-    hResult = StringCchCopyA(params.exec_index, sizeof(params.exec_index), pszParameter);
-    if (FAILED(hResult))
-    {
-        return perror2(hResult, "StringCchCopyA");
+        return perror2(status, "ConvertUTF16ToUTF8");
     }
 
-#ifdef UNICODE
-    free(pszParameter);
-    pszParameter = NULL;
-
-    uResult = ConvertUTF16ToUTF8(argv[1], &pszParameter, NULL);
-    if (ERROR_SUCCESS != uResult)
+    hresult = StringCchCopyA(connectParams.exec_index, sizeof(connectParams.exec_index), argumentUtf8);
+    if (FAILED(hresult))
     {
-        return perror2(uResult, "ConvertUTF16ToUTF8");
-    }
-#else
-    pszParameter = argv[1];
-#endif
-
-    hResult = StringCchCopyA(params.target_vmname, sizeof(params.target_vmname), pszParameter);
-    if (FAILED(hResult))
-    {
-        return perror2(hResult, "StringCchCopyA");
+        return perror2(hresult, "StringCchCopyA");
     }
 
-#ifdef UNICODE
-    free(pszParameter);
-#endif
-    pszParameter = NULL;
+    free(argumentUtf8);
+    argumentUtf8 = NULL;
 
-    LogDebug("Connecting to the pipe server\n");
+    status = ConvertUTF16ToUTF8(argv[1], &argumentUtf8, NULL); // vm name
+    if (ERROR_SUCCESS != status)
+    {
+        return perror2(status, "ConvertUTF16ToUTF8");
+    }
+
+    hresult = StringCchCopyA(connectParams.target_vmname, sizeof(connectParams.target_vmname), argumentUtf8);
+    if (FAILED(hresult))
+    {
+        return perror2(hresult, "StringCchCopyA");
+    }
+
+    free(argumentUtf8);
+    argumentUtf8 = NULL;
+
+    LogDebug("Connecting to qrexec-agent\n");
 
     // Try to open a named pipe; wait for it, if necessary.
 
     while (TRUE)
     {
-        hPipe = CreateFile(
-            lpszPipename,
+        agentPipe = CreateFile(
+            pipeName,
             GENERIC_READ | GENERIC_WRITE,
             0,
             NULL,
@@ -177,19 +108,19 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 
         // Break if the pipe handle is valid.
 
-        if (hPipe != INVALID_HANDLE_VALUE)
+        if (agentPipe != INVALID_HANDLE_VALUE)
             break;
 
         // Exit if an error other than ERROR_PIPE_BUSY occurs.
-        uResult = GetLastError();
-        if (ERROR_PIPE_BUSY != uResult)
+        status = GetLastError();
+        if (ERROR_PIPE_BUSY != status)
         {
-            return perror2(uResult, "CreateFile(agent pipe)");
+            return perror2(status, "CreateFile(agent pipe)");
         }
 
         // All pipe instances are busy, so wait for 10 seconds.
 
-        if (!WaitNamedPipe(lpszPipename, 10000))
+        if (!WaitNamedPipe(pipeName, 10000))
         {
             return perror("WaitNamedPipe");
         }
@@ -197,10 +128,10 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
 
     // The pipe connected; change to message-read mode.
 
-    dwMode = PIPE_READMODE_MESSAGE;
+    pipeMode = PIPE_READMODE_MESSAGE;
     if (!SetNamedPipeHandleState(
-        hPipe, // pipe handle
-        &dwMode, // new pipe mode
+        agentPipe, // pipe handle
+        &pipeMode, // new pipe mode
         NULL, // don't set maximum bytes
         NULL))
     { // don't set maximum time
@@ -210,7 +141,7 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
     // Send the params to the pipe server.
     LogDebug("Sending the parameters to the server\n");
 
-    if (!WriteFile(hPipe, &params, sizeof(params), &cbWritten, NULL))
+    if (!WriteFile(agentPipe, &connectParams, sizeof(connectParams), &cbWritten, NULL))
     {
         return perror("WriteFile");
     }
@@ -218,14 +149,14 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
     LogDebug("Receiving the IO handles\n");
 
     // Read the handle array from the pipe.
-    fSuccess = ReadFile(
-        hPipe,
-        &IoHandles,
-        sizeof(IoHandles),
+    success = ReadFile(
+        agentPipe,
+        &ioHandles,
+        sizeof(ioHandles),
         &cbRead,
         NULL);
 
-    if (!fSuccess || cbRead != sizeof(IoHandles))
+    if (!success || cbRead != sizeof(ioHandles))
     {
         // If the message is too large to fit in a buffer, treat it as an error as well:
         // this shouldn't happen if the pipe server operates correctly.
@@ -235,48 +166,47 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
     LogInfo("Starting the local program '%s'\n", argv[3]);
 
     // find command line starting at third parameter _including_ quotes
-    pszLocalProgram = _tcsstr(GetCommandLine(), argv[2]);
-    pszLocalProgram += _tcslen(argv[2]);
-    while (pszLocalProgram[0] == TEXT(' '))
-        pszLocalProgram++;
+    localProgram = wcsstr(GetCommandLine(), argv[2]);
+    localProgram += wcslen(argv[2]);
+    while (localProgram[0] == L' ')
+        localProgram++;
 
-    uResult = CreatePipedProcessAsCurrentUser(
-        pszLocalProgram,	// local program
-        TRUE,
-        IoHandles.hPipeStdin,
-        IoHandles.hPipeStdout,
-        IoHandles.hPipeStderr,
-        &hProcess);
+    status = CreatePipedProcessAsCurrentUser(
+        localProgram,	// local program
+        ioHandles.StdinPipe,
+        ioHandles.StdoutPipe,
+        ioHandles.StderrPipe,
+        &process);
 
-    CloseHandle(IoHandles.hPipeStdin);
-    CloseHandle(IoHandles.hPipeStdout);
-    CloseHandle(IoHandles.hPipeStderr);
+    CloseHandle(ioHandles.StdinPipe);
+    CloseHandle(ioHandles.StdoutPipe);
+    CloseHandle(ioHandles.StderrPipe);
 
-    if (ERROR_SUCCESS != uResult)
+    if (ERROR_SUCCESS != status)
     {
-        perror2(uResult, "CreatePipedProcessAsCurrentUser");
+        perror2(status, "CreatePipedProcessAsCurrentUser");
 
         LogDebug("Sending the error code to the server\n");
 
-        CreateProcessResponse.bType = CPR_TYPE_ERROR_CODE;
-        CreateProcessResponse.ResponseData.dwErrorCode = uResult;
+        createProcessResponse.ResponseType = CPR_TYPE_ERROR_CODE;
+        createProcessResponse.ResponseData.ErrorCode = status;
     }
     else
     {
         LogDebug("Sending the process handle of the local program to the server\n");
 
-        CreateProcessResponse.bType = CPR_TYPE_HANDLE;
-        CreateProcessResponse.ResponseData.hProcess = hProcess;
+        createProcessResponse.ResponseType = CPR_TYPE_HANDLE;
+        createProcessResponse.ResponseData.Process = process;
     }
 
-    SendCreateProcessResponse(hPipe, &CreateProcessResponse);
+    SendCreateProcessResponse(agentPipe, &createProcessResponse);
 
     LogDebug("Closing the pipe\n");
 
-    CloseHandle(hPipe);
+    CloseHandle(agentPipe);
 
-    if (ERROR_SUCCESS == uResult)
-        CloseHandle(hProcess);
+    if (ERROR_SUCCESS == status)
+        CloseHandle(process);
 
-    return 0;
+    return ERROR_SUCCESS;
 }

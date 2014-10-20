@@ -1,75 +1,77 @@
 #include <windows.h>
 #include <stdio.h>
 
-#define SERVICE_NAME TEXT("QubesNetworkSetup")
+#define SERVICE_NAME L"QubesNetworkSetup"
 
-SERVICE_STATUS ServiceStatus;
-SERVICE_STATUS_HANDLE hStatus;
+SERVICE_STATUS g_serviceStatus;
+SERVICE_STATUS_HANDLE g_statusHandle;
 
-void  ServiceMain(int argc, WCHAR* argv[]);
-void  ControlHandler(DWORD request);
+void ServiceMain(IN int argc, IN WCHAR* argv[]);
+void ControlHandler(IN DWORD request);
 
 // from qubes-network-setup.c
-int qubes_setup_network(void);
+DWORD SetupNetwork(void);
 
-void service_main()
+DWORD ServiceStartup(void)
 {
-    SERVICE_TABLE_ENTRY ServiceTable[2];
-    ServiceTable[0].lpServiceName = SERVICE_NAME;
-    ServiceTable[0].lpServiceProc = (LPSERVICE_MAIN_FUNCTION) ServiceMain;
-    ServiceTable[1].lpServiceName = NULL;
-    ServiceTable[1].lpServiceProc = NULL;
+    SERVICE_TABLE_ENTRY serviceTable[2];
+    serviceTable[0].lpServiceName = SERVICE_NAME;
+    serviceTable[0].lpServiceProc = (LPSERVICE_MAIN_FUNCTION) ServiceMain;
+    serviceTable[1].lpServiceName = NULL;
+    serviceTable[1].lpServiceProc = NULL;
     // Start the control dispatcher thread for our service
-    StartServiceCtrlDispatcher(ServiceTable);
+    StartServiceCtrlDispatcher(serviceTable);
+    return GetLastError();
 }
 
-void ServiceMain(int argc, WCHAR* argv[])
+void ServiceMain(IN int argc, IN WCHAR* argv[])
 {
-    int error;
-    ServiceStatus.dwServiceType = SERVICE_WIN32;
-    ServiceStatus.dwCurrentState = SERVICE_START_PENDING;
-    ServiceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
-    ServiceStatus.dwWin32ExitCode = 0;
-    ServiceStatus.dwServiceSpecificExitCode = 0;
-    ServiceStatus.dwCheckPoint = 0;
-    ServiceStatus.dwWaitHint = 0;
-    hStatus = RegisterServiceCtrlHandler(
+    DWORD status;
+
+    g_serviceStatus.dwServiceType = SERVICE_WIN32;
+    g_serviceStatus.dwCurrentState = SERVICE_START_PENDING;
+    g_serviceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
+    g_serviceStatus.dwWin32ExitCode = 0;
+    g_serviceStatus.dwServiceSpecificExitCode = 0;
+    g_serviceStatus.dwCheckPoint = 0;
+    g_serviceStatus.dwWaitHint = 0;
+    g_statusHandle = RegisterServiceCtrlHandler(
         SERVICE_NAME,
         (LPHANDLER_FUNCTION) ControlHandler);
 
-    if (hStatus == (SERVICE_STATUS_HANDLE) 0)
+    if (g_statusHandle == (SERVICE_STATUS_HANDLE) 0)
     {
         // Registering Control Handler failed
         return;
     }
     // We report the running status to SCM.
-    ServiceStatus.dwCurrentState = SERVICE_RUNNING;
-    SetServiceStatus(hStatus, &ServiceStatus);
+    g_serviceStatus.dwCurrentState = SERVICE_RUNNING;
+    SetServiceStatus(g_statusHandle, &g_serviceStatus);
 
-    error = qubes_setup_network();
+    status = SetupNetwork();
 
     // Done
-    ServiceStatus.dwCurrentState = SERVICE_STOPPED;
-    ServiceStatus.dwWin32ExitCode = error;
-    SetServiceStatus(hStatus, &ServiceStatus);
+    g_serviceStatus.dwCurrentState = SERVICE_STOPPED;
+    g_serviceStatus.dwWin32ExitCode = status;
+    SetServiceStatus(g_statusHandle, &g_serviceStatus);
     return;
 }
 
 // Control handler function
-void ControlHandler(DWORD request)
+void ControlHandler(IN DWORD request)
 {
     switch (request)
     {
     case SERVICE_CONTROL_STOP:
     case SERVICE_CONTROL_SHUTDOWN:
-        ServiceStatus.dwWin32ExitCode = 0;
-        ServiceStatus.dwCurrentState = SERVICE_STOPPED;
-        SetServiceStatus(hStatus, &ServiceStatus);
+        g_serviceStatus.dwWin32ExitCode = 0;
+        g_serviceStatus.dwCurrentState = SERVICE_STOPPED;
+        SetServiceStatus(g_statusHandle, &g_serviceStatus);
         return;
     default:
         break;
     }
     // Report current status
-    SetServiceStatus(hStatus, &ServiceStatus);
+    SetServiceStatus(g_statusHandle, &g_serviceStatus);
     return;
 }

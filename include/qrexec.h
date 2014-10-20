@@ -66,29 +66,29 @@ struct trigger_connect_params
     struct connect_existing_params process_fds;
 };
 
-typedef struct
+typedef struct _IO_HANDLES
 {
-    HANDLE hPipeStdin;
-    HANDLE hPipeStdout;
-    HANDLE hPipeStderr;
-} IO_HANDLES_ARRAY, *PIO_HANDLES_ARRAY;
+    HANDLE StdinPipe;
+    HANDLE StdoutPipe;
+    HANDLE StderrPipe;
+} IO_HANDLES;
 
-enum
+typedef enum _CREATE_PROCESS_RESPONSE_TYPE
 {
     CPR_TYPE_NONE = 0,
     CPR_TYPE_HANDLE,
     CPR_TYPE_ERROR_CODE
-};
+} CREATE_PROCESS_RESPONSE_TYPE;
 
-typedef struct
+typedef struct _CREATE_PROCESS_RESPONSE
 {
-    UCHAR bType;
+    CREATE_PROCESS_RESPONSE_TYPE ResponseType;
     union
     {
-        HANDLE hProcess;
-        DWORD dwErrorCode;
+        HANDLE Process;
+        DWORD ErrorCode;
     } ResponseData;
-} CREATE_PROCESS_RESPONSE, *PCREATE_PROCESS_RESPONSE;
+} CREATE_PROCESS_RESPONSE;
 
 #define	ERROR_SET_LINUX		0x00
 #define	ERROR_SET_WINDOWS	0x01

@@ -145,7 +145,7 @@ ULONG DisconnectAndReconnect(ULONG i)
         CloseHandle(g_Pipes[i].hClientProcess);
     g_Pipes[i].hClientProcess = 0;
 
-    g_Pipes[i].CreateProcessResponse.bType = CPR_TYPE_NONE;
+    g_Pipes[i].CreateProcessResponse.ResponseType = CPR_TYPE_NONE;
 
     if (g_Pipes[i].ClientInfo.hWriteStdinPipe)
         CloseHandle(g_Pipes[i].ClientInfo.hWriteStdinPipe);
@@ -219,11 +219,11 @@ ULONG ConnectExisting(int client_id, HANDLE hClientProcess, CLIENT_INFO *pClient
 
     LogDebug("client_id %d: Got the params '%S', vm '%S'\n", client_id, pparams->exec_index, pparams->target_vmname);
 
-    if (CPR_TYPE_ERROR_CODE == pCpr->bType)
+    if (CPR_TYPE_ERROR_CODE == pCpr->ResponseType)
     {
-        LogWarning("client_id %d: Process creation failed, got the error code %d\n", client_id, pCpr->ResponseData.dwErrorCode);
+        LogWarning("client_id %d: Process creation failed, got the error code %d\n", client_id, pCpr->ResponseData.ErrorCode);
 
-        uResult = send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.dwErrorCode));
+        uResult = send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.ErrorCode));
         if (ERROR_SUCCESS != uResult)
             return perror2(uResult, "send_exit_code");
 
@@ -232,7 +232,7 @@ ULONG ConnectExisting(int client_id, HANDLE hClientProcess, CLIENT_INFO *pClient
 
     if (!DuplicateHandle(
         hClientProcess,
-        pCpr->ResponseData.hProcess,
+        pCpr->ResponseData.Process,
         GetCurrentProcess(),
         &pClientInfo->hProcess,
         0,
@@ -360,7 +360,7 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
     ULONG i;
     ULONG uResult;
     BOOL fSuccess;
-    IO_HANDLES_ARRAY LocalHandles;
+    IO_HANDLES LocalHandles;
     ULONG uClientProcessId;
     SECURITY_ATTRIBUTES sa;
     SECURITY_DESCRIPTOR *pPipeSecurityDescriptor;
@@ -536,9 +536,9 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
 
                 // Pending write operation
             case STATE_SENDING_IO_HANDLES:
-                if (IO_HANDLES_ARRAY_SIZE != cbRet)
+                if (IO_HANDLES_SIZE != cbRet)
                 {
-                    LogWarning("Could not send the handles array: sent %d bytes instead of %d\n", cbRet, IO_HANDLES_ARRAY_SIZE);
+                    LogWarning("Could not send the handles array: sent %d bytes instead of %d\n", cbRet, IO_HANDLES_SIZE);
                     DisconnectAndReconnect(i);
                     continue;
                 }
@@ -641,13 +641,13 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
 
         case STATE_SENDING_IO_HANDLES:
 
-            cbToWrite = IO_HANDLES_ARRAY_SIZE;
+            cbToWrite = IO_HANDLES_SIZE;
 
             uResult = CreateClientPipes(
                 &g_Pipes[i].ClientInfo,
-                &LocalHandles.hPipeStdin,
-                &LocalHandles.hPipeStdout,
-                &LocalHandles.hPipeStderr);
+                &LocalHandles.StdinPipe,
+                &LocalHandles.StdoutPipe,
+                &LocalHandles.StderrPipe);
 
             if (ERROR_SUCCESS != uResult)
             {
@@ -658,40 +658,40 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
 
             if (!DuplicateHandle(
                 GetCurrentProcess(),
-                LocalHandles.hPipeStdin,
+                LocalHandles.StdinPipe,
                 g_Pipes[i].hClientProcess,
-                &g_Pipes[i].RemoteHandles.hPipeStdin,
+                &g_Pipes[i].RemoteHandles.StdinPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
             {
                 perror("DuplicateHandle(stdin)");
-                CloseHandle(LocalHandles.hPipeStdout);
-                CloseHandle(LocalHandles.hPipeStderr);
+                CloseHandle(LocalHandles.StdoutPipe);
+                CloseHandle(LocalHandles.StderrPipe);
                 DisconnectAndReconnect(i);
                 continue;
             }
 
             if (!DuplicateHandle(
                 GetCurrentProcess(),
-                LocalHandles.hPipeStdout,
+                LocalHandles.StdoutPipe,
                 g_Pipes[i].hClientProcess,
-                &g_Pipes[i].RemoteHandles.hPipeStdout,
+                &g_Pipes[i].RemoteHandles.StdoutPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
             {
                 perror("DuplicateHandle(stdout)");
-                CloseHandle(LocalHandles.hPipeStderr);
+                CloseHandle(LocalHandles.StderrPipe);
                 DisconnectAndReconnect(i);
                 continue;
             }
 
             if (!DuplicateHandle(
                 GetCurrentProcess(),
-                LocalHandles.hPipeStderr,
+                LocalHandles.StderrPipe,
                 g_Pipes[i].hClientProcess,
-                &g_Pipes[i].RemoteHandles.hPipeStderr,
+                &g_Pipes[i].RemoteHandles.StderrPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
@@ -704,11 +704,11 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
             fSuccess = WriteFile(
                 g_Pipes[i].hPipeInst,
                 &g_Pipes[i].RemoteHandles,
-                IO_HANDLES_ARRAY_SIZE,
+                IO_HANDLES_SIZE,
                 &cbRet,
                 &g_Pipes[i].oOverlapped);
 
-            if (!fSuccess || IO_HANDLES_ARRAY_SIZE != cbRet)
+            if (!fSuccess || IO_HANDLES_SIZE != cbRet)
             {
                 // The write operation is still pending.
 
