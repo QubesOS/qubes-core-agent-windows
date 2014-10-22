@@ -1,29 +1,31 @@
 #include "service.h"
 
-HANDLE g_hStopServiceEvent;
+HANDLE g_StopServiceEvent;
 
-static HANDLE g_hServiceThread;
+static HANDLE g_ServiceThread;
 static SERVICE_STATUS g_ServiceStatus;
-static SERVICE_STATUS_HANDLE g_hServiceStatus;
+static SERVICE_STATUS_HANDLE g_ServiceStatusHandle;
 
-extern ULONG WINAPI ServiceExecutionThread(void *pParam);
-static void StopService();
+extern ULONG WINAPI ServiceExecutionThread(void *param);
+
+void StopService(void);
 
 ULONG UpdateServiceStatus(
-    DWORD dwCurrentState,
-    DWORD dwWin32ExitCode,
-    DWORD dwServiceSpecificExitCode,
-    DWORD dwWaitHint)
+    IN DWORD currentState,
+    IN DWORD win32ExitCode,
+    IN DWORD serviceSpecificExitCode,
+    IN DWORD waitHint
+    )
 {
-    ULONG uResult;
-    static DWORD dwCheckPoint = 1;
+    ULONG status;
+    static DWORD checkPoint = 1;
 
     g_ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
-    g_ServiceStatus.dwCurrentState = dwCurrentState;
-    g_ServiceStatus.dwServiceSpecificExitCode = dwServiceSpecificExitCode;
-    g_ServiceStatus.dwWaitHint = dwWaitHint;
+    g_ServiceStatus.dwCurrentState = currentState;
+    g_ServiceStatus.dwServiceSpecificExitCode = serviceSpecificExitCode;
+    g_ServiceStatus.dwWaitHint = waitHint;
 
-    if (SERVICE_START_PENDING == dwCurrentState)
+    if (SERVICE_START_PENDING == currentState)
     {
         g_ServiceStatus.dwControlsAccepted = 0;
     }
@@ -32,45 +34,44 @@ ULONG UpdateServiceStatus(
         g_ServiceStatus.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
     }
 
-    if ((SERVICE_RUNNING == dwCurrentState) || (SERVICE_STOPPED == dwCurrentState))
+    if ((SERVICE_RUNNING == currentState) || (SERVICE_STOPPED == currentState))
         g_ServiceStatus.dwCheckPoint = 0;
     else
-        g_ServiceStatus.dwCheckPoint = dwCheckPoint++;
+        g_ServiceStatus.dwCheckPoint = checkPoint++;
 
-    if (0 == dwServiceSpecificExitCode)
+    if (0 == serviceSpecificExitCode)
     {
-        g_ServiceStatus.dwWin32ExitCode = dwWin32ExitCode;
+        g_ServiceStatus.dwWin32ExitCode = win32ExitCode;
     }
     else
     {
         g_ServiceStatus.dwWin32ExitCode = ERROR_SERVICE_SPECIFIC_ERROR;
     }
 
-    if (!SetServiceStatus(g_hServiceStatus, &g_ServiceStatus))
+    if (!SetServiceStatus(g_ServiceStatusHandle, &g_ServiceStatus))
     {
-        uResult = GetLastError();
-        perror("SetServiceStatus");
+        status = perror("SetServiceStatus");
         StopService();
-        return uResult;
+        return status;
     }
 
     return ERROR_SUCCESS;
 }
 
-static void StopService()
+static void StopService(void)
 {
     LogDebug("Signaling the stop event\n");
 
-    SetEvent(g_hStopServiceEvent);
-    WaitForSingleObject(g_hServiceThread, INFINITE);
+    SetEvent(g_StopServiceEvent);
+    WaitForSingleObject(g_ServiceThread, INFINITE);
 
     if (SERVICE_STOPPED != g_ServiceStatus.dwCurrentState)
         UpdateServiceStatus(SERVICE_STOPPED, NO_ERROR, 0, 0);
 }
 
-static void WINAPI ServiceCtrlHandler(ULONG uControlCode)
+static void WINAPI ServiceCtrlHandler(IN ULONG controlCode)
 {
-    switch (uControlCode)
+    switch (controlCode)
     {
     case SERVICE_CONTROL_SHUTDOWN:
     case SERVICE_CONTROL_STOP:
@@ -84,128 +85,128 @@ static void WINAPI ServiceCtrlHandler(ULONG uControlCode)
     UpdateServiceStatus(g_ServiceStatus.dwCurrentState, NO_ERROR, 0, 0);
 }
 
-void WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
+void WINAPI ServiceMain(DWORD argc, WCHAR *argv[])
 {
-    ULONG uResult;
+    ULONG status;
 
     // Manual reset, initial state is not signaled
-    g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_hStopServiceEvent)
+    g_StopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_StopServiceEvent)
     {
         perror("CreateEvent");
         return;
     }
 
-    g_hServiceStatus = RegisterServiceCtrlHandler(SERVICE_NAME, (LPHANDLER_FUNCTION) ServiceCtrlHandler);
-    if (!g_hServiceStatus)
+    g_ServiceStatusHandle = RegisterServiceCtrlHandler(SERVICE_NAME, (LPHANDLER_FUNCTION) ServiceCtrlHandler);
+    if (!g_ServiceStatusHandle)
     {
         perror("RegisterServiceCtrlHandler");
-        CloseHandle(g_hStopServiceEvent);
+        CloseHandle(g_StopServiceEvent);
         return;
     }
 
-    uResult = UpdateServiceStatus(SERVICE_START_PENDING, NO_ERROR, 0, 500);
-    if (ERROR_SUCCESS != uResult)
+    status = UpdateServiceStatus(SERVICE_START_PENDING, NO_ERROR, 0, 500);
+    if (ERROR_SUCCESS != status)
     {
-        perror2(uResult, "UpdateServiceStatus");
-        CloseHandle(g_hStopServiceEvent);
+        perror2(status, "UpdateServiceStatus");
+        CloseHandle(g_StopServiceEvent);
         return;
     }
 
-    uResult = Init(&g_hServiceThread);
-    if (ERROR_SUCCESS != uResult)
+    status = Init(&g_ServiceThread);
+    if (ERROR_SUCCESS != status)
     {
-        CloseHandle(g_hStopServiceEvent);
-        UpdateServiceStatus(SERVICE_STOPPED, uResult, 0, 0);
-        perror2(uResult, "Init");
+        CloseHandle(g_StopServiceEvent);
+        UpdateServiceStatus(SERVICE_STOPPED, status, 0, 0);
+        perror2(status, "Init");
         return;
     }
 
     UpdateServiceStatus(SERVICE_RUNNING, NO_ERROR, 0, 0);
 
-    WaitForSingleObject(g_hServiceThread, INFINITE);
+    WaitForSingleObject(g_ServiceThread, INFINITE);
     UpdateServiceStatus(SERVICE_STOPPED, NO_ERROR, 0, 0);
 
-    CloseHandle(g_hServiceThread);
-    CloseHandle(g_hStopServiceEvent);
+    CloseHandle(g_ServiceThread);
+    CloseHandle(g_StopServiceEvent);
 }
 
-ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrentState, DWORD *pdwExitCode)
+static ULONG WaitForService(IN DWORD pendingState, IN DWORD wantedState, IN HANDLE service, OUT DWORD *currentState, OUT DWORD *exitCode)
 {
-    SERVICE_STATUS_PROCESS ServiceStatus;
-    DWORD dwBytesNeeded;
-    DWORD dwStartTickCount;
-    DWORD dwOldCheckPoint;
-    DWORD dwWaitTime;
+    SERVICE_STATUS_PROCESS serviceStatus;
+    DWORD bytesNeeded;
+    DWORD startTickCount;
+    DWORD oldCheckPoint;
+    DWORD waitTime;
 
-    if (!pdwCurrentState || !pdwExitCode)
+    if (!currentState || !exitCode)
         return ERROR_INVALID_PARAMETER;
 
     // Check the status until the service is no longer start pending.
 
     if (!QueryServiceStatusEx(
-        hService, // handle to service
+        service, // handle to service
         SC_STATUS_PROCESS_INFO, // info level
-        (BYTE *) &ServiceStatus, // address of structure
-        sizeof(SERVICE_STATUS_PROCESS), // size of structure
-        &dwBytesNeeded))
+        (BYTE *) &serviceStatus, // address of structure
+        sizeof(serviceStatus), // size of structure
+        &bytesNeeded))
     {
         return perror("QueryServiceStatusEx");
     }
 
-    if (dwWantedState == ServiceStatus.dwCurrentState)
+    if (wantedState == serviceStatus.dwCurrentState)
     {
-        *pdwCurrentState = ServiceStatus.dwCurrentState;
-        *pdwExitCode = ServiceStatus.dwWin32ExitCode;
+        *currentState = serviceStatus.dwCurrentState;
+        *exitCode = serviceStatus.dwWin32ExitCode;
         return ERROR_SUCCESS;
     }
 
     // Save the tick count and initial checkpoint.
 #pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
     // omeg: ^ what if the machine is suspended mid-execution? :P
-    dwStartTickCount = GetTickCount();
-    dwOldCheckPoint = ServiceStatus.dwCheckPoint;
+    startTickCount = GetTickCount();
+    oldCheckPoint = serviceStatus.dwCheckPoint;
 
-    while (dwPendingState == ServiceStatus.dwCurrentState)
+    while (pendingState == serviceStatus.dwCurrentState)
     {
         // Do not wait longer than the wait hint. A good interval is
         // one-tenth the wait hint, but no less than 1 second and no
         // more than 10 seconds.
 
-        dwWaitTime = ServiceStatus.dwWaitHint / 10;
+        waitTime = serviceStatus.dwWaitHint / 10;
 
-        if (dwWaitTime < 1000)
-            dwWaitTime = 1000;
+        if (waitTime < 1000)
+            waitTime = 1000;
         else
-            if (dwWaitTime > 10000)
-                dwWaitTime = 10000;
+            if (waitTime > 10000)
+                waitTime = 10000;
 
-        Sleep(dwWaitTime);
+        Sleep(waitTime);
 
         // Check the status again.
 
         if (!QueryServiceStatusEx(
-            hService,
+            service,
             SC_STATUS_PROCESS_INFO,
-            (BYTE *) &ServiceStatus,
+            (BYTE *) &serviceStatus,
             sizeof(SERVICE_STATUS_PROCESS),
-            &dwBytesNeeded))
+            &bytesNeeded))
         {
             perror("QueryServiceStatusEx");
             break;
         }
 
-        if (ServiceStatus.dwCheckPoint > dwOldCheckPoint)
+        if (serviceStatus.dwCheckPoint > oldCheckPoint)
         {
             // Continue to wait and check.
 #pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
-            dwStartTickCount = GetTickCount();
-            dwOldCheckPoint = ServiceStatus.dwCheckPoint;
+            startTickCount = GetTickCount();
+            oldCheckPoint = serviceStatus.dwCheckPoint;
         }
         else
         {
 #pragma prefast(suppress:28159, "This routine will not run for longer than 10 seconds")
-            if (GetTickCount() - dwStartTickCount > ServiceStatus.dwWaitHint)
+            if (GetTickCount() - startTickCount > serviceStatus.dwWaitHint)
             {
                 // No progress made within the wait hint.
                 break;
@@ -213,72 +214,72 @@ ULONG WaitForService(DWORD dwPendingState, DWORD dwWantedState, HANDLE hService,
         }
     }
 
-    *pdwCurrentState = ServiceStatus.dwCurrentState;
-    *pdwExitCode = ServiceStatus.dwWin32ExitCode;
+    *currentState = serviceStatus.dwCurrentState;
+    *exitCode = serviceStatus.dwWin32ExitCode;
 
     return ERROR_SUCCESS;
 }
 
-ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrentState, DWORD *pdwExitCode, BOOLEAN *pbNothingToDo)
+static ULONG ChangeServiceState(IN DWORD wantedState, IN HANDLE service, OUT DWORD *currentState, OUT DWORD *exitCode, OUT BOOL *nothingToDo OPTIONAL)
 {
-    SERVICE_STATUS Status;
-    SERVICE_STATUS_PROCESS ServiceStatus;
-    DWORD dwBytesNeeded;
-    DWORD dwPendingState;
+    SERVICE_STATUS status;
+    SERVICE_STATUS_PROCESS statusProcess;
+    DWORD bytesNeeded;
+    DWORD pendingState;
 
-    if (!pdwCurrentState || !pdwExitCode)
+    if (!currentState || !exitCode)
         return ERROR_INVALID_PARAMETER;
 
-    if (SERVICE_RUNNING != dwWantedState && SERVICE_STOPPED != dwWantedState)
+    if (SERVICE_RUNNING != wantedState && SERVICE_STOPPED != wantedState)
         return ERROR_INVALID_PARAMETER;
 
     if (!QueryServiceStatusEx(
-        hService, // handle to service
+        service, // handle to service
         SC_STATUS_PROCESS_INFO, // info level
-        (LPBYTE) &ServiceStatus, // address of structure
+        (LPBYTE) &statusProcess, // address of structure
         sizeof(SERVICE_STATUS_PROCESS), // size of structure
-        &dwBytesNeeded))
+        &bytesNeeded))
     {
         return perror("QueryServiceStatusEx");
     }
 
-    if (dwWantedState == ServiceStatus.dwCurrentState)
+    if (wantedState == statusProcess.dwCurrentState)
     {
-        if (pbNothingToDo)
-            *pbNothingToDo = TRUE;
-        *pdwCurrentState = ServiceStatus.dwCurrentState;
-        *pdwExitCode = ServiceStatus.dwWin32ExitCode;
+        if (nothingToDo)
+            *nothingToDo = TRUE;
+        *currentState = statusProcess.dwCurrentState;
+        *exitCode = statusProcess.dwWin32ExitCode;
         return ERROR_SUCCESS;
     }
 
-    if (pbNothingToDo)
-        *pbNothingToDo = TRUE;
+    if (nothingToDo)
+        *nothingToDo = TRUE;
 
-    switch (dwWantedState)
+    switch (wantedState)
     {
     case SERVICE_RUNNING:
-        dwPendingState = SERVICE_START_PENDING;
+        pendingState = SERVICE_START_PENDING;
 
-        if (dwPendingState == ServiceStatus.dwCurrentState)
+        if (pendingState == statusProcess.dwCurrentState)
             LogWarning("Service is being started already...\n");
         else
         {
             LogInfo("Starting the service...\n");
-            if (!StartService(hService, 0, NULL))
+            if (!StartService(service, 0, NULL))
             {
                 return perror("StartService");
             }
         }
         break;
     case SERVICE_STOPPED:
-        dwPendingState = SERVICE_STOP_PENDING;
+        pendingState = SERVICE_STOP_PENDING;
 
-        if (dwPendingState == ServiceStatus.dwCurrentState)
+        if (pendingState == statusProcess.dwCurrentState)
             LogWarning("ChangeServiceState(): Service is being stopped already...\n");
         else
         {
             LogInfo("Stopping the service...\n");
-            if (!ControlService(hService, SERVICE_CONTROL_STOP, &Status))
+            if (!ControlService(service, SERVICE_CONTROL_STOP, &status))
             {
                 return perror("ControlService");
             }
@@ -286,132 +287,111 @@ ULONG ChangeServiceState(DWORD dwWantedState, HANDLE hService, DWORD *pdwCurrent
         break;
     }
 
-    return WaitForService(dwPendingState, dwWantedState, hService, pdwCurrentState, pdwExitCode);
+    return WaitForService(pendingState, wantedState, service, currentState, exitCode);
 }
 
-ULONG InstallService(TCHAR *pszServiceFileName, TCHAR *pszServiceName)
+ULONG InstallService(IN const WCHAR *executablePath, IN const WCHAR *serviceName)
 {
-    SC_HANDLE hService;
-    SC_HANDLE hScm;
-    ULONG uResult;
+    SC_HANDLE service;
+    SC_HANDLE scm;
+    ULONG status;
 
-    if (!pszServiceFileName || !pszServiceName)
+    if (!executablePath || !serviceName)
         return ERROR_INVALID_PARAMETER;
 
-    hScm = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
-    if (!hScm)
+    scm = OpenSCManager(NULL, NULL, SC_MANAGER_CREATE_SERVICE);
+    if (!scm)
     {
         return perror("OpenSCManager");
     }
 
-    hService = CreateService(
-        hScm,
-        pszServiceName,
-        pszServiceName,
+    service = CreateService(
+        scm,
+        serviceName,
+        serviceName,
         SERVICE_ALL_ACCESS,
         SERVICE_WIN32_OWN_PROCESS,
         SERVICE_AUTO_START,
         SERVICE_ERROR_NORMAL,
-        pszServiceFileName,
+        executablePath,
         NULL,
         NULL,
         NULL,
         NULL,
         NULL);
 
-    if (!hService)
+    if (!service)
     {
-        uResult = GetLastError();
-        perror2(uResult, "CreateService");
-        CloseServiceHandle(hScm);
-        return uResult;
+        status = GetLastError();
+        perror2(status, "CreateService");
+        CloseServiceHandle(scm);
+        return status;
     }
 
     LogInfo("Service installed\n");
 
-#ifdef START_SERVICE_AFTER_INSTALLATION
-    uResult = ChangeServiceState(SERVICE_RUNNING, hService, &dwCurrentState, &dwExitCode, NULL);
-    if (ERROR_SUCCESS != uResult) {
-        perror2(uResult, "ChangeServiceState");
-        CloseServiceHandle(hService);
-        CloseServiceHandle(hScm);
-        return uResult;
-    }
-
-    if (SERVICE_RUNNING != dwCurrentState) {
-        if (SERVICE_STOPPED == dwCurrentState)
-            perror2(dwExitCode, "Service start failed");
-        else
-            LogWarning("Service is not running, current state is %d\n", dwCurrentState);
-}
-    else
-        LogInfo("Service is running\n");
-#endif
-
-    CloseServiceHandle(hService);
-    CloseServiceHandle(hScm);
+    CloseServiceHandle(service);
+    CloseServiceHandle(scm);
 
     return ERROR_SUCCESS;
 }
 
-ULONG UninstallService(TCHAR *pszServiceName)
+ULONG UninstallService(IN const WCHAR *serviceName)
 {
-    SC_HANDLE hService;
-    SC_HANDLE hScm;
-    ULONG uResult;
-    DWORD dwCurrentState;
-    DWORD dwExitCode;
-    BOOLEAN bNothingToDo;
+    SC_HANDLE service;
+    SC_HANDLE scm;
+    ULONG status;
+    DWORD currentState;
+    DWORD exitCode;
+    BOOL nothingToDo;
 
-    if (!pszServiceName)
+    if (!serviceName)
         return ERROR_INVALID_PARAMETER;
 
-    hScm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    if (!hScm)
+    scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (!scm)
     {
         return perror("OpenSCManager");
     }
 
-    hService = OpenService(hScm, pszServiceName, SERVICE_STOP | SERVICE_QUERY_STATUS | DELETE);
-    if (!hService)
+    service = OpenService(scm, serviceName, SERVICE_STOP | SERVICE_QUERY_STATUS | DELETE);
+    if (!service)
     {
-        uResult = GetLastError();
-        perror2(uResult, "OpenService");
-        CloseServiceHandle(hScm);
-        return uResult;
+        status = perror("OpenService");
+        CloseServiceHandle(scm);
+        return status;
     }
 
-    uResult = ChangeServiceState(SERVICE_STOPPED, hService, &dwCurrentState, &dwExitCode, &bNothingToDo);
-    if (ERROR_SUCCESS != uResult)
-        perror2(uResult, "ChangeServiceState");
+    status = ChangeServiceState(SERVICE_STOPPED, service, &currentState, &exitCode, &nothingToDo);
+    if (ERROR_SUCCESS != status)
+        perror2(status, "ChangeServiceState");
     else
     {
-        if (!bNothingToDo)
+        if (!nothingToDo)
         {
-            if (SERVICE_STOPPED == dwCurrentState)
+            if (SERVICE_STOPPED == currentState)
             {
-                if (ERROR_SUCCESS != dwExitCode)
-                    perror2(dwExitCode, "Service");
+                if (ERROR_SUCCESS != exitCode)
+                    perror2(exitCode, "Service");
                 else
                     LogInfo("Service stopped\n");
             }
             else
-                LogWarning("Failed to stop the service, current state is %d\n", dwCurrentState);
+                LogWarning("Failed to stop the service, current state is %d\n", currentState);
         }
     }
 
-    if (!DeleteService(hService))
+    if (!DeleteService(service))
     {
-        uResult = GetLastError();
-        perror2(uResult, "DeleteService");
+        status = perror("DeleteService");
 
-        CloseServiceHandle(hService);
-        CloseServiceHandle(hScm);
-        return uResult;
+        CloseServiceHandle(service);
+        CloseServiceHandle(scm);
+        return status;
     }
 
-    CloseServiceHandle(hService);
-    CloseServiceHandle(hScm);
+    CloseServiceHandle(service);
+    CloseServiceHandle(scm);
 
     LogInfo("Service uninstalled\n");
     return ERROR_SUCCESS;

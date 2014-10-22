@@ -20,68 +20,63 @@
  */
 
 #include <windows.h>
-#include "libvchan.h"
 #include <stdlib.h>
 
-struct libvchan *ctrl;
+#include "libvchan.h"
 
-int write_all_vchan_ext(void *buf, int size)
+struct libvchan *g_Vchan;
+
+int VchanSendBuffer(IN const void *buffer, IN int size)
 {
     int written = 0;
-    int ret;
+    int status;
 
-    if (!ctrl)
+    if (!g_Vchan)
         return -1;
 
     while (written < size)
     {
-        ret =
-            libvchan_write(ctrl, (char *) buf + written,
-            size - written);
-        if (ret <= 0)
-            return ret;
+        status = libvchan_write(g_Vchan, (char *) buffer + written, size - written);
+        if (status <= 0)
+            return status;
 
-        written += ret;
+        written += status;
     }
 
-    //      fprintf(stderr, "sent %d bytes\n", size);
     return size;
 }
 
-int read_all_vchan_ext(void *buf, int size)
+int VchanReceiveBuffer(OUT void *buffer, IN int size)
 {
     int written = 0;
-    int ret;
+    int status;
 
     while (written < size)
     {
-        ret =
-            libvchan_read(ctrl, (char *) buf + written,
-            size - written);
-        if (ret <= 0)
-            return ret;
+        status = libvchan_read(g_Vchan, (char *) buffer + written, size - written);
+        if (status <= 0)
+            return status;
 
-        written += ret;
+        written += status;
     }
-    //      fprintf(stderr, "read %d bytes\n", size);
     return size;
 }
 
-int read_ready_vchan_ext()
+int VchanGetReadBufferSize(void)
 {
-    return libvchan_data_ready(ctrl);
+    return libvchan_data_ready(g_Vchan);
 }
 
-int buffer_space_vchan_ext()
+int VchanGetWriteBufferSize(void)
 {
-    return libvchan_buffer_space(ctrl);
+    return libvchan_buffer_space(g_Vchan);
 }
 
-int peer_server_init(int port)
+BOOL VchanInitServer(IN int port)
 {
-    ctrl = libvchan_server_init(port);
-    if (!ctrl)
-        return 1;
+    g_Vchan = libvchan_server_init(port);
+    if (!g_Vchan)
+        return FALSE;
 
-    return 0;
+    return TRUE;
 }

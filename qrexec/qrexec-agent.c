@@ -2,287 +2,280 @@
 #include <Shlwapi.h>
 #include "utf8-conv.h"
 
-HANDLE g_hAddExistingClientEvent;
+HANDLE g_AddExistingClientEvent;
 
 CLIENT_INFO g_Clients[MAX_CLIENTS];
 HANDLE g_WatchedEvents[MAXIMUM_WAIT_OBJECTS];
 HANDLE_INFO	g_HandlesInfo[MAXIMUM_WAIT_OBJECTS];
 
-ULONG64	g_uPipeId = 0;
+ULONG64	g_PipeId = 0;
 
 CRITICAL_SECTION g_ClientsCriticalSection;
 CRITICAL_SECTION g_VchanCriticalSection;
 
-extern HANDLE g_hStopServiceEvent;
+extern HANDLE g_StopServiceEvent;
 #ifndef BUILD_AS_SERVICE
-HANDLE g_hCleanupFinishedEvent;
+HANDLE g_CleanupFinishedEvent;
 #endif
 
 // from advertise_tools.c
-LONG advertise_tools();
+ULONG AdvertiseTools(void);
 
-ULONG CreateAsyncPipe(HANDLE *phReadPipe, HANDLE *phWritePipe, SECURITY_ATTRIBUTES *pSecurityAttributes)
+static ULONG CreateAsyncPipe(OUT HANDLE *readPipe, OUT HANDLE *writePipe, IN SECURITY_ATTRIBUTES *securityAttributes)
 {
-    TCHAR szPipeName[MAX_PATH + 1];
-    HANDLE hReadPipe;
-    HANDLE hWritePipe;
-    ULONG uResult;
+    WCHAR pipeName[MAX_PATH + 1];
+    ULONG status;
 
-    if (!phReadPipe || !phWritePipe)
+    if (!readPipe || !writePipe)
         return ERROR_INVALID_PARAMETER;
 
-    StringCchPrintf(szPipeName, MAX_PATH, TEXT("\\\\.\\pipe\\qrexec.%08x.%I64x"), GetCurrentProcessId(), g_uPipeId++);
+    StringCchPrintf(pipeName, MAX_PATH, L"\\\\.\\pipe\\qrexec.%08x.%I64x", GetCurrentProcessId(), g_PipeId++);
 
-    hReadPipe = CreateNamedPipe(
-        szPipeName,
+    *readPipe = CreateNamedPipe(
+        pipeName,
         PIPE_ACCESS_INBOUND | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE,
         1,
         4096,
         4096,
         50,	// the default timeout is 50ms
-        pSecurityAttributes);
+        securityAttributes);
 
-    if (!hReadPipe)
+    if (*readPipe == NULL)
     {
         return perror("CreateNamedPipe");
     }
 
-    hWritePipe = CreateFile(
-        szPipeName,
+    *writePipe = CreateFile(
+        pipeName,
         GENERIC_WRITE,
         0,
-        pSecurityAttributes,
+        securityAttributes,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
         NULL);
 
-    if (INVALID_HANDLE_VALUE == hWritePipe)
+    if (INVALID_HANDLE_VALUE == *writePipe)
     {
-        uResult = perror("CreateFile");
-        CloseHandle(hReadPipe);
-        return uResult;
+        status = perror("CreateFile");
+        CloseHandle(*readPipe);
+        return status;
     }
-
-    *phReadPipe = hReadPipe;
-    *phWritePipe = hWritePipe;
 
     return ERROR_SUCCESS;
 }
 
-ULONG InitReadPipe(PIPE_DATA *pPipeData, HANDLE *phWritePipe, UCHAR bPipeType)
+static ULONG InitReadPipe(OUT PIPE_DATA *pipeData, OUT HANDLE *writePipe, IN PIPE_TYPE pipeType)
 {
-    SECURITY_ATTRIBUTES sa;
-    ULONG uResult;
+    SECURITY_ATTRIBUTES sa = { 0 };
+    ULONG status;
 
-    memset(pPipeData, 0, sizeof(PIPE_DATA));
-    memset(&sa, 0, sizeof(sa));
+    ZeroMemory(pipeData, sizeof(*pipeData));
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
     sa.lpSecurityDescriptor = NULL;
 
-    if (!pPipeData || !phWritePipe)
+    if (!pipeData || !writePipe)
         return ERROR_INVALID_PARAMETER;
 
-    pPipeData->olRead.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!pPipeData->olRead.hEvent)
+    pipeData->ReadState.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!pipeData->ReadState.hEvent)
         return GetLastError();
 
-    uResult = CreateAsyncPipe(&pPipeData->hReadPipe, phWritePipe, &sa);
-    if (ERROR_SUCCESS != uResult)
+    status = CreateAsyncPipe(&pipeData->ReadPipe, writePipe, &sa);
+    if (ERROR_SUCCESS != status)
     {
-        CloseHandle(pPipeData->olRead.hEvent);
-        return perror2(uResult, "CreateAsyncPipe");
+        CloseHandle(pipeData->ReadState.hEvent);
+        return perror2(status, "CreateAsyncPipe");
     }
 
     // Ensure the read handle to the pipe is not inherited.
-    SetHandleInformation(pPipeData->hReadPipe, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(pipeData->ReadPipe, HANDLE_FLAG_INHERIT, 0);
 
-    pPipeData->bPipeType = bPipeType;
+    pipeData->PipeType = pipeType;
 
     return ERROR_SUCCESS;
 }
 
-ULONG ReturnData(int client_id, int type, void *pData, ULONG uDataSize, ULONG *puDataWritten)
+ULONG SendMessageToDaemon(IN ULONG clientId, IN UINT messageType, IN const void *data, IN ULONG cbData, OUT ULONG *cbWritten)
 {
-    struct server_header s_hdr;
-    unsigned int vchan_space_avail;
-    ULONG uResult = ERROR_SUCCESS;
+    struct server_header serverHeader;
+    int vchanFreeSpace;
+    ULONG status = ERROR_SUCCESS;
 
     EnterCriticalSection(&g_VchanCriticalSection);
 
-    if (puDataWritten)
+    if (cbWritten)
     {
         // allow partial write only when puDataWritten given
-        *puDataWritten = 0;
-        vchan_space_avail = buffer_space_vchan_ext();
-        if (vchan_space_avail < sizeof(s_hdr))
+        *cbWritten = 0;
+        vchanFreeSpace = VchanGetWriteBufferSize();
+        if (vchanFreeSpace < sizeof(serverHeader))
         {
             LeaveCriticalSection(&g_VchanCriticalSection);
             return ERROR_INSUFFICIENT_BUFFER;
         }
         // inhibit zero-length write when not requested
-        if (uDataSize && vchan_space_avail == sizeof(s_hdr))
+        if (cbData && vchanFreeSpace == sizeof(serverHeader))
         {
             LeaveCriticalSection(&g_VchanCriticalSection);
             return ERROR_INSUFFICIENT_BUFFER;
         }
 
-        if (vchan_space_avail < sizeof(s_hdr) + uDataSize)
+        if (vchanFreeSpace < sizeof(serverHeader) + cbData)
         {
-            uResult = ERROR_INSUFFICIENT_BUFFER;
-            uDataSize = vchan_space_avail - sizeof(s_hdr);
+            status = ERROR_INSUFFICIENT_BUFFER;
+            cbData = vchanFreeSpace - sizeof(serverHeader);
         }
 
-        *puDataWritten = uDataSize;
+        *cbWritten = cbData;
     }
 
-    s_hdr.type = type;
-    s_hdr.client_id = client_id;
-    s_hdr.len = uDataSize;
-    if (write_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0)
+    serverHeader.type = messageType;
+    serverHeader.client_id = clientId;
+    serverHeader.len = cbData;
+    if (VchanSendBuffer(&serverHeader, sizeof serverHeader) <= 0)
     {
         LogError("write_all_vchan_ext(s_hdr)");
         LeaveCriticalSection(&g_VchanCriticalSection);
         return ERROR_INVALID_FUNCTION;
     }
 
-    if (!uDataSize)
+    if (!cbData)
     {
         LeaveCriticalSection(&g_VchanCriticalSection);
         return ERROR_SUCCESS;
     }
 
-    if (write_all_vchan_ext(pData, uDataSize) <= 0)
+    if (VchanSendBuffer(data, cbData) <= 0)
     {
-        LogError("write_all_vchan_ext(data, %d)", uDataSize);
+        LogError("write_all_vchan_ext(data, %d)", cbData);
         LeaveCriticalSection(&g_VchanCriticalSection);
         return ERROR_INVALID_FUNCTION;
     }
 
     LeaveCriticalSection(&g_VchanCriticalSection);
-    return uResult;
+    return status;
 }
 
-ULONG send_exit_code(int client_id, int status)
+ULONG SendExitCode(IN ULONG clientId, IN int exitCode)
 {
-    ULONG uResult;
+    ULONG status;
 
-    uResult = ReturnData(client_id, MSG_AGENT_TO_SERVER_EXIT_CODE, &status, sizeof(status), NULL);
-    if (ERROR_SUCCESS != uResult)
+    status = SendMessageToDaemon(clientId, MSG_AGENT_TO_SERVER_EXIT_CODE, &exitCode, sizeof(exitCode), NULL);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ReturnData");
+        return perror2(status, "ReturnData");
     }
     else
-        LogDebug("Send exit code %d for client_id %d\n", status, client_id);
+        LogDebug("Send exit code %d for client_id %d\n", exitCode, clientId);
 
     return ERROR_SUCCESS;
 }
 
-CLIENT_INFO *FindClientById(int client_id)
+static CLIENT_INFO *FindClientById(IN ULONG clientId)
 {
-    ULONG uClientNumber;
+    ULONG clientIndex;
 
-    for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-        if (client_id == g_Clients[uClientNumber].client_id)
-            return &g_Clients[uClientNumber];
+    for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
+        if (clientId == g_Clients[clientIndex].ClientId)
+            return &g_Clients[clientIndex];
 
     return NULL;
 }
 
-ULONG ReturnPipeData(int client_id, PIPE_DATA *pPipeData)
+static ULONG SendDataToDaemon(IN ULONG clientId, IN OUT PIPE_DATA *data)
 {
-    DWORD dwRead;
-    int	message_type;
-    CLIENT_INFO *pClientInfo;
-    ULONG uResult;
-    ULONG uDataSent;
+    DWORD cbRead, cbSent;
+    UINT messageType;
+    CLIENT_INFO *clientInfo;
+    ULONG status;
 
-    uResult = ERROR_SUCCESS;
+    status = ERROR_SUCCESS;
 
-    if (!pPipeData)
+    if (!data)
         return ERROR_INVALID_PARAMETER;
 
-    pClientInfo = FindClientById(client_id);
-    if (!pClientInfo)
+    clientInfo = FindClientById(clientId);
+    if (!clientInfo)
         return ERROR_NOT_FOUND;
 
-    if (pClientInfo->bReadingIsDisabled)
+    if (clientInfo->ReadingDisabled)
         // The client does not want to receive any data from this console.
         return ERROR_INVALID_FUNCTION;
 
-    pPipeData->bReadInProgress = FALSE;
-    pPipeData->bDataIsReady = FALSE;
+    data->ReadInProgress = FALSE;
+    data->DataIsReady = FALSE;
 
-    switch (pPipeData->bPipeType)
+    switch (data->PipeType)
     {
     case PTYPE_STDOUT:
-        message_type = MSG_AGENT_TO_SERVER_STDOUT;
+        messageType = MSG_AGENT_TO_SERVER_STDOUT;
         break;
     case PTYPE_STDERR:
-        message_type = MSG_AGENT_TO_SERVER_STDERR;
+        messageType = MSG_AGENT_TO_SERVER_STDERR;
         break;
     default:
         return ERROR_INVALID_FUNCTION;
     }
 
-    dwRead = 0;
-    if (!GetOverlappedResult(pPipeData->hReadPipe, &pPipeData->olRead, &dwRead, FALSE))
+    cbRead = 0;
+    if (!GetOverlappedResult(data->ReadPipe, &data->ReadState, &cbRead, FALSE))
     {
         perror("GetOverlappedResult");
-        LogError("client %d, dwRead %d", client_id, dwRead);
+        LogError("client %d, dwRead %d", clientId, cbRead);
     }
 
-    uResult = ReturnData(client_id, message_type, pPipeData->ReadBuffer + pPipeData->dwSentBytes, dwRead - pPipeData->dwSentBytes, &uDataSent);
-    if (ERROR_INSUFFICIENT_BUFFER == uResult)
+    status = SendMessageToDaemon(clientId, messageType, data->ReadBuffer + data->cbSentBytes, cbRead - data->cbSentBytes, &cbSent);
+    if (ERROR_INSUFFICIENT_BUFFER == status)
     {
-        pPipeData->dwSentBytes += uDataSent;
-        pPipeData->bVchanWritePending = TRUE;
-        return uResult;
+        data->cbSentBytes += cbSent;
+        data->VchanWritePending = TRUE;
+        return status;
     }
-    else if (ERROR_SUCCESS != uResult)
-        perror2(uResult, "ReturnData");
+    else if (ERROR_SUCCESS != status)
+        perror2(status, "SendMessageToDaemon");
 
-    pPipeData->bVchanWritePending = FALSE;
+    data->VchanWritePending = FALSE;
 
-    if (!dwRead)
+    if (!cbRead)
     {
-        pPipeData->bPipeClosed = TRUE;
-        uResult = ERROR_HANDLE_EOF;
+        data->PipeClosed = TRUE;
+        status = ERROR_HANDLE_EOF;
     }
 
-    return uResult;
+    return status;
 }
 
-ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
+ULONG CloseReadPipeHandles(IN ULONG clientId, IN OUT PIPE_DATA *data)
 {
-    ULONG uResult;
+    ULONG status;
 
-    if (!pPipeData)
+    if (!data)
         return ERROR_INVALID_PARAMETER;
 
-    uResult = ERROR_SUCCESS;
+    status = ERROR_SUCCESS;
 
-    if (pPipeData->olRead.hEvent)
+    if (data->ReadState.hEvent)
     {
-        if (pPipeData->bDataIsReady)
-            ReturnPipeData(client_id, pPipeData);
+        if (data->DataIsReady)
+            SendDataToDaemon(clientId, data);
 
         // ReturnPipeData() clears both bDataIsReady and bReadInProgress, but they cannot be ever set to a non-FALSE value at the same time.
         // So, if the above ReturnPipeData() has been executed (bDataIsReady was not FALSE), then bReadInProgress was FALSE
         // and this branch wouldn't be executed anyways.
-        if (pPipeData->bReadInProgress)
+        if (data->ReadInProgress)
         {
             // If bReadInProgress is not FALSE then hReadPipe must be a valid handle for which an
             // asynchornous read has been issued.
-            if (CancelIo(pPipeData->hReadPipe))
+            if (CancelIo(data->ReadPipe))
             {
                 // Must wait for the canceled IO to complete, otherwise a race condition may occur on the
                 // OVERLAPPED structure.
-                WaitForSingleObject(pPipeData->olRead.hEvent, INFINITE);
+                WaitForSingleObject(data->ReadState.hEvent, INFINITE);
 
                 // See if there is something to return.
-                ReturnPipeData(client_id, pPipeData);
+                SendDataToDaemon(clientId, data);
             }
             else
             {
@@ -290,66 +283,65 @@ ULONG CloseReadPipeHandles(int client_id, PIPE_DATA *pPipeData)
             }
         }
 
-        CloseHandle(pPipeData->olRead.hEvent);
+        CloseHandle(data->ReadState.hEvent);
     }
 
-    if (pPipeData->hReadPipe)
+    if (data->ReadPipe)
         // Can close the pipe only when there is no pending IO in progress.
-        CloseHandle(pPipeData->hReadPipe);
+        CloseHandle(data->ReadPipe);
 
-    return uResult;
+    return status;
 }
 
-ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, WCHAR **ppwszUtf16)
+static ULONG Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf8, OUT WCHAR **stringUtf16)
 {
     size_t cbSkipChars = 0;
-    WCHAR *pwszUtf16 = NULL;
-    ULONG uResult;
-    HRESULT hResult;
+    WCHAR *bufferUtf16 = NULL;
+    ULONG status;
+    HRESULT hresult;
 
-    if (!pszBuf || !cbBufLen || !ppwszUtf16)
+    if (!stringUtf8 || !cbStringUtf8 || !stringUtf16)
         return ERROR_INVALID_PARAMETER;
 
-    *ppwszUtf16 = NULL;
+    *stringUtf16 = NULL;
 
-    // see http://en.wikipedia.org/wiki/Byte-order_mark for explaination of the BOM
-    // encoding
-    if (cbBufLen >= 3 && pszBuf[0] == 0xEF && pszBuf[1] == 0xBB && pszBuf[2] == 0xBF)
+    // see http://en.wikipedia.org/wiki/Byte-order_mark for explaination of the BOM encoding
+    if (cbStringUtf8 >= 3 && stringUtf8[0] == 0xEF && stringUtf8[1] == 0xBB && stringUtf8[2] == 0xBF)
     {
         // UTF-8
         cbSkipChars = 3;
     }
-    else if (cbBufLen >= 2 && pszBuf[0] == 0xFE && pszBuf[1] == 0xFF)
+    else if (cbStringUtf8 >= 2 && stringUtf8[0] == 0xFE && stringUtf8[1] == 0xFF)
     {
         // UTF-16BE
         return ERROR_NOT_SUPPORTED;
     }
-    else if (cbBufLen >= 2 && pszBuf[0] == 0xFF && pszBuf[1] == 0xFE)
+    else if (cbStringUtf8 >= 2 && stringUtf8[0] == 0xFF && stringUtf8[1] == 0xFE)
     {
         // UTF-16LE
         cbSkipChars = 2;
 
-        pwszUtf16 = malloc(cbBufLen - cbSkipChars + sizeof(WCHAR));
-        if (!pwszUtf16)
+        bufferUtf16 = malloc(cbStringUtf8 - cbSkipChars + sizeof(WCHAR));
+        if (!bufferUtf16)
             return ERROR_NOT_ENOUGH_MEMORY;
 
-        hResult = StringCbCopyW(pwszUtf16, cbBufLen - cbSkipChars + sizeof(WCHAR), (STRSAFE_LPCWSTR) (pszBuf + cbSkipChars));
-        if (FAILED(hResult))
+        hresult = StringCbCopyW(bufferUtf16, cbStringUtf8 - cbSkipChars + sizeof(WCHAR), (STRSAFE_LPCWSTR) (stringUtf8 + cbSkipChars));
+        if (FAILED(hresult))
         {
-            perror2(hResult, "StringCbCopyW");
-            free(pwszUtf16);
-            return hResult;
+            perror2(hresult, "StringCbCopyW");
+            free(bufferUtf16);
+            return hresult;
         }
 
-        *ppwszUtf16 = pwszUtf16;
+        *stringUtf16 = bufferUtf16;
         return ERROR_SUCCESS;
     }
-    else if (cbBufLen >= 4 && pszBuf[0] == 0 && pszBuf[1] == 0 && pszBuf[2] == 0xFE && pszBuf[3] == 0xFF)
+    else if (cbStringUtf8 >= 4 && stringUtf8[0] == 0 && stringUtf8[1] == 0 && stringUtf8[2] == 0xFE && stringUtf8[3] == 0xFF)
     {
         // UTF-32BE
         return ERROR_NOT_SUPPORTED;
     }
-    else if (cbBufLen >= 4 && pszBuf[0] == 0xFF && pszBuf[1] == 0xFE && pszBuf[2] == 0 && pszBuf[3] == 0)
+    else if (cbStringUtf8 >= 4 && stringUtf8[0] == 0xFF && stringUtf8[1] == 0xFE && stringUtf8[2] == 0 && stringUtf8[3] == 0)
     {
         // UTF-32LE
         return ERROR_NOT_SUPPORTED;
@@ -357,146 +349,130 @@ ULONG TextBOMToUTF16(unsigned char *pszBuf, size_t cbBufLen, WCHAR **ppwszUtf16)
 
     // Try UTF-8
 
-    uResult = ConvertUTF8ToUTF16(pszBuf + cbSkipChars, ppwszUtf16, NULL);
-    if (ERROR_SUCCESS != uResult)
+    status = ConvertUTF8ToUTF16(stringUtf8 + cbSkipChars, stringUtf16, NULL);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ConvertUTF8ToUTF16");
+        return perror2(status, "ConvertUTF8ToUTF16");
     }
 
     return ERROR_SUCCESS;
 }
 
-ULONG ParseUtf8Command(UCHAR *pszUtf8Command, WCHAR **ppwszCommand, WCHAR **ppwszUserName, WCHAR **ppwszCommandLine, BOOLEAN *pbRunInteractively)
+static ULONG ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf16, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively)
 {
-    ULONG uResult;
-    WCHAR *pwszCommand = NULL;
-    WCHAR *pwszCommandLine = NULL;
-    WCHAR *pwSeparator = NULL;
-    WCHAR *pwszUserName = NULL;
+    ULONG status;
+    WCHAR *separator = NULL;
 
-    if (!pszUtf8Command || !pbRunInteractively)
+    if (!commandUtf8 || !runInteractively)
         return ERROR_INVALID_PARAMETER;
 
-    *ppwszCommand = NULL;
-    *ppwszUserName = NULL;
-    *ppwszCommandLine = NULL;
-    *pbRunInteractively = TRUE;
+    *commandUtf16 = NULL;
+    *userName = NULL;
+    *commandLine = NULL;
+    *runInteractively = TRUE;
 
-    pwszCommand = NULL;
-    uResult = ConvertUTF8ToUTF16(pszUtf8Command, &pwszCommand, NULL);
-    if (ERROR_SUCCESS != uResult)
+    status = ConvertUTF8ToUTF16(commandUtf8, commandUtf16, NULL);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ConvertUTF8ToUTF16");
+        return perror2(status, "ConvertUTF8ToUTF16");
     }
 
-    LogInfo("Command: %s", pwszCommand);
+    LogInfo("Command: %s", *commandUtf16);
 
-    pwszUserName = pwszCommand;
-    pwSeparator = wcschr(pwszCommand, L':');
-    if (!pwSeparator)
+    *userName = *commandUtf16;
+    separator = wcschr(*commandUtf16, L':');
+    if (!separator)
     {
-        free(pwszCommand);
-        LogWarning("Command line is supposed to be in user:[nogui:]command form\n");
+        free(*commandUtf16);
+        LogWarning("Command line is supposed to be in 'user:[nogui:]command' form\n");
         return ERROR_INVALID_PARAMETER;
     }
 
-    *pwSeparator = L'\0';
-    pwSeparator++;
+    *separator = L'\0';
+    separator++;
 
-    if (!wcsncmp(pwSeparator, L"nogui:", 6))
+    if (!wcsncmp(separator, L"nogui:", 6))
     {
-        pwSeparator = wcschr(pwSeparator, L':');
-        if (!pwSeparator)
+        separator = wcschr(separator, L':');
+        if (!separator)
         {
-            free(pwszCommand);
+            free(*commandUtf16);
             LogWarning("Command line is supposed to be in user:[nogui:]command form\n");
             return ERROR_INVALID_PARAMETER;
         }
 
-        *pwSeparator = L'\0';
-        pwSeparator++;
+        *separator = L'\0';
+        separator++;
 
-        *pbRunInteractively = FALSE;
+        *runInteractively = FALSE;
     }
 
-    if (!wcscmp(pwszUserName, L"SYSTEM") || !wcscmp(pwszUserName, L"root"))
+    if (!wcscmp(*userName, L"SYSTEM") || !wcscmp(*userName, L"root"))
     {
-        pwszUserName = NULL;
+        *userName = NULL;
     }
 
-    *ppwszCommand = pwszCommand;
-    *ppwszUserName = pwszUserName;
-    *ppwszCommandLine = pwSeparator;
+    *commandLine = separator;
 
     return ERROR_SUCCESS;
 }
 
-ULONG CreateClientPipes(CLIENT_INFO *pClientInfo, HANDLE *phPipeStdin, HANDLE *phPipeStdout, HANDLE *phPipeStderr)
+ULONG CreateClientPipes(IN OUT CLIENT_INFO *clientInfo, OUT HANDLE *pipeStdin, OUT HANDLE *pipeStdout, OUT HANDLE *pipeStderr)
 {
-    ULONG uResult;
-    SECURITY_ATTRIBUTES sa;
-    HANDLE hPipeStdin = INVALID_HANDLE_VALUE;
-    HANDLE hPipeStdout = INVALID_HANDLE_VALUE;
-    HANDLE hPipeStderr = INVALID_HANDLE_VALUE;
+    ULONG status;
+    SECURITY_ATTRIBUTES sa = { 0 };
 
-    if (!pClientInfo || !phPipeStdin || !phPipeStdout || !phPipeStderr)
+    if (!clientInfo || !pipeStdin || !pipeStdout || !pipeStderr)
         return ERROR_INVALID_PARAMETER;
 
-    memset(&sa, 0, sizeof(sa));
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
     sa.lpSecurityDescriptor = NULL;
 
-    uResult = InitReadPipe(&pClientInfo->Stdout, &hPipeStdout, PTYPE_STDOUT);
-    if (ERROR_SUCCESS != uResult)
+    status = InitReadPipe(&clientInfo->StdoutData, pipeStdout, PTYPE_STDOUT);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "InitReadPipe(STDOUT)");
-    }
-    uResult = InitReadPipe(&pClientInfo->Stderr, &hPipeStderr, PTYPE_STDERR);
-    if (ERROR_SUCCESS != uResult)
-    {
-        CloseHandle(pClientInfo->Stdout.hReadPipe);
-        CloseHandle(hPipeStdout);
-
-        return perror2(uResult, "InitReadPipe(STDERR)");
+        return perror2(status, "InitReadPipe(STDOUT)");
     }
 
-    if (!CreatePipe(&hPipeStdin, &pClientInfo->hWriteStdinPipe, &sa, 0))
+    status = InitReadPipe(&clientInfo->StderrData, pipeStderr, PTYPE_STDERR);
+    if (ERROR_SUCCESS != status)
     {
-        uResult = GetLastError();
-
-        CloseHandle(pClientInfo->Stdout.hReadPipe);
-        CloseHandle(pClientInfo->Stderr.hReadPipe);
-        CloseHandle(hPipeStdout);
-        CloseHandle(hPipeStderr);
-
-        return perror2(uResult, "CreatePipe(STDIN)");
+        CloseHandle(clientInfo->StdoutData.ReadPipe);
+        CloseHandle(*pipeStdout);
+        return perror2(status, "InitReadPipe(STDERR)");
     }
 
-    pClientInfo->bStdinPipeClosed = FALSE;
+    if (!CreatePipe(pipeStdin, &clientInfo->WriteStdinPipe, &sa, 0))
+    {
+        status = GetLastError();
+
+        CloseHandle(clientInfo->StdoutData.ReadPipe);
+        CloseHandle(clientInfo->StderrData.ReadPipe);
+        CloseHandle(*pipeStdout);
+        CloseHandle(*pipeStderr);
+
+        return perror2(status, "CreatePipe(STDIN)");
+    }
+
+    clientInfo->StdinPipeClosed = FALSE;
 
     // Ensure the write handle to the pipe for STDIN is not inherited.
-    SetHandleInformation(pClientInfo->hWriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
-
-    *phPipeStdin = hPipeStdin;
-    *phPipeStdout = hPipeStdout;
-    *phPipeStderr = hPipeStderr;
+    SetHandleInformation(clientInfo->WriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
 
     return ERROR_SUCCESS;
 }
 
 // This routine may be called by pipe server threads, hence the critical section around g_Clients array is required.
-ULONG ReserveClientNumber(int client_id, ULONG *puClientNumber)
+static ULONG ReserveClientIndex(IN ULONG clientId, OUT ULONG *clientIndex)
 {
-    ULONG uClientNumber;
-
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-        if (FREE_CLIENT_SPOT_ID == g_Clients[uClientNumber].client_id)
+    for (*clientIndex = 0; *clientIndex < MAX_CLIENTS; *clientIndex++)
+        if (FREE_CLIENT_SPOT_ID == g_Clients[*clientIndex].ClientId)
             break;
 
-    if (MAX_CLIENTS == uClientNumber)
+    if (MAX_CLIENTS == *clientIndex)
     {
         // There is no space for watching for another process
         LeaveCriticalSection(&g_ClientsCriticalSection);
@@ -504,305 +480,302 @@ ULONG ReserveClientNumber(int client_id, ULONG *puClientNumber)
         return ERROR_TOO_MANY_CMDS;
     }
 
-    if (FindClientById(client_id))
+    if (FindClientById(clientId))
     {
         LeaveCriticalSection(&g_ClientsCriticalSection);
-        LogWarning("A client with the same id (%d) already exists\n", client_id);
+        LogWarning("A client with the same id (%d) already exists\n", clientId);
         return ERROR_ALREADY_EXISTS;
     }
 
-    g_Clients[uClientNumber].bClientIsReady = FALSE;
-    g_Clients[uClientNumber].client_id = client_id;
-    *puClientNumber = uClientNumber;
+    g_Clients[*clientIndex].ClientIsReady = FALSE;
+    g_Clients[*clientIndex].ClientId = clientId;
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
     return ERROR_SUCCESS;
 }
 
-ULONG ReleaseClientNumber(ULONG uClientNumber)
+static ULONG ReleaseClientIndex(IN ULONG clientIndex)
 {
-    if (uClientNumber >= MAX_CLIENTS)
+    if (clientIndex >= MAX_CLIENTS)
         return ERROR_INVALID_PARAMETER;
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    g_Clients[uClientNumber].bClientIsReady = FALSE;
-    g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
+    g_Clients[clientIndex].ClientIsReady = FALSE;
+    g_Clients[clientIndex].ClientId = FREE_CLIENT_SPOT_ID;
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
     return ERROR_SUCCESS;
 }
 
-ULONG AddFilledClientInfo(ULONG uClientNumber, CLIENT_INFO *pClientInfo)
+static ULONG AddFilledClientInfo(IN ULONG clientIndex, IN const CLIENT_INFO *clientInfo)
 {
-    if (!pClientInfo || uClientNumber >= MAX_CLIENTS)
+    if (!clientInfo || clientIndex >= MAX_CLIENTS)
         return ERROR_INVALID_PARAMETER;
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    g_Clients[uClientNumber] = *pClientInfo;
-    g_Clients[uClientNumber].bClientIsReady = TRUE;
+    g_Clients[clientIndex] = *clientInfo;
+    g_Clients[clientIndex].ClientIsReady = TRUE;
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
     return ERROR_SUCCESS;
 }
 
-ULONG AddClient(int client_id, WCHAR *pwszUserName, WCHAR *pwszCommandLine, BOOLEAN bRunInteractively)
+static ULONG StartClient(IN ULONG clientId, IN const WCHAR *userName, IN WCHAR *commandLine, IN BOOL runInteractively)
 {
-    ULONG uResult;
-    CLIENT_INFO ClientInfo;
-    HANDLE hPipeStdout = INVALID_HANDLE_VALUE;
-    HANDLE hPipeStderr = INVALID_HANDLE_VALUE;
-    HANDLE hPipeStdin = INVALID_HANDLE_VALUE;
-    ULONG uClientNumber;
+    ULONG status;
+    CLIENT_INFO clientInfo;
+    HANDLE pipeStdout = INVALID_HANDLE_VALUE;
+    HANDLE pipeStderr = INVALID_HANDLE_VALUE;
+    HANDLE pipeStdin = INVALID_HANDLE_VALUE;
+    ULONG clientIndex;
 
-    // if pwszUserName is NULL we run the process on behalf of the current user.
-    if (!pwszCommandLine)
+    // if userName is NULL we run the process on behalf of the current user.
+    if (!commandLine)
         return ERROR_INVALID_PARAMETER;
 
-    uResult = ReserveClientNumber(client_id, &uClientNumber);
-    if (ERROR_SUCCESS != uResult)
+    status = ReserveClientIndex(clientId, &clientIndex);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ReserveClientNumber");
+        return perror2(status, "ReserveClientNumber");
     }
 
-    if (pwszUserName)
-        LogInfo("Running '%s' as user '%s'\n", pwszCommandLine, pwszUserName);
+    if (userName)
+        LogInfo("Running '%s' as user '%s'\n", commandLine, userName);
     else
     {
 #ifdef BUILD_AS_SERVICE
-        LogInfo("Running '%s' as SYSTEM\n", pwszCommandLine);
+        LogInfo("Running '%s' as SYSTEM\n", commandLine);
 #else
-        LogInfo("Running '%s' as current user\n", pwszCommandLine);
+        LogInfo("Running '%s' as current user\n", commandLine);
 #endif
     }
 
-    memset(&ClientInfo, 0, sizeof(ClientInfo));
-    ClientInfo.client_id = client_id;
+    ZeroMemory(&clientInfo, sizeof(clientInfo));
+    clientInfo.ClientId = clientId;
 
-    uResult = CreateClientPipes(&ClientInfo, &hPipeStdin, &hPipeStdout, &hPipeStderr);
-    if (ERROR_SUCCESS != uResult)
+    status = CreateClientPipes(&clientInfo, &pipeStdin, &pipeStdout, &pipeStderr);
+    if (ERROR_SUCCESS != status)
     {
-        ReleaseClientNumber(uClientNumber);
-        return perror2(uResult, "CreateClientPipes");
+        ReleaseClientIndex(clientIndex);
+        return perror2(status, "CreateClientPipes");
     }
 
 #ifdef BUILD_AS_SERVICE
-    if (pwszUserName)
+    if (userName)
     {
-        uResult = CreatePipedProcessAsUser(
-            pwszUserName,
+        status = CreatePipedProcessAsUser(
+            userName,
             DEFAULT_USER_PASSWORD_UNICODE,
-            pwszCommandLine,
-            bRunInteractively,
-            hPipeStdin,
-            hPipeStdout,
-            hPipeStderr,
-            &ClientInfo.hProcess);
+            commandLine,
+            runInteractively,
+            pipeStdin,
+            pipeStdout,
+            pipeStderr,
+            &clientInfo.ChildProcess);
     }
     else
     {
-        uResult = CreatePipedProcessAsCurrentUser(
-            pwszCommandLine,
-            hPipeStdin,
-            hPipeStdout,
-            hPipeStderr,
-            &ClientInfo.hProcess);
+        status = CreatePipedProcessAsCurrentUser(
+            commandLine,
+            pipeStdin,
+            pipeStdout,
+            pipeStderr,
+            &clientInfo.ChildProcess);
     }
 #else
-    uResult = CreatePipedProcessAsCurrentUser(
-        pwszCommandLine,
-        bRunInteractively,
-        hPipeStdin,
-        hPipeStdout,
-        hPipeStderr,
-        &ClientInfo.hProcess);
+    status = CreatePipedProcessAsCurrentUser(
+        commandLine,
+        runInteractively,
+        pipeStdin,
+        pipeStdout,
+        pipeStderr,
+        &clientInfo.ChildProcess);
 #endif
 
-    CloseHandle(hPipeStdout);
-    CloseHandle(hPipeStderr);
-    CloseHandle(hPipeStdin);
+    CloseHandle(pipeStdout);
+    CloseHandle(pipeStderr);
+    CloseHandle(pipeStdin);
 
-    if (ERROR_SUCCESS != uResult)
+    if (ERROR_SUCCESS != status)
     {
-        ReleaseClientNumber(uClientNumber);
+        ReleaseClientIndex(clientIndex);
 
-        CloseHandle(ClientInfo.hWriteStdinPipe);
-        CloseHandle(ClientInfo.Stdout.hReadPipe);
-        CloseHandle(ClientInfo.Stderr.hReadPipe);
+        CloseHandle(clientInfo.WriteStdinPipe);
+        CloseHandle(clientInfo.StdoutData.ReadPipe);
+        CloseHandle(clientInfo.StderrData.ReadPipe);
 
 #ifdef BUILD_AS_SERVICE
-        if (pwszUserName)
-            return perror2(uResult, "CreatePipedProcessAsUser");
+        if (userName)
+            return perror2(status, "CreatePipedProcessAsUser");
         else
-            return perror2(uResult, "ACreatePipedProcessAsCurrentUser");
+            return perror2(status, "ACreatePipedProcessAsCurrentUser");
 #else
-        return perror2(uResult, "CreatePipedProcessAsCurrentUser");
+        return perror2(status, "CreatePipedProcessAsCurrentUser");
 #endif
     }
 
-    uResult = AddFilledClientInfo(uClientNumber, &ClientInfo);
-    if (ERROR_SUCCESS != uResult)
+    status = AddFilledClientInfo(clientIndex, &clientInfo);
+    if (ERROR_SUCCESS != status)
     {
-        ReleaseClientNumber(uClientNumber);
+        ReleaseClientIndex(clientIndex);
 
-        CloseHandle(ClientInfo.hWriteStdinPipe);
-        CloseHandle(ClientInfo.Stdout.hReadPipe);
-        CloseHandle(ClientInfo.Stderr.hReadPipe);
-        CloseHandle(ClientInfo.hProcess);
+        CloseHandle(clientInfo.WriteStdinPipe);
+        CloseHandle(clientInfo.StdoutData.ReadPipe);
+        CloseHandle(clientInfo.StderrData.ReadPipe);
+        CloseHandle(clientInfo.ChildProcess);
 
-        return perror2(uResult, "AddFilledClientInfo");
+        return perror2(status, "AddFilledClientInfo");
     }
 
-    LogDebug("New client %d (local id %d)\n", client_id, uClientNumber);
+    LogDebug("New client %d (local id %d)\n", clientId, clientIndex);
 
     return ERROR_SUCCESS;
 }
 
-ULONG AddExistingClient(int client_id, CLIENT_INFO *pClientInfo)
+ULONG AddExistingClient(IN ULONG clientId, IN CLIENT_INFO *clientInfo)
 {
-    ULONG uClientNumber;
-    ULONG uResult;
+    ULONG clientIndex;
+    ULONG status;
 
-    if (!pClientInfo)
+    if (!clientInfo)
         return ERROR_INVALID_PARAMETER;
 
-    uResult = ReserveClientNumber(client_id, &uClientNumber);
-    if (ERROR_SUCCESS != uResult)
+    status = ReserveClientIndex(clientId, &clientIndex);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ReserveClientNumber");
+        return perror2(status, "ReserveClientNumber");
     }
 
-    pClientInfo->client_id = client_id;
+    clientInfo->ClientId = clientId;
 
-    uResult = AddFilledClientInfo(uClientNumber, pClientInfo);
-    if (ERROR_SUCCESS != uResult)
+    status = AddFilledClientInfo(clientIndex, clientInfo);
+    if (ERROR_SUCCESS != status)
     {
-        ReleaseClientNumber(uClientNumber);
-        return perror2(uResult, "AddFilledClientInfo");
+        ReleaseClientIndex(clientIndex);
+        return perror2(status, "AddFilledClientInfo");
     }
 
-    LogDebug("New client %d (local id %d)\n", client_id, uClientNumber);
+    LogDebug("New client %d (local id %d)\n", clientId, clientIndex);
 
-    SetEvent(g_hAddExistingClientEvent);
+    SetEvent(g_AddExistingClientEvent);
 
     return ERROR_SUCCESS;
 }
 
-VOID RemoveClientNoLocks(CLIENT_INFO *pClientInfo)
+static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
 {
-    if (!pClientInfo || (FREE_CLIENT_SPOT_ID == pClientInfo->client_id))
+    if (!clientInfo || (FREE_CLIENT_SPOT_ID == clientInfo->ClientId))
         return;
 
-    CloseHandle(pClientInfo->hProcess);
+    CloseHandle(clientInfo->ChildProcess);
 
-    if (!pClientInfo->bStdinPipeClosed)
-        CloseHandle(pClientInfo->hWriteStdinPipe);
+    if (!clientInfo->StdinPipeClosed)
+        CloseHandle(clientInfo->WriteStdinPipe);
 
-    CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stdout);
-    CloseReadPipeHandles(pClientInfo->client_id, &pClientInfo->Stderr);
+    CloseReadPipeHandles(clientInfo->ClientId, &clientInfo->StdoutData);
+    CloseReadPipeHandles(clientInfo->ClientId, &clientInfo->StderrData);
 
-    LogDebug("Client %d removed\n", pClientInfo->client_id);
+    LogDebug("Client %d removed\n", clientInfo->ClientId);
 
-    pClientInfo->client_id = FREE_CLIENT_SPOT_ID;
-    pClientInfo->bClientIsReady = FALSE;
+    clientInfo->ClientId = FREE_CLIENT_SPOT_ID;
+    clientInfo->ClientIsReady = FALSE;
 }
 
-VOID RemoveClient(CLIENT_INFO *pClientInfo)
+static void RemoveClient(IN OUT CLIENT_INFO *clientInfo)
 {
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    RemoveClientNoLocks(pClientInfo);
+    RemoveClientNoLocks(clientInfo);
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 }
 
-VOID RemoveAllClients()
+static void RemoveAllClients(void)
 {
-    ULONG uClientNumber;
+    ULONG clientIndex;
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-        if (FREE_CLIENT_SPOT_ID != g_Clients[uClientNumber].client_id)
-            RemoveClientNoLocks(&g_Clients[uClientNumber]);
+    for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
+        if (FREE_CLIENT_SPOT_ID != g_Clients[clientIndex].ClientId)
+            RemoveClientNoLocks(&g_Clients[clientIndex]);
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 }
 
 // must be called with g_ClientsCriticalSection
-ULONG PossiblyHandleTerminatedClientNoLocks(CLIENT_INFO *pClientInfo)
+static ULONG HandleTerminatedClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
 {
-    ULONG uResult;
+    ULONG status;
 
-    if (pClientInfo->bChildExited && pClientInfo->Stdout.bPipeClosed && pClientInfo->Stderr.bPipeClosed)
+    if (clientInfo->ChildExited && clientInfo->StdoutData.PipeClosed && clientInfo->StderrData.PipeClosed)
     {
-        uResult = send_exit_code(pClientInfo->client_id, pClientInfo->dwExitCode);
+        status = SendExitCode(clientInfo->ClientId, clientInfo->ExitCode);
         // guaranted that all data was already sent (above bPipeClosed==TRUE)
         // so no worry about returning some data after exit code
-        RemoveClientNoLocks(pClientInfo);
-        return uResult;
+        RemoveClientNoLocks(clientInfo);
+        return status;
     }
     return ERROR_SUCCESS;
 }
 
-ULONG PossiblyHandleTerminatedClient(CLIENT_INFO *pClientInfo)
+ULONG HandleTerminatedClient(IN OUT CLIENT_INFO *cientInfo)
 {
-    ULONG uResult;
+    ULONG status;
 
-    if (pClientInfo->bChildExited && pClientInfo->Stdout.bPipeClosed && pClientInfo->Stderr.bPipeClosed)
+    if (cientInfo->ChildExited && cientInfo->StdoutData.PipeClosed && cientInfo->StderrData.PipeClosed)
     {
-        uResult = send_exit_code(pClientInfo->client_id, pClientInfo->dwExitCode);
+        status = SendExitCode(cientInfo->ClientId, cientInfo->ExitCode);
         // guaranted that all data was already sent (above bPipeClosed==TRUE)
         // so no worry about returning some data after exit code
-        RemoveClient(pClientInfo);
-        return uResult;
+        RemoveClient(cientInfo);
+        return status;
     }
     return ERROR_SUCCESS;
 }
 
 // Recognize magic RPC request command ("QUBESRPC") and replace it with real
 // command to be executed, after reading RPC service configuration.
-// pwszCommandLine will be modified (and possibly reallocated)
-// ppwszSourceDomainName will contain source domain (if available) to be set in
+// commandLine will be modified (and possibly reallocated)
+// sourceDomainName will contain source domain (if available) to be set in
 // environment; must be freed by caller
-ULONG InterceptRPCRequest(WCHAR *pwszCommandLine, WCHAR **ppwszServiceCommandLine, WCHAR **ppwszSourceDomainName)
+static ULONG InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceCommandLine, OUT WCHAR **sourceDomainName)
 {
-    WCHAR *pwszServiceName = NULL;
-    WCHAR *pwszSourceDomainName = NULL;
-    WCHAR *pwSeparator = NULL;
-    UCHAR szBuffer[sizeof(WCHAR) * (MAX_PATH + 1)];
-    WCHAR wszServiceFilePath[MAX_PATH + 1];
-    WCHAR *pwszRawServiceFilePath = NULL;
-    WCHAR *pwszServiceArgs = NULL;
-    HANDLE hServiceConfigFile;
-    ULONG uResult;
-    ULONG uBytesRead;
-    ULONG uPathLength;
-    WCHAR *pwszServiceCommandLine = NULL;
+    WCHAR *serviceName = NULL;
+    WCHAR *separator = NULL;
+    char serviceConfigContents[sizeof(WCHAR) * (MAX_PATH + 1)];
+    WCHAR serviceFilePath[MAX_PATH + 1];
+    WCHAR *rawServiceFilePath = NULL;
+    WCHAR *serviceArgs = NULL;
+    HANDLE serviceConfigFile;
+    ULONG status;
+    ULONG cbRead;
+    ULONG pathLength;
 
-    if (!pwszCommandLine || !ppwszServiceCommandLine || !ppwszSourceDomainName)
+    if (!commandLine || !serviceCommandLine || !sourceDomainName)
         return ERROR_INVALID_PARAMETER;
 
-    *ppwszServiceCommandLine = *ppwszSourceDomainName = NULL;
+    *serviceCommandLine = *sourceDomainName = NULL;
 
-    if (wcsncmp(pwszCommandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND)) == 0)
+    if (wcsncmp(commandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND)) == 0)
     {
         // RPC_REQUEST_COMMAND contains trailing space, so this must succeed
 #pragma prefast(suppress:28193, "RPC_REQUEST_COMMAND contains trailing space, so this must succeed")
-        pwSeparator = wcschr(pwszCommandLine, L' ');
-        pwSeparator++;
-        pwszServiceName = pwSeparator;
-        pwSeparator = wcschr(pwszServiceName, L' ');
-        if (pwSeparator)
+        separator = wcschr(commandLine, L' ');
+        separator++;
+        serviceName = separator;
+        separator = wcschr(serviceName, L' ');
+        if (separator)
         {
-            *pwSeparator = L'\0';
-            pwSeparator++;
-            pwszSourceDomainName = _wcsdup(pwSeparator);
-            if (!pwszSourceDomainName)
+            *separator = L'\0';
+            separator++;
+            *sourceDomainName = _wcsdup(separator);
+            if (*sourceDomainName == NULL)
             {
                 return perror2(ERROR_NOT_ENOUGH_MEMORY, "_wcsdup");
             }
@@ -816,48 +789,45 @@ ULONG InterceptRPCRequest(WCHAR *pwszCommandLine, WCHAR **ppwszServiceCommandLin
         }
 
         // build RPC service config file path
-        memset(wszServiceFilePath, 0, sizeof(wszServiceFilePath));
-        if (!GetModuleFileNameW(NULL, wszServiceFilePath, MAX_PATH))
+        ZeroMemory(serviceFilePath, sizeof(serviceFilePath));
+        if (!GetModuleFileNameW(NULL, serviceFilePath, MAX_PATH))
         {
-            uResult = GetLastError();
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
-            return perror2(uResult, "GetModuleFileName");
+            status = GetLastError();
+            free(*sourceDomainName);
+            return perror2(status, "GetModuleFileName");
         }
         // cut off file name (qrexec_agent.exe)
-        pwSeparator = wcsrchr(wszServiceFilePath, L'\\');
-        if (!pwSeparator)
+        separator = wcsrchr(serviceFilePath, L'\\');
+        if (!separator)
         {
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
+            free(*sourceDomainName);
             LogError("Cannot find dir containing qrexec_agent.exe\n");
             return ERROR_PATH_NOT_FOUND;
         }
-        *pwSeparator = L'\0';
+        *separator = L'\0';
         // cut off one dir (bin)
-        pwSeparator = wcsrchr(wszServiceFilePath, L'\\');
-        if (!pwSeparator)
+        separator = wcsrchr(serviceFilePath, L'\\');
+        if (!separator)
         {
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
+            free(*sourceDomainName);
             LogError("Cannot find dir containing bin\\qrexec_agent.exe\n");
             return ERROR_PATH_NOT_FOUND;
         }
         // Leave trailing backslash
-        pwSeparator++;
-        *pwSeparator = L'\0';
-        if (wcslen(wszServiceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(pwszServiceName) > MAX_PATH)
+        separator++;
+        *separator = L'\0';
+        if (wcslen(serviceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(serviceName) > MAX_PATH)
         {
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
+            free(*sourceDomainName);
             LogError("RPC service config file path too long\n");
             return ERROR_PATH_NOT_FOUND;
         }
-        PathAppendW(wszServiceFilePath, L"qubes-rpc");
-        PathAppendW(wszServiceFilePath, pwszServiceName);
 
-        hServiceConfigFile = CreateFileW(
-            wszServiceFilePath,    // file to open
+        PathAppendW(serviceFilePath, L"qubes-rpc");
+        PathAppendW(serviceFilePath, serviceName);
+
+        serviceConfigFile = CreateFileW(
+            serviceFilePath,    // file to open
             GENERIC_READ,          // open for reading
             FILE_SHARE_READ,       // share for reading
             NULL,                  // default security
@@ -865,373 +835,371 @@ ULONG InterceptRPCRequest(WCHAR *pwszCommandLine, WCHAR **ppwszServiceCommandLin
             FILE_ATTRIBUTE_NORMAL, // normal file
             NULL);                 // no attr. template
 
-        if (hServiceConfigFile == INVALID_HANDLE_VALUE)
+        if (serviceConfigFile == INVALID_HANDLE_VALUE)
         {
-            uResult = perror("CreateFile");
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
-            LogError("Failed to open RPC %s configuration file (%s)", pwszServiceName, wszServiceFilePath);
-            return uResult;
+            status = perror("CreateFile");
+            free(*sourceDomainName);
+            LogError("Failed to open RPC %s configuration file (%s)", serviceName, serviceFilePath);
+            return status;
         }
 
-        uBytesRead = 0;
-        memset(szBuffer, 0, sizeof(szBuffer));
+        cbRead = 0;
+        ZeroMemory(serviceConfigContents, sizeof(serviceConfigContents));
 
-        if (!ReadFile(hServiceConfigFile, szBuffer, sizeof(WCHAR) * MAX_PATH, &uBytesRead, NULL))
+        if (!ReadFile(serviceConfigFile, serviceConfigContents, sizeof(WCHAR) * MAX_PATH, &cbRead, NULL))
         {
-            uResult = perror("ReadFile");
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
-            LogError("Failed to read RPC %s configuration file (%s)", pwszServiceName, wszServiceFilePath);
-            CloseHandle(hServiceConfigFile);
-            return uResult;
+            status = perror("ReadFile");
+            free(*sourceDomainName);
+            LogError("Failed to read RPC %s configuration file (%s)", serviceName, serviceFilePath);
+            CloseHandle(serviceConfigFile);
+            return status;
         }
-        CloseHandle(hServiceConfigFile);
+        CloseHandle(serviceConfigFile);
 
-        uResult = TextBOMToUTF16(szBuffer, uBytesRead, &pwszRawServiceFilePath);
-        if (uResult != ERROR_SUCCESS)
+        status = Utf8WithBomToUtf16(serviceConfigContents, cbRead, &rawServiceFilePath);
+        if (status != ERROR_SUCCESS)
         {
-            perror2(uResult, "TextBOMToUTF16");
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
-            LogError("Failed to parse the encoding in RPC %s configuration file (%s)", pwszServiceName, wszServiceFilePath);
-            return uResult;
+            perror2(status, "TextBOMToUTF16");
+            free(*sourceDomainName);
+            LogError("Failed to parse the encoding in RPC %s configuration file (%s)", serviceName, serviceFilePath);
+            return status;
         }
 
         // strip white chars (especially end-of-line) from string
-        uPathLength = wcslen(pwszRawServiceFilePath);
-        while (iswspace(pwszRawServiceFilePath[uPathLength - 1]))
+        pathLength = wcslen(rawServiceFilePath);
+        while (iswspace(rawServiceFilePath[pathLength - 1]))
         {
-            uPathLength--;
-            pwszRawServiceFilePath[uPathLength] = L'\0';
+            pathLength--;
+            rawServiceFilePath[pathLength] = L'\0';
         }
 
-        pwszServiceArgs = PathGetArgsW(pwszRawServiceFilePath);
-        PathRemoveArgsW(pwszRawServiceFilePath);
-        PathUnquoteSpacesW(pwszRawServiceFilePath);
-        if (PathIsRelativeW(pwszRawServiceFilePath))
+        serviceArgs = PathGetArgsW(rawServiceFilePath);
+        PathRemoveArgsW(rawServiceFilePath);
+        PathUnquoteSpacesW(rawServiceFilePath);
+        if (PathIsRelativeW(rawServiceFilePath))
         {
             // relative path are based in qubes-rpc-services
             // reuse separator found when preparing previous file path
-            *pwSeparator = L'\0';
-            PathAppendW(wszServiceFilePath, L"qubes-rpc-services");
-            PathAppendW(wszServiceFilePath, pwszRawServiceFilePath);
+            *separator = L'\0';
+            PathAppendW(serviceFilePath, L"qubes-rpc-services");
+            PathAppendW(serviceFilePath, rawServiceFilePath);
         }
         else
         {
-            StringCchCopyW(wszServiceFilePath, MAX_PATH + 1, pwszRawServiceFilePath);
+            StringCchCopyW(serviceFilePath, MAX_PATH + 1, rawServiceFilePath);
         }
-        PathQuoteSpacesW(wszServiceFilePath);
-        if (pwszServiceArgs && pwszServiceArgs[0] != L'\0')
+
+        PathQuoteSpacesW(serviceFilePath);
+        if (serviceArgs && serviceArgs[0] != L'\0')
         {
-            StringCchCatW(wszServiceFilePath, MAX_PATH + 1, L" ");
-            StringCchCatW(wszServiceFilePath, MAX_PATH + 1, pwszServiceArgs);
+            StringCchCatW(serviceFilePath, MAX_PATH + 1, L" ");
+            StringCchCatW(serviceFilePath, MAX_PATH + 1, serviceArgs);
         }
-        free(pwszRawServiceFilePath);
-        pwszServiceCommandLine = malloc((wcslen(wszServiceFilePath) + 1) * sizeof(WCHAR));
-        if (pwszServiceCommandLine == NULL)
+
+        free(rawServiceFilePath);
+        *serviceCommandLine = malloc((wcslen(serviceFilePath) + 1) * sizeof(WCHAR));
+        if (*serviceCommandLine == NULL)
         {
-            if (pwszSourceDomainName)
-                free(pwszSourceDomainName);
+            free(*sourceDomainName);
             return perror2(ERROR_NOT_ENOUGH_MEMORY, "malloc");
         }
-        LogDebug("RPC %s: %s\n", pwszServiceName, wszServiceFilePath);
-        StringCchCopyW(pwszServiceCommandLine, wcslen(wszServiceFilePath) + 1, wszServiceFilePath);
-
-        *ppwszServiceCommandLine = pwszServiceCommandLine;
-        *ppwszSourceDomainName = pwszSourceDomainName;
+        LogDebug("RPC %s: %s\n", serviceName, serviceFilePath);
+        StringCchCopyW(*serviceCommandLine, wcslen(serviceFilePath) + 1, serviceFilePath);
     }
     return ERROR_SUCCESS;
 }
 
 // This will return error only if vchan fails.
-ULONG handle_connect_existing(int client_id, int len)
+// RPC service connect, receives connection ident from vchan
+ULONG HandleConnectExisting(IN ULONG clientId, IN int cbIdent)
 {
-    ULONG uResult;
-    char *buf;
+    ULONG status;
+    char *ident;
 
-    if (!len)
+    if (!cbIdent)
         return ERROR_SUCCESS;
 
-    buf = malloc(len + 1);
-    if (!buf)
+    ident = malloc(cbIdent + 1);
+    if (!ident)
         return ERROR_SUCCESS;
-    buf[len] = 0;
+    ident[cbIdent] = 0;
 
-    if (read_all_vchan_ext(buf, len) <= 0)
+    if (VchanReceiveBuffer(ident, cbIdent) <= 0)
     {
-        free(buf);
-        return perror2(ERROR_INVALID_FUNCTION, "read_all_vchan_ext");
+        free(ident);
+        return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
     }
 
-    LogDebug("client %d, ident %S\n", client_id, buf);
+    LogDebug("client %d, ident %S\n", clientId, ident);
 
-    uResult = ProceedWithExecution(client_id, buf);
-    free(buf);
+    status = ProceedWithExecution(clientId, ident);
+    free(ident);
 
-    if (ERROR_SUCCESS != uResult)
-        perror2(uResult, "ProceedWithExecution");
+    if (ERROR_SUCCESS != status)
+        perror2(status, "ProceedWithExecution");
 
     return ERROR_SUCCESS;
 }
 
 // This will return error only if vchan fails.
-ULONG handle_exec(int client_id, int len)
+// handle execute command with piped IO
+static ULONG HandleExec(IN ULONG clientId, IN int cbCommandUtf8)
 {
-    char *buf;
-    ULONG uResult;
-    WCHAR *pwszCommand = NULL;
-    WCHAR *pwszUserName = NULL;
-    WCHAR *pwszCommandLine = NULL;
-    WCHAR *pwszServiceCommandLine = NULL;
-    WCHAR *pwszRemoteDomainName = NULL;
-    BOOLEAN bRunInteractively;
+    char *commandUtf8;
+    ULONG status;
+    WCHAR *command = NULL;
+    WCHAR *userName = NULL;
+    WCHAR *commandLine = NULL;
+    WCHAR *serviceCommandLine = NULL;
+    WCHAR *remoteDomainName = NULL;
+    BOOL runInteractively;
 
-    buf = malloc(len + 1);
-    if (!buf)
+    commandUtf8 = malloc(cbCommandUtf8 + 1);
+    if (!commandUtf8)
         return ERROR_SUCCESS;
-    buf[len] = 0;
+    commandUtf8[cbCommandUtf8] = 0;
 
-    if (read_all_vchan_ext(buf, len) <= 0)
+    if (VchanReceiveBuffer(commandUtf8, cbCommandUtf8) <= 0)
     {
-        free(buf);
-        return perror2(ERROR_INVALID_FUNCTION, "read_all_vchan_ext");
+        free(commandUtf8);
+        return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
     }
 
-    bRunInteractively = TRUE;
+    runInteractively = TRUE;
 
-    uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine, &bRunInteractively);
-    if (ERROR_SUCCESS != uResult)
+    status = ParseUtf8Command(commandUtf8, &command, &userName, &commandLine, &runInteractively);
+    if (ERROR_SUCCESS != status)
     {
-        free(buf);
-        send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-        perror2(uResult, "ParseUtf8Command");
-        return ERROR_SUCCESS;
-    }
-
-    free(buf);
-    buf = NULL;
-
-    uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
-    if (ERROR_SUCCESS != uResult)
-    {
-        free(pwszCommand);
-        send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-        perror2(uResult, "InterceptRPCRequest");
+        free(commandUtf8);
+        SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        perror2(status, "ParseUtf8Command");
         return ERROR_SUCCESS;
     }
 
-    if (pwszServiceCommandLine)
-        pwszCommandLine = pwszServiceCommandLine;
+    free(commandUtf8);
+    commandUtf8 = NULL;
 
-    if (pwszRemoteDomainName)
-        SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
+    status = InterceptRPCRequest(commandLine, &serviceCommandLine, &remoteDomainName);
+    if (ERROR_SUCCESS != status)
+    {
+        free(command);
+        SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        perror2(status, "InterceptRPCRequest");
+        return ERROR_SUCCESS;
+    }
+
+    if (serviceCommandLine)
+        commandLine = serviceCommandLine;
+
+    if (remoteDomainName)
+        SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", remoteDomainName);
 
     // Create a process and redirect its console IO to vchan.
-    uResult = AddClient(client_id, pwszUserName, pwszCommandLine, bRunInteractively);
-    if (ERROR_SUCCESS == uResult)
-        LogInfo("Executed: %s\n", pwszCommandLine);
+    status = StartClient(clientId, userName, commandLine, runInteractively);
+    if (ERROR_SUCCESS == status)
+        LogInfo("Executed: %s\n", commandLine);
     else
     {
-        send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-        LogWarning("AddClient('%s') failed: %d", pwszCommandLine, uResult);
+        SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        LogWarning("AddClient('%s') failed: %d", commandLine, status);
     }
 
-    if (pwszRemoteDomainName)
+    if (remoteDomainName)
     {
         SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", NULL);
-        free(pwszRemoteDomainName);
+        free(remoteDomainName);
     }
-    if (pwszServiceCommandLine)
-        free(pwszServiceCommandLine);
+    if (serviceCommandLine)
+        free(serviceCommandLine);
 
-    free(pwszCommand);
+    free(command);
     return ERROR_SUCCESS;
 }
 
 // This will return error only if vchan fails.
-ULONG handle_just_exec(int client_id, int len)
+// handle execute command without piped IO
+static ULONG HandleJustExec(IN ULONG clientId, IN int cbCommandUtf8)
 {
-    char *buf;
-    ULONG uResult;
-    WCHAR *pwszCommand = NULL;
-    WCHAR *pwszUserName = NULL;
-    WCHAR *pwszCommandLine = NULL;
-    WCHAR *pwszServiceCommandLine = NULL;
-    WCHAR *pwszRemoteDomainName = NULL;
-    HANDLE hProcess;
-    BOOLEAN bRunInteractively;
+    char *commandUtf8;
+    ULONG status;
+    WCHAR *command = NULL;
+    WCHAR *userName = NULL;
+    WCHAR *commandLine = NULL;
+    WCHAR *serviceCommandLine = NULL;
+    WCHAR *remoteDomainName = NULL;
+    HANDLE process;
+    BOOL runInteractively;
 
-    buf = malloc(len + 1);
-    if (!buf)
+    commandUtf8 = malloc(cbCommandUtf8 + 1);
+    if (!commandUtf8)
         return ERROR_SUCCESS;
-    buf[len] = 0;
 
-    if (read_all_vchan_ext(buf, len) <= 0)
+    commandUtf8[cbCommandUtf8] = 0;
+
+    if (VchanReceiveBuffer(commandUtf8, cbCommandUtf8) <= 0)
     {
-        free(buf);
-        return perror2(ERROR_INVALID_FUNCTION, "read_all_vchan_ext");
+        free(commandUtf8);
+        return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
     }
 
-    bRunInteractively = TRUE;
+    runInteractively = TRUE;
 
-    uResult = ParseUtf8Command(buf, &pwszCommand, &pwszUserName, &pwszCommandLine, &bRunInteractively);
-    if (ERROR_SUCCESS != uResult)
+    status = ParseUtf8Command(commandUtf8, &command, &userName, &commandLine, &runInteractively);
+    if (ERROR_SUCCESS != status)
     {
-        free(buf);
-        send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-        perror2(uResult, "ParseUtf8Command");
-        return ERROR_SUCCESS;
-    }
-
-    free(buf);
-    buf = NULL;
-
-    uResult = InterceptRPCRequest(pwszCommandLine, &pwszServiceCommandLine, &pwszRemoteDomainName);
-    if (ERROR_SUCCESS != uResult)
-    {
-        free(pwszCommand);
-        send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
-        perror2(uResult, "InterceptRPCRequest");
+        free(commandUtf8);
+        SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        perror2(status, "ParseUtf8Command");
         return ERROR_SUCCESS;
     }
 
-    if (pwszServiceCommandLine)
-        pwszCommandLine = pwszServiceCommandLine;
+    free(commandUtf8);
+    commandUtf8 = NULL;
 
-    if (pwszRemoteDomainName)
-        SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", pwszRemoteDomainName);
+    status = InterceptRPCRequest(commandLine, &serviceCommandLine, &remoteDomainName);
+    if (ERROR_SUCCESS != status)
+    {
+        free(command);
+        SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        perror2(status, "InterceptRPCRequest");
+        return ERROR_SUCCESS;
+    }
 
-    LogDebug("Command line: %s", pwszCommandLine);
+    if (serviceCommandLine)
+        commandLine = serviceCommandLine;
+
+    if (remoteDomainName)
+        SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", remoteDomainName);
+
+    LogDebug("Command line: %s", commandLine);
 
 #ifdef BUILD_AS_SERVICE
     // Create a process which IO is not redirected anywhere.
-    uResult = CreateNormalProcessAsUser(
-        pwszUserName,
+    status = CreateNormalProcessAsUser(
+        userName,
         DEFAULT_USER_PASSWORD_UNICODE,
-        pwszCommandLine,
-        bRunInteractively,
-        &hProcess);
+        commandLine,
+        runInteractively,
+        &process);
 #else
-    uResult = CreateNormalProcessAsCurrentUser(
-        pwszCommandLine,
-        &hProcess);
+    status = CreateNormalProcessAsCurrentUser(
+        commandLine,
+        &process);
 #endif
 
-    if (ERROR_SUCCESS == uResult)
+    if (ERROR_SUCCESS == status)
     {
-        CloseHandle(hProcess);
-        LogInfo("Executed: %s\n", pwszCommandLine);
+        CloseHandle(process);
+        LogInfo("Executed: %s\n", commandLine);
     }
     else
     {
-        send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, uResult));
+        SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
 #ifdef BUILD_AS_SERVICE
-        perror2(uResult, "CreateNormalProcessAsUser");
+        perror2(status, "CreateNormalProcessAsUser");
 #else
-        perror2(uResult, "CreateNormalProcessAsCurrentUser");
+        perror2(status, "CreateNormalProcessAsCurrentUser");
 #endif
     }
 
-    if (pwszRemoteDomainName)
+    if (remoteDomainName)
     {
         SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", NULL);
-        free(pwszRemoteDomainName);
+        free(remoteDomainName);
     }
-    if (pwszServiceCommandLine)
-        free(pwszServiceCommandLine);
+    if (serviceCommandLine)
+        free(serviceCommandLine);
 
-    free(pwszCommand);
+    free(command);
     return ERROR_SUCCESS;
 }
 
 // This will return error only if vchan fails.
-ULONG handle_input(int client_id, int len)
+// receive input data from daemon and pipe it to client
+static ULONG HandleInput(IN ULONG clientId, IN int cbInput)
 {
-    char *buf;
-    CLIENT_INFO *pClientInfo;
-    DWORD dwWritten;
+    char *input;
+    CLIENT_INFO *clientInfo;
+    DWORD cbWritten;
 
-    // If pClientInfo is NULL after this it means we couldn't find a specified client.
+    // If clientInfo is NULL after this it means we couldn't find a specified client.
     // Read and discard any data in the channel in this case.
-    pClientInfo = FindClientById(client_id);
+    clientInfo = FindClientById(clientId);
 
-    if (!len)
+    if (!cbInput)
     {
-        if (pClientInfo)
+        if (clientInfo)
         {
-            CloseHandle(pClientInfo->hWriteStdinPipe);
-            pClientInfo->bStdinPipeClosed = TRUE;
+            CloseHandle(clientInfo->WriteStdinPipe);
+            clientInfo->StdinPipeClosed = TRUE;
         }
         return ERROR_SUCCESS;
     }
 
-    buf = malloc(len + 1);
-    if (!buf)
+    input = malloc(cbInput + 1);
+    if (!input)
         return ERROR_SUCCESS;
-    buf[len] = 0;
+    input[cbInput] = 0;
 
-    if (read_all_vchan_ext(buf, len) <= 0)
+    if (VchanReceiveBuffer(input, cbInput) <= 0)
     {
-        free(buf);
-        return perror2(ERROR_INVALID_FUNCTION, "read_all_vchan_ext");
+        free(input);
+        return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
     }
 
-    if (pClientInfo && !pClientInfo->bStdinPipeClosed)
+    if (clientInfo && !clientInfo->StdinPipeClosed)
     {
-        if (!WriteFile(pClientInfo->hWriteStdinPipe, buf, len, &dwWritten, NULL))
+        if (!WriteFile(clientInfo->WriteStdinPipe, input, cbInput, &cbWritten, NULL))
             perror("WriteFile");
     }
 
-    free(buf);
+    free(input);
     return ERROR_SUCCESS;
 }
 
-void set_blocked_outerr(int client_id, BOOLEAN bBlockOutput)
+static void SetReadingDisabled(IN ULONG clientId, IN BOOLEAN blockOutput)
 {
-    CLIENT_INFO *pClientInfo;
+    CLIENT_INFO *clientInfo;
 
-    pClientInfo = FindClientById(client_id);
-    if (!pClientInfo)
+    clientInfo = FindClientById(clientId);
+    if (!clientInfo)
         return;
 
-    pClientInfo->bReadingIsDisabled = bBlockOutput;
+    clientInfo->ReadingDisabled = blockOutput;
 }
 
-ULONG handle_server_data()
+static ULONG HandleServerMessage(void)
 {
-    struct server_header s_hdr;
-    ULONG uResult;
+    struct server_header header;
+    ULONG status;
 
-    if (read_all_vchan_ext(&s_hdr, sizeof s_hdr) <= 0)
+    if (VchanReceiveBuffer(&header, sizeof header) <= 0)
     {
         return perror2(ERROR_INVALID_FUNCTION, "read_all_vchan_ext");
     }
 
-    //	lprintf("got %x %x %x\n", s_hdr.type, s_hdr.client_id, s_hdr.len);
-
-    switch (s_hdr.type)
+    switch (header.type)
     {
     case MSG_XON:
         LogDebug("MSG_XON\n");
-        set_blocked_outerr(s_hdr.client_id, FALSE);
+        SetReadingDisabled(header.client_id, FALSE);
         break;
     case MSG_XOFF:
         LogDebug("MSG_XOFF\n");
-        set_blocked_outerr(s_hdr.client_id, TRUE);
+        SetReadingDisabled(header.client_id, TRUE);
         break;
     case MSG_SERVER_TO_AGENT_CONNECT_EXISTING:
         LogDebug("MSG_SERVER_TO_AGENT_CONNECT_EXISTING\n");
-        handle_connect_existing(s_hdr.client_id, s_hdr.len);
+        HandleConnectExisting(header.client_id, header.len);
         break;
     case MSG_SERVER_TO_AGENT_EXEC_CMDLINE:
         LogDebug("MSG_SERVER_TO_AGENT_EXEC_CMDLINE\n");
 
         // This will return error only if vchan fails.
-        uResult = handle_exec(s_hdr.client_id, s_hdr.len);
-        if (ERROR_SUCCESS != uResult)
+        status = HandleExec(header.client_id, header.len);
+        if (ERROR_SUCCESS != status)
         {
-            return perror2(uResult, "handle_exec");
+            return perror2(status, "HandleExec");
         }
         break;
 
@@ -1239,10 +1207,10 @@ ULONG handle_server_data()
         LogDebug("MSG_SERVER_TO_AGENT_JUST_EXEC\n");
 
         // This will return error only if vchan fails.
-        uResult = handle_just_exec(s_hdr.client_id, s_hdr.len);
-        if (ERROR_SUCCESS != uResult)
+        status = HandleJustExec(header.client_id, header.len);
+        if (ERROR_SUCCESS != status)
         {
-            return perror2(uResult, "handle_just_exec");
+            return perror2(status, "HandleJustExec");
         }
         break;
 
@@ -1250,19 +1218,19 @@ ULONG handle_server_data()
         LogDebug("MSG_SERVER_TO_AGENT_INPUT\n");
 
         // This will return error only if vchan fails.
-        uResult = handle_input(s_hdr.client_id, s_hdr.len);
-        if (ERROR_SUCCESS != uResult)
+        status = HandleInput(header.client_id, header.len);
+        if (ERROR_SUCCESS != status)
         {
-            return perror2(uResult, "handle_input");
+            return perror2(status, "HandleInput");
         }
         break;
 
     case MSG_SERVER_TO_AGENT_CLIENT_END:
         LogDebug("MSG_SERVER_TO_AGENT_CLIENT_END\n");
-        RemoveClient(FindClientById(s_hdr.client_id));
+        RemoveClient(FindClientById(header.client_id));
         break;
     default:
-        LogWarning("Unknown msg type from daemon: %d\n", s_hdr.type);
+        LogWarning("Unknown msg type from daemon: %d\n", header.type);
         return ERROR_INVALID_FUNCTION;
     }
 
@@ -1270,44 +1238,45 @@ ULONG handle_server_data()
 }
 
 // returns number of filled events (0 or 1)
-ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType, PIPE_DATA *pPipeData)
+ULONG FillAsyncIoData(IN ULONG eventIndex, IN ULONG clientIndex, IN HANDLE_TYPE handleType, IN OUT PIPE_DATA *pipeData)
 {
-    ULONG uResult;
+    ULONG status;
 
-    if (uEventNumber >= RTL_NUMBER_OF(g_WatchedEvents) ||
-        uClientNumber >= RTL_NUMBER_OF(g_Clients) ||
-        !pPipeData)
+    if (eventIndex >= RTL_NUMBER_OF(g_WatchedEvents) ||
+        clientIndex >= RTL_NUMBER_OF(g_Clients) ||
+        !pipeData)
         return 0;
 
-    if (!pPipeData->bReadInProgress && !pPipeData->bDataIsReady && !pPipeData->bPipeClosed && !pPipeData->bVchanWritePending)
+    if (!pipeData->ReadInProgress && !pipeData->DataIsReady && !pipeData->PipeClosed && !pipeData->VchanWritePending)
     {
-        memset(&pPipeData->ReadBuffer, 0, READ_BUFFER_SIZE);
-        pPipeData->dwSentBytes = 0;
+        ZeroMemory(&pipeData->ReadBuffer, READ_BUFFER_SIZE);
+        pipeData->cbSentBytes = 0;
 
         if (!ReadFile(
-            pPipeData->hReadPipe,
-            &pPipeData->ReadBuffer,
+            pipeData->ReadPipe,
+            &pipeData->ReadBuffer,
             READ_BUFFER_SIZE,
             NULL,
-            &pPipeData->olRead))
+            &pipeData->ReadState))
         {
             // Last error is usually ERROR_IO_PENDING here because of the asynchronous read.
             // But if the process has closed it would be ERROR_BROKEN_PIPE,
             // in this case ReturnPipeData will send EOF notification and set bPipeClosed.
-            uResult = GetLastError();
-            if (ERROR_IO_PENDING == uResult)
-                pPipeData->bReadInProgress = TRUE;
-            if (ERROR_BROKEN_PIPE == uResult)
+            status = GetLastError();
+            if (ERROR_IO_PENDING == status)
+                pipeData->ReadInProgress = TRUE;
+
+            if (ERROR_BROKEN_PIPE == status)
             {
-                SetEvent(pPipeData->olRead.hEvent);
-                pPipeData->bDataIsReady = TRUE;
+                SetEvent(pipeData->ReadState.hEvent);
+                pipeData->DataIsReady = TRUE;
             }
         }
         else
         {
             // The read has completed synchronously.
             // The event in the OVERLAPPED structure should be signalled by now.
-            pPipeData->bDataIsReady = TRUE;
+            pipeData->DataIsReady = TRUE;
 
             // Do not set bReadInProgress to TRUE in this case because if the pipes are to be closed
             // before the next read IO starts then there will be no IO to cancel.
@@ -1320,115 +1289,116 @@ ULONG FillAsyncIoData(ULONG uEventNumber, ULONG uClientNumber, UCHAR bHandleType
     }
 
     // when bVchanWritePending==TRUE, ReturnPipeData already reset bReadInProgress and bDataIsReady
-    if (pPipeData->bReadInProgress || pPipeData->bDataIsReady)
+    if (pipeData->ReadInProgress || pipeData->DataIsReady)
     {
-        g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
-        g_HandlesInfo[uEventNumber].bType = bHandleType;
-        g_WatchedEvents[uEventNumber] = pPipeData->olRead.hEvent;
+        g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
+        g_HandlesInfo[eventIndex].Type = handleType;
+        g_WatchedEvents[eventIndex] = pipeData->ReadState.hEvent;
         return 1;
     }
 
     return 0;
 }
 
-ULONG WatchForEvents()
+// main event loop
+// fixme: this function is way too long
+ULONG WatchForEvents(void)
 {
-    EVTCHN evtchn;
-    OVERLAPPED ol;
-    unsigned int fired_port;
-    ULONG i, uEventNumber, uClientNumber;
-    DWORD dwSignaledEvent;
-    CLIENT_INFO *pClientInfo;
-    DWORD dwExitCode;
-    BOOLEAN bVchanIoInProgress;
-    ULONG uResult;
-    BOOLEAN bVchanReturnedError;
-    BOOLEAN bVchanClientConnected;
+    EVTCHN vchanHandle;
+    OVERLAPPED olVchan;
+    UINT firedPort;
+    ULONG cbRead, eventIndex, clientIndex;
+    DWORD signaledEvent;
+    CLIENT_INFO *clientInfo;
+    DWORD exitCode;
+    BOOLEAN vchanIoInProgress;
+    ULONG status;
+    BOOLEAN vchanReturnedError;
+    BOOLEAN vchanClientConnected;
 
     // This will not block.
-    uResult = peer_server_init(REXEC_PORT);
-    if (uResult)
+    if (!VchanInitServer(QREXEC_PORT))
     {
         return perror2(ERROR_INVALID_FUNCTION, "WatchForEvents(): peer_server_init()");
     }
 
-    LogInfo("Awaiting for a vchan client, write ring size: %d\n", buffer_space_vchan_ext());
+    LogInfo("Awaiting for a vchan client, write ring size: %d\n", VchanGetWriteBufferSize());
 
-    evtchn = libvchan_fd_for_select(ctrl);
+    vchanHandle = libvchan_fd_for_select(g_Vchan);
 
-    memset(&ol, 0, sizeof(ol));
-    ol.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    ZeroMemory(&olVchan, sizeof(olVchan));
+    olVchan.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
-    bVchanClientConnected = FALSE;
-    bVchanIoInProgress = FALSE;
-    bVchanReturnedError = FALSE;
+    vchanClientConnected = FALSE;
+    vchanIoInProgress = FALSE;
+    vchanReturnedError = FALSE;
 
-    for (;;)
+    while (TRUE)
     {
-        uEventNumber = 0;
+        eventIndex = 0;
 
         // Order matters.
-        g_WatchedEvents[uEventNumber++] = g_hStopServiceEvent;
-        g_WatchedEvents[uEventNumber++] = g_hAddExistingClientEvent;
+        g_WatchedEvents[eventIndex++] = g_StopServiceEvent;
+        g_WatchedEvents[eventIndex++] = g_AddExistingClientEvent;
 
-        g_HandlesInfo[0].bType = g_HandlesInfo[1].bType = HTYPE_INVALID;
+        g_HandlesInfo[0].Type = g_HandlesInfo[1].Type = HTYPE_INVALID;
 
-        uResult = ERROR_SUCCESS;
+        status = ERROR_SUCCESS;
 
-        libvchan_prepare_to_select(ctrl);
+        libvchan_prepare_to_select(g_Vchan);
         // read 1 byte instead of sizeof(fired_port) to not flush fired port
         // from evtchn buffer; evtchn driver will read only whole fired port
         // numbers (sizeof(fired_port)), so this will end in zero-length read
-        if (!ReadFile(evtchn, &fired_port, 1, NULL, &ol))
+        if (!ReadFile(vchanHandle, &firedPort, 1, NULL, &olVchan))
         {
-            uResult = GetLastError();
-            if (ERROR_IO_PENDING != uResult)
+            status = GetLastError();
+            if (ERROR_IO_PENDING != status)
             {
                 perror("Vchan async read");
-                bVchanReturnedError = TRUE;
+                vchanReturnedError = TRUE;
                 break;
             }
         }
 
-        bVchanIoInProgress = TRUE;
+        vchanIoInProgress = TRUE;
 
-        if (ERROR_SUCCESS == uResult || ERROR_IO_PENDING == uResult)
+        if (ERROR_SUCCESS == status || ERROR_IO_PENDING == status)
         {
-            g_HandlesInfo[uEventNumber].uClientNumber = FREE_CLIENT_SPOT_ID;
-            g_HandlesInfo[uEventNumber].bType = HTYPE_VCHAN;
-            g_WatchedEvents[uEventNumber++] = ol.hEvent;
+            g_HandlesInfo[eventIndex].ClientIndex = FREE_CLIENT_SPOT_ID;
+            g_HandlesInfo[eventIndex].Type = HTYPE_VCHAN;
+            g_WatchedEvents[eventIndex++] = olVchan.hEvent;
         }
 
         EnterCriticalSection(&g_ClientsCriticalSection);
 
-        for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+        for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
         {
-            if (g_Clients[uClientNumber].bClientIsReady)
+            if (g_Clients[clientIndex].ClientIsReady)
             {
-                if (!g_Clients[uClientNumber].bChildExited)
+                if (!g_Clients[clientIndex].ChildExited)
                 {
-                    g_HandlesInfo[uEventNumber].uClientNumber = uClientNumber;
-                    g_HandlesInfo[uEventNumber].bType = HTYPE_PROCESS;
-                    g_WatchedEvents[uEventNumber++] = g_Clients[uClientNumber].hProcess;
+                    g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
+                    g_HandlesInfo[eventIndex].Type = HTYPE_PROCESS;
+                    g_WatchedEvents[eventIndex++] = g_Clients[clientIndex].ChildProcess;
                 }
 
-                if (!g_Clients[uClientNumber].bReadingIsDisabled)
+                if (!g_Clients[clientIndex].ReadingDisabled)
                 {
                     // Skip those clients which have received MSG_XOFF.
-                    uEventNumber += FillAsyncIoData(uEventNumber, uClientNumber, HTYPE_STDOUT, &g_Clients[uClientNumber].Stdout);
-                    uEventNumber += FillAsyncIoData(uEventNumber, uClientNumber, HTYPE_STDERR, &g_Clients[uClientNumber].Stderr);
+                    eventIndex += FillAsyncIoData(eventIndex, clientIndex, HTYPE_STDOUT, &g_Clients[clientIndex].StdoutData);
+                    eventIndex += FillAsyncIoData(eventIndex, clientIndex, HTYPE_STDERR, &g_Clients[clientIndex].StderrData);
                 }
             }
         }
         LeaveCriticalSection(&g_ClientsCriticalSection);
 
-        dwSignaledEvent = WaitForMultipleObjects(uEventNumber, g_WatchedEvents, FALSE, INFINITE);
-        if (dwSignaledEvent >= MAXIMUM_WAIT_OBJECTS)
+        signaledEvent = WaitForMultipleObjects(eventIndex, g_WatchedEvents, FALSE, INFINITE);
+        if (signaledEvent >= MAXIMUM_WAIT_OBJECTS)
         {
-            uResult = GetLastError();
-            if (ERROR_INVALID_HANDLE != uResult)
+            status = GetLastError();
+            if (ERROR_INVALID_HANDLE != status)
             {
-                perror2(uResult, "WaitForMultipleObjects");
+                perror2(status, "WaitForMultipleObjects");
                 break;
             }
 
@@ -1439,32 +1409,32 @@ ULONG WatchForEvents()
 
             EnterCriticalSection(&g_ClientsCriticalSection);
 
-            for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+            for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
             {
-                pClientInfo = &g_Clients[uClientNumber];
+                clientInfo = &g_Clients[clientIndex];
 
-                if (!g_Clients[uClientNumber].bClientIsReady)
+                if (!g_Clients[clientIndex].ClientIsReady)
                     continue;
 
-                if (!GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode))
+                if (!GetExitCodeProcess(clientInfo->ChildProcess, &exitCode))
                 {
                     perror("GetExitCodeProcess");
-                    dwExitCode = ERROR_SUCCESS;
+                    exitCode = ERROR_SUCCESS;
                 }
 
-                if (STILL_ACTIVE != dwExitCode)
+                if (STILL_ACTIVE != exitCode)
                 {
-                    int client_id;
+                    ULONG clientId;
 
-                    client_id = pClientInfo->client_id;
-                    pClientInfo->bChildExited = TRUE;
-                    pClientInfo->dwExitCode = dwExitCode;
+                    clientId = clientInfo->ClientId;
+                    clientInfo->ChildExited = TRUE;
+                    clientInfo->ExitCode = exitCode;
                     // send exit code only when all data was sent to the daemon
-                    uResult = PossiblyHandleTerminatedClientNoLocks(pClientInfo);
-                    if (ERROR_SUCCESS != uResult)
+                    status = HandleTerminatedClientNoLocks(clientInfo);
+                    if (ERROR_SUCCESS != status)
                     {
-                        bVchanReturnedError = TRUE;
-                        perror2(uResult, "send_exit_code");
+                        vchanReturnedError = TRUE;
+                        perror2(status, "HandleTerminatedClientNoLocks");
                     }
                 }
             }
@@ -1474,41 +1444,40 @@ ULONG WatchForEvents()
         }
         else
         {
-            if (0 == dwSignaledEvent)
+            if (0 == signaledEvent)
                 // g_hStopServiceEvent is signaled
                 break;
 
-            if (HTYPE_VCHAN != g_HandlesInfo[dwSignaledEvent].bType)
+            if (HTYPE_VCHAN != g_HandlesInfo[signaledEvent].Type)
             {
                 // If this is not a vchan event, cancel the event channel read so that libvchan_write() calls
                 // could issue their own libvchan_wait on the same channel, and not interfere with the
-                // ReadFile(evtchn, ...) above.
-                if (CancelIo(evtchn))
+                // ReadFile(vchanHandle, ...) above.
+                if (CancelIo(vchanHandle))
                     // Must wait for the canceled IO to complete, otherwise a race condition may occur on the
                     // OVERLAPPED structure.
-                    WaitForSingleObject(ol.hEvent, INFINITE);
-                bVchanIoInProgress = FALSE;
+                    WaitForSingleObject(olVchan.hEvent, INFINITE);
+                vchanIoInProgress = FALSE;
             }
 
-            if (1 == dwSignaledEvent)
-                // g_hAddExistingClientEvent is signaled. Since Vchan IO has been canceled,
+            if (1 == signaledEvent)
+                // g_AddExistingClientEvent is signaled. Since Vchan IO has been canceled,
                 // safely re-iterate the loop and pick up the new handles to watch.
                 continue;
 
             // Do not have to lock g_Clients here because other threads may only call
-            // ReserveClientNumber()/ReleaseClientNumber()/AddFilledClientInfo()
-            // which operate on different uClientNumbers than those specified for WaitForMultipleObjects().
+            // ReserveClientIndex()/ReleaseClientIndex()/AddFilledClientInfo()
+            // which operate on different indices than those specified for WaitForMultipleObjects().
 
             // The other threads cannot call RemoveClient(), for example, they
-            // operate only on newly allocated uClientNumbers.
+            // operate only on newly allocated indices.
 
             // So here in this thread we may call FindByClientId() with no locks safely.
 
             // When this thread (in this switch) calls RemoveClient() later the g_Clients
             // list will be locked as usual.
 
-            // lprintf("client %d, type %d, signaled: %d, en %d\n", g_HandlesInfo[dwSignaledEvent].uClientNumber, g_HandlesInfo[dwSignaledEvent].bType, dwSignaledEvent, uEventNumber);
-            switch (g_HandlesInfo[dwSignaledEvent].bType)
+            switch (g_HandlesInfo[signaledEvent].Type)
             {
             case HTYPE_VCHAN:
 
@@ -1520,33 +1489,33 @@ ULONG WatchForEvents()
                 // sure that we clear pending state _only_
                 // when handling vchan data in this loop iteration (not any
                 // other process)
-                libvchan_wait(ctrl);
+                libvchan_wait(g_Vchan);
 
-                bVchanIoInProgress = FALSE;
+                vchanIoInProgress = FALSE;
 
-                if (!bVchanClientConnected)
+                if (!vchanClientConnected)
                 {
                     LogInfo("A vchan client has connected\n");
 
                     // Remove the xenstore device/vchan/N entry.
-                    uResult = libvchan_server_handle_connected(ctrl);
-                    if (uResult)
+                    status = libvchan_server_handle_connected(g_Vchan);
+                    if (status)
                     {
                         perror2(ERROR_INVALID_FUNCTION, "libvchan_server_handle_connected");
-                        bVchanReturnedError = TRUE;
+                        vchanReturnedError = TRUE;
                         break;
                     }
 
-                    bVchanClientConnected = TRUE;
+                    vchanClientConnected = TRUE;
 
                     // ignore error - perhaps core-admin too old and didn't
                     // create appropriate xenstore directory?
-                    advertise_tools();
+                    AdvertiseTools();
 
                     break;
                 }
 
-                if (!GetOverlappedResult(evtchn, &ol, &i, FALSE))
+                if (!GetOverlappedResult(vchanHandle, &olVchan, &cbRead, FALSE))
                 {
                     if (GetLastError() == ERROR_IO_DEVICE)
                     {
@@ -1569,27 +1538,27 @@ ULONG WatchForEvents()
                     else if (GetLastError() != ERROR_OPERATION_ABORTED)
                     {
                         perror("GetOverlappedResult(evtchn)");
-                        bVchanReturnedError = TRUE;
+                        vchanReturnedError = TRUE;
                         break;
                     }
                 }
 
                 EnterCriticalSection(&g_VchanCriticalSection);
 
-                if (libvchan_is_eof(ctrl))
+                if (libvchan_is_eof(g_Vchan))
                 {
-                    bVchanReturnedError = TRUE;
+                    vchanReturnedError = TRUE;
                     LeaveCriticalSection(&g_VchanCriticalSection);
                     break;
                 }
 
-                while (read_ready_vchan_ext())
+                while (VchanGetReadBufferSize())
                 {
-                    uResult = handle_server_data();
-                    if (ERROR_SUCCESS != uResult)
+                    status = HandleServerMessage();
+                    if (ERROR_SUCCESS != status)
                     {
-                        bVchanReturnedError = TRUE;
-                        perror2(uResult, "handle_server_data");
+                        vchanReturnedError = TRUE;
+                        perror2(status, "HandleServerMessage");
                         LeaveCriticalSection(&g_VchanCriticalSection);
                         break;
                     }
@@ -1599,44 +1568,44 @@ ULONG WatchForEvents()
 
                 EnterCriticalSection(&g_ClientsCriticalSection);
 
-                for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
+                for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
                 {
-                    if (g_Clients[uClientNumber].bClientIsReady && !g_Clients[uClientNumber].bReadingIsDisabled)
+                    if (g_Clients[clientIndex].ClientIsReady && !g_Clients[clientIndex].ReadingDisabled)
                     {
-                        if (g_Clients[uClientNumber].Stdout.bVchanWritePending)
+                        if (g_Clients[clientIndex].StdoutData.VchanWritePending)
                         {
-                            uResult = ReturnPipeData(g_Clients[uClientNumber].client_id, &g_Clients[uClientNumber].Stdout);
-                            if (ERROR_HANDLE_EOF == uResult)
+                            status = SendDataToDaemon(g_Clients[clientIndex].ClientId, &g_Clients[clientIndex].StdoutData);
+                            if (ERROR_HANDLE_EOF == status)
                             {
-                                PossiblyHandleTerminatedClientNoLocks(&g_Clients[uClientNumber]);
+                                HandleTerminatedClientNoLocks(&g_Clients[clientIndex]);
                             }
-                            else if (ERROR_INSUFFICIENT_BUFFER == uResult)
+                            else if (ERROR_INSUFFICIENT_BUFFER == status)
                             {
                                 // no more space in vchan
                                 break;
                             }
-                            else if (ERROR_SUCCESS != uResult)
+                            else if (ERROR_SUCCESS != status)
                             {
-                                bVchanReturnedError = TRUE;
-                                perror2(uResult, "ReturnPipeData(STDOUT)");
+                                vchanReturnedError = TRUE;
+                                perror2(status, "SendDataToDaemon(STDOUT)");
                             }
                         }
-                        if (g_Clients[uClientNumber].Stderr.bVchanWritePending)
+                        if (g_Clients[clientIndex].StderrData.VchanWritePending)
                         {
-                            uResult = ReturnPipeData(g_Clients[uClientNumber].client_id, &g_Clients[uClientNumber].Stderr);
-                            if (ERROR_HANDLE_EOF == uResult)
+                            status = SendDataToDaemon(g_Clients[clientIndex].ClientId, &g_Clients[clientIndex].StderrData);
+                            if (ERROR_HANDLE_EOF == status)
                             {
-                                PossiblyHandleTerminatedClientNoLocks(&g_Clients[uClientNumber]);
+                                HandleTerminatedClientNoLocks(&g_Clients[clientIndex]);
                             }
-                            else if (ERROR_INSUFFICIENT_BUFFER == uResult)
+                            else if (ERROR_INSUFFICIENT_BUFFER == status)
                             {
                                 // no more space in vchan
                                 break;
                             }
-                            else if (ERROR_SUCCESS != uResult)
+                            else if (ERROR_SUCCESS != status)
                             {
-                                bVchanReturnedError = TRUE;
-                                perror2(uResult, "ReturnPipeData(STDERR)");
+                                vchanReturnedError = TRUE;
+                                perror2(status, "SendDataToDaemon(STDERR)");
                             }
                         }
                     }
@@ -1648,100 +1617,102 @@ ULONG WatchForEvents()
 
             case HTYPE_STDOUT:
 #ifdef DISPLAY_CONSOLE_OUTPUT
-                printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout.ReadBuffer);
+                printf("%s", &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].StdoutData.ReadBuffer);
 #endif
 
-                uResult = ReturnPipeData(
-                    g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
-                    &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stdout);
-                if (ERROR_HANDLE_EOF == uResult)
+                status = SendDataToDaemon(
+                    g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].ClientId,
+                    &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].StdoutData);
+
+                if (ERROR_HANDLE_EOF == status)
                 {
-                    PossiblyHandleTerminatedClient(&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber]);
+                    HandleTerminatedClient(&g_Clients[g_HandlesInfo[signaledEvent].ClientIndex]);
                 }
-                else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult)
+                else if (ERROR_SUCCESS != status && ERROR_INSUFFICIENT_BUFFER != status)
                 {
-                    bVchanReturnedError = TRUE;
-                    perror2(uResult, "ReturnPipeData(STDOUT)");
+                    vchanReturnedError = TRUE;
+                    perror2(status, "SendDataToDaemon(STDOUT)");
                 }
                 break;
 
             case HTYPE_STDERR:
 #ifdef DISPLAY_CONSOLE_OUTPUT
-                printf("%s", &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr.ReadBuffer);
+                printf("%s", &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].StderrData.ReadBuffer);
 #endif
 
-                uResult = ReturnPipeData(
-                    g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].client_id,
-                    &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber].Stderr);
-                if (ERROR_HANDLE_EOF == uResult)
+                status = SendDataToDaemon(
+                    g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].ClientId,
+                    &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].StderrData);
+
+                if (ERROR_HANDLE_EOF == status)
                 {
-                    PossiblyHandleTerminatedClient(&g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber]);
+                    HandleTerminatedClient(&g_Clients[g_HandlesInfo[signaledEvent].ClientIndex]);
                 }
-                else if (ERROR_SUCCESS != uResult && ERROR_INSUFFICIENT_BUFFER != uResult)
+                else if (ERROR_SUCCESS != status && ERROR_INSUFFICIENT_BUFFER != status)
                 {
-                    bVchanReturnedError = TRUE;
-                    perror2(uResult, "ReturnPipeData(STDERR)");
+                    vchanReturnedError = TRUE;
+                    perror2(status, "SendDataToDaemon(STDERR)");
                 }
                 break;
 
             case HTYPE_PROCESS:
 
-                pClientInfo = &g_Clients[g_HandlesInfo[dwSignaledEvent].uClientNumber];
+                clientInfo = &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex];
 
-                if (!GetExitCodeProcess(pClientInfo->hProcess, &dwExitCode))
+                if (!GetExitCodeProcess(clientInfo->ChildProcess, &exitCode))
                 {
                     perror("GetExitCodeProcess");
-                    dwExitCode = ERROR_SUCCESS;
+                    exitCode = ERROR_SUCCESS;
                 }
 
-                pClientInfo->bChildExited = TRUE;
-                pClientInfo->dwExitCode = dwExitCode;
+                clientInfo->ChildExited = TRUE;
+                clientInfo->ExitCode = exitCode;
                 // send exit code only when all data was sent to the daemon
-                uResult = PossiblyHandleTerminatedClient(pClientInfo);
-                if (ERROR_SUCCESS != uResult)
+                status = HandleTerminatedClient(clientInfo);
+                if (ERROR_SUCCESS != status)
                 {
-                    bVchanReturnedError = TRUE;
-                    perror2(uResult, "send_exit_code");
+                    vchanReturnedError = TRUE;
+                    perror2(status, "HandleTerminatedClient");
                 }
 
                 break;
             }
         }
 
-        if (bVchanReturnedError)
+        if (vchanReturnedError)
             break;
     }
 
-    if (bVchanIoInProgress)
-        if (CancelIo(evtchn))
+    if (vchanIoInProgress)
+        if (CancelIo(vchanHandle))
             // Must wait for the canceled IO to complete, otherwise a race condition may occur on the
             // OVERLAPPED structure.
-            WaitForSingleObject(ol.hEvent, INFINITE);
+            WaitForSingleObject(olVchan.hEvent, INFINITE);
 
-    if (!bVchanClientConnected)
+    if (!vchanClientConnected)
         // Remove the xenstore device/vchan/N entry.
-        libvchan_server_handle_connected(ctrl);
+        libvchan_server_handle_connected(g_Vchan);
 
-    // Cancel all the other pending IO.
+    // Cancel all other pending IO.
     RemoveAllClients();
 
-    if (bVchanClientConnected)
-        libvchan_close(ctrl);
+    if (vchanClientConnected)
+        libvchan_close(g_Vchan);
 
     // This is actually CloseHandle(evtchn)
-    xc_evtchn_close(ctrl->evfd);
+    xc_evtchn_close(g_Vchan->evfd);
 
-    CloseHandle(ol.hEvent);
+    CloseHandle(olVchan.hEvent);
 
-    return bVchanReturnedError ? ERROR_INVALID_FUNCTION : ERROR_SUCCESS;
+    return vchanReturnedError ? ERROR_INVALID_FUNCTION : ERROR_SUCCESS;
 }
 
-VOID Usage()
+void Usage(void)
 {
     LogError("qrexec agent service\n\nUsage: qrexec_agent <-i|-u>\n");
 }
 
-ULONG CheckForXenInterface()
+ULONG CheckForXenInterface(void)
 {
     EVTCHN xc;
 
@@ -1753,44 +1724,44 @@ ULONG CheckForXenInterface()
     return ERROR_SUCCESS;
 }
 
-ULONG WINAPI ServiceExecutionThread(void *pParam)
+ULONG WINAPI ServiceExecutionThread(void *param)
 {
-    ULONG uResult;
-    HANDLE hTriggerEventsThread;
+    ULONG status;
+    HANDLE triggerEventsThread;
 
     LogInfo("Service started\n");
 
     // Auto reset, initial state is not signaled
-    g_hAddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!g_hAddExistingClientEvent)
+    g_AddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!g_AddExistingClientEvent)
     {
         return perror("CreateEvent");
     }
 
-    hTriggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) WatchForTriggerEvents, NULL, 0, NULL);
-    if (!hTriggerEventsThread)
+    triggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) WatchForTriggerEvents, NULL, 0, NULL);
+    if (!triggerEventsThread)
     {
-        uResult = GetLastError();
-        CloseHandle(g_hAddExistingClientEvent);
-        return perror2(uResult, "CreateThread");
+        status = GetLastError();
+        CloseHandle(g_AddExistingClientEvent);
+        return perror2(status, "CreateThread");
     }
 
-    for (;;)
+    while (TRUE)
     {
-        uResult = WatchForEvents();
-        if (ERROR_SUCCESS != uResult)
-            perror2(uResult, "WatchForEvents");
+        status = WatchForEvents();
+        if (ERROR_SUCCESS != status)
+            perror2(status, "WatchForEvents");
 
-        if (!WaitForSingleObject(g_hStopServiceEvent, 0))
+        if (!WaitForSingleObject(g_StopServiceEvent, 0))
             break;
 
         Sleep(1000);
     }
 
     LogDebug("Waiting for the trigger thread to exit\n");
-    WaitForSingleObject(hTriggerEventsThread, INFINITE);
-    CloseHandle(hTriggerEventsThread);
-    CloseHandle(g_hAddExistingClientEvent);
+    WaitForSingleObject(triggerEventsThread, INFINITE);
+    CloseHandle(triggerEventsThread);
+    CloseHandle(g_AddExistingClientEvent);
 
     DeleteCriticalSection(&g_ClientsCriticalSection);
     DeleteCriticalSection(&g_VchanCriticalSection);
@@ -1802,64 +1773,60 @@ ULONG WINAPI ServiceExecutionThread(void *pParam)
 
 #ifdef BUILD_AS_SERVICE
 
-ULONG Init(HANDLE *phServiceThread)
+ULONG Init(OUT HANDLE *serviceThread)
 {
-    ULONG uResult;
-    HANDLE hThread;
-    ULONG uClientNumber;
+    ULONG status;
+    ULONG clientIndex;
 
-    *phServiceThread = INVALID_HANDLE_VALUE;
+    *serviceThread = INVALID_HANDLE_VALUE;
 
-    uResult = CheckForXenInterface();
-    if (ERROR_SUCCESS != uResult)
+    status = CheckForXenInterface();
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "CheckForXenInterface");
+        return perror2(status, "CheckForXenInterface");
     }
 
     InitializeCriticalSection(&g_ClientsCriticalSection);
     InitializeCriticalSection(&g_VchanCriticalSection);
     InitializeCriticalSection(&g_PipesCriticalSection);
 
-    for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-        g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
+    for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
+        g_Clients[clientIndex].ClientId = FREE_CLIENT_SPOT_ID;
 
-    hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) ServiceExecutionThread, NULL, 0, NULL);
-    if (!hThread)
+    *serviceThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) ServiceExecutionThread, NULL, 0, NULL);
+    if (*serviceThread == NULL)
     {
         return perror("CreateThread");
     }
-
-    *phServiceThread = hThread;
 
     return ERROR_SUCCESS;
 }
 
 // This is the entry point for a service module (BUILD_AS_SERVICE defined).
-int __cdecl _tmain(ULONG argc, TCHAR *argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    ULONG uOption;
-    TCHAR *pszParam = NULL;
-    TCHAR szUserName[UNLEN + 1];
-    TCHAR szFullPath[MAX_PATH + 1];
-    DWORD nSize;
-    ULONG uResult;
-    BOOL bStop;
-    TCHAR bCommand;
-    TCHAR *pszAccountName = NULL;
+    ULONG option;
+    WCHAR *param = NULL;
+    WCHAR userName[UNLEN + 1] = { 0 };
+    WCHAR fullPath[MAX_PATH + 1];
+    DWORD cchUserName;
+    ULONG status;
+    BOOL stopParsing;
+    WCHAR command;
+    WCHAR *accountName = NULL;
 
-    SERVICE_TABLE_ENTRY	ServiceTable[] = {
-        { SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain },
-        { NULL, NULL }
+    SERVICE_TABLE_ENTRY	serviceTable[] = {
+            { SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain },
+            { NULL, NULL }
     };
 
-    memset(szUserName, 0, sizeof(szUserName));
-    nSize = RTL_NUMBER_OF(szUserName);
-    if (!GetUserName(szUserName, &nSize))
+    cchUserName = RTL_NUMBER_OF(userName);
+    if (!GetUserName(userName, &cchUserName))
     {
         return perror("GetUserName");
     }
 
-    if ((1 == argc) && _tcscmp(szUserName, TEXT("SYSTEM")))
+    if ((1 == argc) && wcscmp(userName, L"SYSTEM"))
     {
         Usage();
         return ERROR_INVALID_PARAMETER;
@@ -1869,99 +1836,99 @@ int __cdecl _tmain(ULONG argc, TCHAR *argv[])
     {
         LogInfo("Running as SYSTEM\n");
 
-        uResult = ERROR_SUCCESS;
-        if (!StartServiceCtrlDispatcher(ServiceTable))
+        status = ERROR_SUCCESS;
+        if (!StartServiceCtrlDispatcher(serviceTable))
         {
             return perror("StartServiceCtrlDispatcher");
         }
     }
 
-    memset(szFullPath, 0, sizeof(szFullPath));
-    if (!GetModuleFileName(NULL, szFullPath, RTL_NUMBER_OF(szFullPath) - 1))
+    memset(fullPath, 0, sizeof(fullPath));
+    if (!GetModuleFileName(NULL, fullPath, RTL_NUMBER_OF(fullPath) - 1))
     {
         return perror("GetModuleFileName");
     }
 
-    uResult = ERROR_SUCCESS;
-    bStop = FALSE;
-    bCommand = 0;
+    status = ERROR_SUCCESS;
+    stopParsing = FALSE;
+    command = 0;
 
-    while (!bStop)
+    while (!stopParsing)
     {
-        uOption = GetOption(argc, argv, TEXT("iua:"), &pszParam);
-        switch (uOption)
+        option = GetOption(argc, argv, TEXT("iua:"), &param);
+        switch (option)
         {
         case 0:
-            bStop = TRUE;
+            stopParsing = TRUE;
             break;
 
-        case _T('i'):
-        case _T('u'):
-            if (bCommand)
+        case L'i':
+        case L'u':
+            if (command)
             {
-                bCommand = 0;
-                bStop = TRUE;
+                command = 0;
+                stopParsing = TRUE;
             }
             else
-                bCommand = (TCHAR) uOption;
+                command = (TCHAR) option;
 
             break;
 
-        case _T('a'):
-            if (pszParam)
-                pszAccountName = pszParam;
+        case L'a':
+            if (param)
+                accountName = param;
             break;
 
         default:
-            bCommand = 0;
-            bStop = TRUE;
+            command = 0;
+            stopParsing = TRUE;
         }
     }
 
-    if (pszAccountName)
+    if (accountName)
     {
-        LogDebug("GrantDesktopAccess('%s')\n", pszAccountName);
-        uResult = GrantDesktopAccess(pszAccountName, NULL);
-        if (ERROR_SUCCESS != uResult)
-            perror2(uResult, "GrantDesktopAccess");
+        LogDebug("GrantDesktopAccess('%s')\n", accountName);
+        status = GrantDesktopAccess(accountName, NULL);
+        if (ERROR_SUCCESS != status)
+            perror2(status, "GrantDesktopAccess");
 
-        return uResult;
+        return status;
     }
 
-    switch (bCommand)
+    switch (command)
     {
-    case _T('i'):
-        uResult = InstallService(szFullPath, SERVICE_NAME);
+    case L'i':
+        status = InstallService(fullPath, SERVICE_NAME);
         break;
 
-    case _T('u'):
-        uResult = UninstallService(SERVICE_NAME);
+    case L'u':
+        status = UninstallService(SERVICE_NAME);
         break;
     default:
         Usage();
     }
 
-    return uResult;
+    return status;
 }
 
 #else
 
 // Is not called when built without BUILD_AS_SERVICE definition.
-ULONG Init(HANDLE *phServiceThread)
+ULONG Init(HANDLE *serviceThread)
 {
     return ERROR_SUCCESS;
 }
 
-BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
+BOOL WINAPI CtrlHandler(IN DWORD ctrlType)
 {
     LogInfo("Got shutdown signal\n");
 
-    SetEvent(g_hStopServiceEvent);
+    SetEvent(g_StopServiceEvent);
 
-    WaitForSingleObject(g_hCleanupFinishedEvent, 2000);
+    WaitForSingleObject(g_CleanupFinishedEvent, 2000);
 
-    CloseHandle(g_hStopServiceEvent);
-    CloseHandle(g_hCleanupFinishedEvent);
+    CloseHandle(g_StopServiceEvent);
+    CloseHandle(g_CleanupFinishedEvent);
 
     LogInfo("Shutdown complete\n");
     ExitProcess(0);
@@ -1969,42 +1936,40 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 }
 
 // This is the entry point for a console application (BUILD_AS_SERVICE not defined).
-int __cdecl _tmain(ULONG argc, PTCHAR argv[])
+int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    ULONG uResult;
-    ULONG uClientNumber;
+    ULONG clientIndex;
 
-    _tprintf(TEXT("\nqrexec agent console application\n\n"));
+    wprintf(L"\nqrexec agent console application\n\n");
 
-    if (ERROR_SUCCESS != CheckForXenInterface()) {
+    if (ERROR_SUCCESS != CheckForXenInterface())
+    {
         LogError("Could not find Xen interface\n");
         return ERROR_NOT_SUPPORTED;
     }
 
     // Manual reset, initial state is not signaled
-    g_hStopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_hStopServiceEvent) {
+    g_StopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_StopServiceEvent)
         return perror("CreateEvent");
-    }
 
     // Manual reset, initial state is not signaled
-    g_hCleanupFinishedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_hCleanupFinishedEvent) {
+    g_CleanupFinishedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!g_CleanupFinishedEvent)
         return perror("CreateEvent");
-    }
 
     // InitializeCriticalSection always succeeds in Vista and later OSes.
     InitializeCriticalSection(&g_ClientsCriticalSection);
     InitializeCriticalSection(&g_VchanCriticalSection);
     InitializeCriticalSection(&g_PipesCriticalSection);
 
-    SetConsoleCtrlHandler((HANDLER_ROUTINE *)CtrlHandler, TRUE);
+    SetConsoleCtrlHandler((PHANDLER_ROUTINE) CtrlHandler, TRUE);
 
-    for (uClientNumber = 0; uClientNumber < MAX_CLIENTS; uClientNumber++)
-        g_Clients[uClientNumber].client_id = FREE_CLIENT_SPOT_ID;
+    for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
+        g_Clients[clientIndex].ClientId = FREE_CLIENT_SPOT_ID;
 
     ServiceExecutionThread(NULL);
-    SetEvent(g_hCleanupFinishedEvent);
+    SetEvent(g_CleanupFinishedEvent);
 
     return ERROR_SUCCESS;
 }

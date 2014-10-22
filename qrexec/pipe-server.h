@@ -6,42 +6,42 @@
 #include "log.h"
 #include <strsafe.h>
 
+typedef enum _CONNECTION_STATE
+{
+    STATE_WAITING_FOR_CLIENT = 0,
+    STATE_RECEIVING_PARAMETERS,
+    STATE_WAITING_FOR_DAEMON_DECISION,
+    STATE_SENDING_IO_HANDLES,
+    STATE_RECEIVING_PROCESS_HANDLE
+} CONNECTION_STATE;
 
-typedef enum {
-	STATE_WAITING_FOR_CLIENT = 0,
-	STATE_RECEIVING_PARAMETERS,
-	STATE_WAITING_FOR_DAEMON_DECISION,
-	STATE_SENDING_IO_HANDLES,
-	STATE_RECEIVING_PROCESS_HANDLE
-};
-
-#define INSTANCES	4
+#define TRIGGER_PIPE_INSTANCES	4
 #define PIPE_TIMEOUT	5000
 #define IO_HANDLES_SIZE	sizeof(IO_HANDLES)
 
-typedef struct {
-	OVERLAPPED	oOverlapped;
-	HANDLE	hPipeInst;
-	ULONG	uState;
-	BOOLEAN	fPendingIO;
-	int	assigned_client_id;
-	struct	trigger_connect_params	params;
+typedef struct _PIPE_INSTANCE
+{
+    OVERLAPPED AsyncState;
+    HANDLE Pipe;
+    CONNECTION_STATE ConnectionState;
+    BOOL PendingIo;
+    UINT ClientId;
+    struct trigger_connect_params ConnectParams;
 
-	CLIENT_INFO	ClientInfo;
-	IO_HANDLES	RemoteHandles;
+    CLIENT_INFO ClientInfo;
+    IO_HANDLES RemoteHandles;
 
-	HANDLE	hClientProcess;
-	CREATE_PROCESS_RESPONSE	CreateProcessResponse;
-} PIPEINST, *LPPIPEINST;
-
+    HANDLE ClientProcess;
+    CREATE_PROCESS_RESPONSE CreateProcessResponse;
+} PIPE_INSTANCE;
 
 ULONG WINAPI WatchForTriggerEvents(
-	PVOID pParam
-);
+    IN void *param
+    );
 
 ULONG ProceedWithExecution(
-	int assigned_client_id,
-	PUCHAR pszIdent
-);
+    IN ULONG clientId,
+    IN const char *ident
+    );
 
 extern CRITICAL_SECTION	g_PipesCriticalSection;

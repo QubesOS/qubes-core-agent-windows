@@ -3,13 +3,16 @@
 #include "common.h"
 #include "log.h"
 
+void WINAPI ServiceMain(IN DWORD argc, IN WCHAR *argv[]);
 
-VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv);
-ULONG UpdateServiceStatus(DWORD dwCurrentState,
-						 DWORD dwWin32ExitCode,
-						 DWORD dwServiceSpecificExitCode,
-						 DWORD dwWaitHint);
-ULONG InstallService(PTCHAR pszServiceFileName, PTCHAR pszServiceName);
-ULONG UninstallService(PTCHAR wszServiceName);
+ULONG UpdateServiceStatus(
+    IN DWORD currentState,
+    IN DWORD win32ExitCode,
+    IN DWORD serviceSpecificExitCode,
+    IN DWORD waitHint);
 
-ULONG Init(HANDLE *phServiceThread);
+ULONG InstallService(IN const WCHAR *serviceFileName, IN const WCHAR *serviceName);
+
+ULONG UninstallService(IN const WCHAR *serviceName);
+
+ULONG Init(IN const HANDLE *serviceThread);

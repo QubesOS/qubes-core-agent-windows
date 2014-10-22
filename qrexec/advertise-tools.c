@@ -1,106 +1,104 @@
 #include <windows.h>
 #include <shlwapi.h>
-#include <tchar.h>
 #include <xenstore.h>
 #include <Wtsapi32.h>
 #include "log.h"
 
 #define XS_TOOLS_PREFIX "qubes-tools/"
 
-BOOL get_current_user(CHAR **ppUserName)
+// userName needs to be freed with WtsFreeMemory
+BOOL GetCurrentUser(OUT char **userName)
 {
-    WTS_SESSION_INFOA *pSessionInfo;
-    DWORD dSessionCount;
+    WTS_SESSION_INFOA *sessionInfo;
+    DWORD sessionCount;
     DWORD i;
     DWORD cbUserName;
-    BOOL bFound;
+    BOOL found;
 
-    if (FAILED(WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dSessionCount)))
+    if (!WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessionInfo, &sessionCount))
     {
         perror("WTSEnumerateSessionsA");
         return FALSE;
     }
 
-    bFound = FALSE;
+    found = FALSE;
 
-    for (i = 0; i < dSessionCount; i++)
+    for (i = 0; i < sessionCount; i++)
     {
-        if (pSessionInfo[i].State == WTSActive)
+        if (sessionInfo[i].State == WTSActive)
         {
-            if (FAILED(WTSQuerySessionInformationA(
+            if (!WTSQuerySessionInformationA(
                 WTS_CURRENT_SERVER_HANDLE,
-                pSessionInfo[i].SessionId, WTSUserName,
-                ppUserName,
-                &cbUserName)))
+                sessionInfo[i].SessionId, WTSUserName,
+                userName,
+                &cbUserName))
             {
                 perror("WTSQuerySessionInformationA");
                 goto cleanup;
             }
-            LogDebug("Found session: %S\n", *ppUserName);
-            bFound = TRUE;
+            LogDebug("Found session: %S\n", *userName);
+            found = TRUE;
         }
     }
 
 cleanup:
-    WTSFreeMemory(pSessionInfo);
-    return bFound;
+    WTSFreeMemory(sessionInfo);
+    return found;
 }
 
 /* just a helper function, the buffer needs to be at least MAX_PATH+1 length */
-BOOL prepare_exe_path(TCHAR *buffer, TCHAR *exe_name)
+BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 {
-    TCHAR *ptSeparator = NULL;
+    WCHAR *lastBackslash = NULL;
 
-    memset(buffer, 0, sizeof(buffer));
-    if (!GetModuleFileName(NULL, buffer, MAX_PATH))
+    if (!GetModuleFileName(NULL, fullPath, MAX_PATH))
     {
         perror("GetModuleFileName");
         return FALSE;
     }
 
     // cut off file name (qrexec_agent.exe)
-    ptSeparator = _tcsrchr(buffer, L'\\');
-    if (!ptSeparator)
+    lastBackslash = wcsrchr(fullPath, L'\\');
+    if (!lastBackslash)
     {
-        LogError("Cannot find dir containing qrexec_agent.exe\n");
+        LogError("qrexec-agent.exe path has no backslash\n");
         return FALSE;
     }
 
     // Leave trailing backslash
-    ptSeparator++;
-    *ptSeparator = L'\0';
+    lastBackslash++;
+    *lastBackslash = L'\0';
     // add an executable filename
-    PathAppendW(buffer, exe_name);
+    PathAppend(fullPath, exeName);
     return TRUE;
 }
 
 /* TODO - make this configurable? */
-BOOL check_gui_presence()
+BOOL CheckGuiAgentPresence(void)
 {
-    TCHAR szServiceFilePath[MAX_PATH + 1];
+    WCHAR serviceFilePath[MAX_PATH + 1];
 
-    if (!prepare_exe_path(szServiceFilePath, TEXT("wga.exe")))
+    if (!PrepareExePath(serviceFilePath, L"wga.exe"))
         return FALSE;
 
-    return PathFileExists(szServiceFilePath);
+    return PathFileExists(serviceFilePath);
 }
 
-BOOL notify_dom0()
+BOOL NotifyDom0(void)
 {
-    TCHAR szQrxecClientVmPath[MAX_PATH + 1];
-    STARTUPINFO si;
+    WCHAR qrexecClientVmPath[MAX_PATH + 1];
+    STARTUPINFO si = { 0 };
     PROCESS_INFORMATION pi;
 
-    if (!prepare_exe_path(szQrxecClientVmPath, TEXT("qrexec-client-vm.exe")))
+    if (!PrepareExePath(qrexecClientVmPath, L"qrexec-client-vm.exe"))
         return FALSE;
 
-    memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
     si.wShowWindow = SW_HIDE;
     si.dwFlags = STARTF_USESHOWWINDOW;
 
     if (!CreateProcess(
-        szQrxecClientVmPath,
+        qrexecClientVmPath,
         TEXT("qrexec-client-vm.exe dom0 qubes.NotifyTools dummy"),
         NULL,
         NULL,
@@ -122,12 +120,12 @@ BOOL notify_dom0()
     return TRUE;
 }
 
-LONG advertise_tools()
+ULONG AdvertiseTools(void)
 {
     struct xs_handle *xs;
-    LONG ret = ERROR_INVALID_FUNCTION;
-    BOOL gui_present;
-    CHAR *pszUserName;
+    ULONG status = ERROR_UNIDENTIFIED_ERROR;
+    BOOL guiAgentPresent;
+    CHAR *userName = NULL;
 
     xs = xs_domain_open();
     if (!xs)
@@ -153,35 +151,35 @@ LONG advertise_tools()
         goto cleanup;
     }
 
-    gui_present = check_gui_presence();
+    guiAgentPresent = CheckGuiAgentPresence();
 
-    if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "gui", gui_present ? "1" : "0", 1))
+    if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "gui", guiAgentPresent ? "1" : "0", 1))
     {
         perror("write 'gui' entry");
         goto cleanup;
     }
 
-    if (get_current_user(&pszUserName))
+    if (GetCurrentUser(&userName))
     {
-        if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "default-user", pszUserName, strlen(pszUserName)))
+        if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "default-user", userName, strlen(userName)))
         {
             perror("write 'default-user' entry");
-            WTSFreeMemory(pszUserName);
             goto cleanup;
         }
-        WTSFreeMemory(pszUserName);
     }
 
-    if (!notify_dom0())
+    if (!NotifyDom0())
     {
         /* error already reported */
         goto cleanup;
     }
 
-    ret = ERROR_SUCCESS;
+    status = ERROR_SUCCESS;
 
 cleanup:
     if (xs)
         xs_daemon_close(xs);
-    return ret;
+    if (userName)
+        WTSFreeMemory(userName);
+    return status;
 }

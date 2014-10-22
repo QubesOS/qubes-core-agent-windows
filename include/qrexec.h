@@ -20,7 +20,9 @@
  */
 
 #pragma once
-#define REXEC_PORT 512
+#include <windows.h>
+
+#define QREXEC_PORT 512
 
 enum
 {

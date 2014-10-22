@@ -1,110 +1,102 @@
 #include "pipe-server.h"
 
-extern HANDLE g_hStopServiceEvent;
+extern HANDLE g_StopServiceEvent;
 
 CRITICAL_SECTION g_PipesCriticalSection;
-PIPEINST g_Pipes[INSTANCES];
-HANDLE g_hEvents[INSTANCES + 1];
+PIPE_INSTANCE g_Pipes[TRIGGER_PIPE_INSTANCES] = { 0 };
+HANDLE g_Events[TRIGGER_PIPE_INSTANCES + 1];
 
-ULONG64	g_uDaemonRequestsCounter = 1;
+ULONG64	g_DaemonRequestsCounter = 1;
 
-ULONG CreatePipeSecurityDescriptor(SECURITY_DESCRIPTOR **ppPipeSecurityDescriptor, ACL **ppACL)
+static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurityDescriptor, OUT ACL **pipeAcl)
 {
-    ULONG uResult;
-    SID *pEveryoneSid = NULL;
-    SID *pAdminSID = NULL;
-    ACL *pACL = NULL;
-    SECURITY_DESCRIPTOR *pSD = NULL;
-    EXPLICIT_ACCESS	ea[2];
-    SID_IDENTIFIER_AUTHORITY SIDAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
+    ULONG status;
+    SID *everyoneSid = NULL;
+    SID *adminSid = NULL;
+    EXPLICIT_ACCESS	ea[2] = { 0 };
+    SID_IDENTIFIER_AUTHORITY sidAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
 
-    if (!ppPipeSecurityDescriptor || !ppACL)
+    if (!pipeSecurityDescriptor || !pipeAcl)
         return ERROR_INVALID_PARAMETER;
-
-    *ppPipeSecurityDescriptor = NULL;
-    *ppACL = NULL;
 
     // Create a well-known SID for the Everyone group.
     if (!AllocateAndInitializeSid(
-        &SIDAuthWorld,
+        &sidAuthWorld,
         1,
         SECURITY_WORLD_RID,
         0, 0, 0, 0, 0, 0, 0,
-        &pEveryoneSid))
+        &everyoneSid))
     {
         return perror("AllocateAndInitializeSid");
     }
 
+    *pipeAcl = NULL;
+    *pipeSecurityDescriptor = NULL;
+
     // Initialize an EXPLICIT_ACCESS structure for an ACE.
     // The ACE will allow Everyone read/write access to the pipe.
-    memset(&ea, 0, sizeof(ea));
     ea[0].grfAccessPermissions = FILE_GENERIC_READ | FILE_GENERIC_WRITE | FILE_CREATE_PIPE_INSTANCE | SYNCHRONIZE;
     ea[0].grfAccessMode = SET_ACCESS;
     ea[0].grfInheritance = NO_INHERITANCE;
     ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
     ea[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-    ea[0].Trustee.ptstrName = (TCHAR *) pEveryoneSid;
+    ea[0].Trustee.ptstrName = (WCHAR *) everyoneSid;
 
     // Create a new ACL that contains the new ACE.
-    uResult = SetEntriesInAcl(1, ea, NULL, &pACL);
-    FreeSid(pEveryoneSid);
+    status = SetEntriesInAcl(1, ea, NULL, pipeAcl);
 
-    if (ERROR_SUCCESS != uResult)
+    if (ERROR_SUCCESS != status)
     {
-        SetLastError(uResult);
-        return perror("SetEntriesInAcl");
+        perror2(status, "SetEntriesInAcl");
+        goto cleanup;
     }
 
     // Initialize a security descriptor.
-    pSD = (SECURITY_DESCRIPTOR *) LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
-    if (!pSD)
+    *pipeSecurityDescriptor = (SECURITY_DESCRIPTOR *) LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
+    if (*pipeSecurityDescriptor = NULL)
     {
-        LocalFree(pACL);
-        return perror("LocalAlloc");
+        perror("LocalAlloc");
+        goto cleanup;
     }
 
-    if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
+    if (!InitializeSecurityDescriptor(*pipeSecurityDescriptor, SECURITY_DESCRIPTOR_REVISION))
     {
-        uResult = GetLastError();
-
-        LocalFree(pACL);
-        LocalFree(pSD);
-
-        return perror2(uResult, "InitializeSecurityDescriptor");
+        status = perror("InitializeSecurityDescriptor");
+        goto cleanup;
     }
 
     // Add the ACL to the security descriptor.
-    if (!SetSecurityDescriptorDacl(pSD, TRUE, pACL, FALSE))
+    if (!SetSecurityDescriptorDacl(*pipeSecurityDescriptor, TRUE, *pipeAcl, FALSE))
     {
-        uResult = GetLastError();
-
-        LocalFree(pACL);
-        LocalFree(pSD);
-
-        return perror2(uResult, "SetSecurityDescriptorDacl");
+        status = perror("SetSecurityDescriptorDacl");
+        goto cleanup;
     }
 
-    *ppPipeSecurityDescriptor = pSD;
-    *ppACL = pACL;
-
-    return ERROR_SUCCESS;
+cleanup:
+    if (everyoneSid)
+        FreeSid(everyoneSid);
+    if (status != ERROR_SUCCESS && *pipeAcl)
+        LocalFree(*pipeAcl);
+    if (status != ERROR_SUCCESS && *pipeSecurityDescriptor)
+        LocalFree(*pipeSecurityDescriptor);
+    return status;
 }
 
 // This function is called to start an overlapped connect operation.
-// It sets *pbPendingIO to TRUE if an operation is pending or to FALSE if the
+// It sets pendingIo to TRUE if an operation is pending or to FALSE if the
 // connection has been completed.
-ULONG ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo, HANDLE hEvent, BOOLEAN *pbPendingIO)
+static ULONG ConnectToNewClient(IN HANDLE clientPipe, OUT OVERLAPPED *asyncState, IN HANDLE connectionEvent, OUT BOOL *pendingIo)
 {
-    BOOLEAN	bPendingIO = FALSE;
-
-    if (!pbPendingIO)
+    if (!pendingIo)
         return ERROR_INVALID_PARAMETER;
 
-    memset(lpo, 0, sizeof(OVERLAPPED));
-    lpo->hEvent = hEvent;
+    *pendingIo = FALSE;
+    ZeroMemory(asyncState, sizeof(*asyncState));
+
+    asyncState->hEvent = connectionEvent;
 
     // Start an overlapped connection for this pipe instance.
-    if (ConnectNamedPipe(hPipe, lpo))
+    if (ConnectNamedPipe(clientPipe, asyncState))
     {
         return perror("ConnectNamedPipe");
     }
@@ -113,12 +105,12 @@ ULONG ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo, HANDLE hEvent, BOOLEAN 
     {
         // The overlapped connection in progress.
     case ERROR_IO_PENDING:
-        bPendingIO = TRUE;
+        *pendingIo = TRUE;
         break;
 
-        // Client is already connected, so signal an event.
+        // Client is already connected, so signal the event.
     case ERROR_PIPE_CONNECTED:
-        SetEvent(lpo->hEvent);
+        SetEvent(asyncState->hEvent);
         break;
 
         // If an error occurs during the connect operation
@@ -126,7 +118,6 @@ ULONG ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo, HANDLE hEvent, BOOLEAN 
         return perror("ConnectNamedPipe");
     }
 
-    *pbPendingIO = bPendingIO;
     return ERROR_SUCCESS;
 }
 
@@ -135,68 +126,66 @@ ULONG ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo, HANDLE hEvent, BOOLEAN 
 // - when the client closes its handle to the pipe;
 // - when the server disconnects from the client.
 // Disconnect from this client, then call ConnectNamedPipe to wait for another client to connect.
-ULONG DisconnectAndReconnect(ULONG i)
+ULONG DisconnectAndReconnect(IN ULONG clientIndex)
 {
-    ULONG uResult;
+    ULONG status;
 
-    LogDebug("Disconnecting pipe %d, state %d\n", i, g_Pipes[i].uState);
+    LogDebug("Disconnecting pipe %lu, state %d\n", clientIndex, g_Pipes[clientIndex].ConnectionState);
 
-    if (g_Pipes[i].hClientProcess)
-        CloseHandle(g_Pipes[i].hClientProcess);
-    g_Pipes[i].hClientProcess = 0;
+    if (g_Pipes[clientIndex].ClientProcess)
+        CloseHandle(g_Pipes[clientIndex].ClientProcess);
+    g_Pipes[clientIndex].ClientProcess = 0;
 
-    g_Pipes[i].CreateProcessResponse.ResponseType = CPR_TYPE_NONE;
+    g_Pipes[clientIndex].CreateProcessResponse.ResponseType = CPR_TYPE_NONE;
 
-    if (g_Pipes[i].ClientInfo.hWriteStdinPipe)
-        CloseHandle(g_Pipes[i].ClientInfo.hWriteStdinPipe);
+    if (g_Pipes[clientIndex].ClientInfo.WriteStdinPipe)
+        CloseHandle(g_Pipes[clientIndex].ClientInfo.WriteStdinPipe);
 
     // There is no IO going in these pipes, so we can safely pass any
     // client_id to CloseReadPipeHandles - it will not be used anywhere.
     // Once a pipe becomes watched, these handles are moved to g_Clients,
     // and these structures are zeroed.
-    if (g_Pipes[i].ClientInfo.Stdout.hReadPipe)
-        CloseReadPipeHandles(-1, &g_Pipes[i].ClientInfo.Stdout);
+    if (g_Pipes[clientIndex].ClientInfo.StdoutData.ReadPipe)
+        CloseReadPipeHandles(-1, &g_Pipes[clientIndex].ClientInfo.StdoutData);
 
-    if (g_Pipes[i].ClientInfo.Stderr.hReadPipe)
-        CloseReadPipeHandles(-1, &g_Pipes[i].ClientInfo.Stderr);
+    if (g_Pipes[clientIndex].ClientInfo.StderrData.ReadPipe)
+        CloseReadPipeHandles(-1, &g_Pipes[clientIndex].ClientInfo.StderrData);
 
-    memset(&g_Pipes[i].ClientInfo, 0, sizeof(g_Pipes[i].ClientInfo));
-    memset(&g_Pipes[i].RemoteHandles, 0, sizeof(g_Pipes[i].RemoteHandles));
-    memset(&g_Pipes[i].params, 0, sizeof(g_Pipes[i].params));
-    g_Pipes[i].assigned_client_id = 0;
+    ZeroMemory(&g_Pipes[clientIndex].ClientInfo, sizeof(g_Pipes[clientIndex].ClientInfo));
+    ZeroMemory(&g_Pipes[clientIndex].RemoteHandles, sizeof(g_Pipes[clientIndex].RemoteHandles));
+    ZeroMemory(&g_Pipes[clientIndex].ConnectParams, sizeof(g_Pipes[clientIndex].ConnectParams));
+    g_Pipes[clientIndex].ClientId = 0;
 
     // Disconnect the pipe instance.
-
-    if (!DisconnectNamedPipe(g_Pipes[i].hPipeInst))
+    if (!DisconnectNamedPipe(g_Pipes[clientIndex].Pipe))
     {
         return perror("DisconnectNamedPipe");
     }
 
     // Call a subroutine to connect to the new client.
-
-    uResult = ConnectToNewClient(g_Pipes[i].hPipeInst, &g_Pipes[i].oOverlapped, g_hEvents[i], &g_Pipes[i].fPendingIO);
-    if (ERROR_SUCCESS != uResult)
+    status = ConnectToNewClient(g_Pipes[clientIndex].Pipe, &g_Pipes[clientIndex].AsyncState, g_Events[clientIndex], &g_Pipes[clientIndex].PendingIo);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ConnectToNewClient");
+        return perror2(status, "ConnectToNewClient");
     }
 
-    g_Pipes[i].uState = g_Pipes[i].fPendingIO ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
+    g_Pipes[clientIndex].ConnectionState = g_Pipes[clientIndex].PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
     return ERROR_SUCCESS;
 }
 
-ULONG ClosePipeHandles()
+static ULONG ClosePipeHandles(void)
 {
     ULONG i;
 
-    for (i = 0; i < INSTANCES; i++)
+    for (i = 0; i < TRIGGER_PIPE_INSTANCES; i++)
     {
-        if (g_Pipes[i].fPendingIO)
+        if (g_Pipes[i].PendingIo)
         {
-            if (CancelIo(g_Pipes[i].hPipeInst))
+            if (CancelIo(g_Pipes[i].Pipe))
             {
                 // Must wait for the canceled IO to complete, otherwise a race condition may occur on the
                 // OVERLAPPED structure.
-                WaitForSingleObject(g_Pipes[i].oOverlapped.hEvent, INFINITE);
+                WaitForSingleObject(g_Pipes[i].AsyncState.hEvent, INFINITE);
             }
             else
             {
@@ -204,37 +193,43 @@ ULONG ClosePipeHandles()
             }
         }
 
-        CloseHandle(g_hEvents[i]);
+        CloseHandle(g_Events[i]);
     }
 
     return ERROR_SUCCESS;
 }
 
-ULONG ConnectExisting(int client_id, HANDLE hClientProcess, CLIENT_INFO *pClientInfo, struct trigger_connect_params *pparams, CREATE_PROCESS_RESPONSE *pCpr)
+static ULONG ConnectExisting(
+    IN ULONG clientId,
+    IN HANDLE clientProcess,
+    OUT CLIENT_INFO *clientInfo,
+    IN const struct trigger_connect_params *connectParams,
+    IN const CREATE_PROCESS_RESPONSE *cpr
+    )
 {
-    ULONG uResult;
+    ULONG status;
 
-    if (!pClientInfo || !pparams || !pCpr)
+    if (!clientInfo || !connectParams || !cpr)
         return ERROR_INVALID_PARAMETER;
 
-    LogDebug("client_id %d: Got the params '%S', vm '%S'\n", client_id, pparams->exec_index, pparams->target_vmname);
+    LogDebug("client_id %d: Got the params '%S', vm '%S'\n", clientId, connectParams->exec_index, connectParams->target_vmname);
 
-    if (CPR_TYPE_ERROR_CODE == pCpr->ResponseType)
+    if (CPR_TYPE_ERROR_CODE == cpr->ResponseType)
     {
-        LogWarning("client_id %d: Process creation failed, got the error code %d\n", client_id, pCpr->ResponseData.ErrorCode);
+        LogWarning("client_id %d: Process creation failed, got the error code %d\n", clientId, cpr->ResponseData.ErrorCode);
 
-        uResult = send_exit_code(client_id, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, pCpr->ResponseData.ErrorCode));
-        if (ERROR_SUCCESS != uResult)
-            return perror2(uResult, "send_exit_code");
+        status = SendExitCode(clientId, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, cpr->ResponseData.ErrorCode));
+        if (ERROR_SUCCESS != status)
+            return perror2(status, "send_exit_code");
 
-        return uResult;
+        return status;
     }
 
     if (!DuplicateHandle(
-        hClientProcess,
-        pCpr->ResponseData.Process,
+        clientProcess,
+        cpr->ResponseData.Process,
         GetCurrentProcess(),
-        &pClientInfo->hProcess,
+        &clientInfo->ChildProcess,
         0,
         TRUE,
         DUPLICATE_SAME_ACCESS))
@@ -242,75 +237,75 @@ ULONG ConnectExisting(int client_id, HANDLE hClientProcess, CLIENT_INFO *pClient
         return perror("DuplicateHandle");
     }
 
-    SetLastError(uResult = AddExistingClient(client_id, pClientInfo));
-    if (ERROR_SUCCESS != uResult)
+    status = AddExistingClient(clientId, clientInfo);
+    if (ERROR_SUCCESS != status)
     {
-        return perror("AddExistingClient");
+        return perror2(status, "AddExistingClient");
         // DisconnectAndReconnect will close all the handles later
     }
 
     // Clear the handles; now the WatchForEvents thread takes care of them.
-    memset(pClientInfo, 0, sizeof(CLIENT_INFO));
+    ZeroMemory(clientInfo, sizeof(CLIENT_INFO));
 
     return ERROR_SUCCESS;
 }
 
 // This routine will be called by a single thread only (WatchForTriggerEvents thread),
-// and this is the only place where g_uDaemonRequestsCounter is read and written, so
+// and this is the only place where g_DaemonRequestsCounter is read and written, so
 // there is no need to do InterlockedIncrement on the counter.
 
 // However, g_Pipes list may be accessed by another thread (WatchForEvents thread),
 // so it must be locked. This access happens when a daemon responds with a CONNECT_EXISTING
 // message.
-ULONG SendParametersToDaemon(ULONG i)
+ULONG SendParametersToDaemon(IN ULONG clientIndex)
 {
-    HRESULT hResult;
-    ULONG uResult;
-    struct trigger_connect_params params;
+    HRESULT hresult;
+    ULONG status;
+    struct trigger_connect_params connectParams;
 
-    if (i >= INSTANCES)
+    if (clientIndex >= TRIGGER_PIPE_INSTANCES)
         return ERROR_INVALID_PARAMETER;
 
     EnterCriticalSection(&g_PipesCriticalSection);
 
-    hResult = StringCchPrintfA(
-        (STRSAFE_LPSTR) &g_Pipes[i].params.process_fds.ident,
-        sizeof(g_Pipes[i].params.process_fds.ident),
+    hresult = StringCchPrintfA(
+        (STRSAFE_LPSTR) &g_Pipes[clientIndex].ConnectParams.process_fds.ident,
+        sizeof(g_Pipes[clientIndex].ConnectParams.process_fds.ident),
         "%I64x",
-        g_uDaemonRequestsCounter++);
+        g_DaemonRequestsCounter++);
 
-    if (FAILED(hResult))
+    if (FAILED(hresult))
     {
-        perror2(hResult, "StringCchPrintfA");
+        perror2(hresult, "StringCchPrintfA");
         LeaveCriticalSection(&g_PipesCriticalSection);
-        return hResult;
+        return hresult;
     }
 
-    params = g_Pipes[i].params;
+    connectParams = g_Pipes[clientIndex].ConnectParams;
 
     LeaveCriticalSection(&g_PipesCriticalSection);
 
-    uResult = ReturnData(0, MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING, &params, sizeof(params), NULL);
-    if (ERROR_SUCCESS != uResult)
+    status = SendMessageToDaemon(0, MSG_AGENT_TO_SERVER_TRIGGER_CONNECT_EXISTING, &connectParams, sizeof(connectParams), NULL);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "ReturnData");
+        return perror2(status, "ReturnData");
     }
 
     return ERROR_SUCCESS;
 }
 
-ULONG FindPipeByIdent(UCHAR *pszIdent, ULONG *puPipeNumber)
+ULONG FindClientByIdent(IN const char *ident, OUT ULONG *clientIndex)
 {
     ULONG i;
 
-    if (!pszIdent || !puPipeNumber)
+    if (!ident || !clientIndex)
         return ERROR_INVALID_PARAMETER;
 
-    for (i = 0; i < INSTANCES; i++)
+    for (i = 0; i < TRIGGER_PIPE_INSTANCES; i++)
     {
-        if (!strcmp(g_Pipes[i].params.process_fds.ident, pszIdent))
+        if (!strcmp(g_Pipes[i].ConnectParams.process_fds.ident, ident))
         {
-            *puPipeNumber = i;
+            *clientIndex = i;
             return ERROR_SUCCESS;
         }
     }
@@ -318,131 +313,132 @@ ULONG FindPipeByIdent(UCHAR *pszIdent, ULONG *puPipeNumber)
     return ERROR_NOT_FOUND;
 }
 
-ULONG ProceedWithExecution(int assigned_client_id, UCHAR *pszIdent)
+ULONG ProceedWithExecution(IN ULONG clientId, IN const char *ident)
 {
-    ULONG uPipeNumber;
-    ULONG uResult;
+    ULONG clientIndex;
+    ULONG status;
 
-    if (!pszIdent)
+    if (!ident)
         return ERROR_INVALID_PARAMETER;
 
     EnterCriticalSection(&g_PipesCriticalSection);
 
-    uResult = FindPipeByIdent(pszIdent, &uPipeNumber);
-    if (ERROR_SUCCESS != uResult)
+    status = FindClientByIdent(ident, &clientIndex);
+    if (ERROR_SUCCESS != status)
     {
-        perror2(uResult, "FindPipeByIdent");
-        LogError("id=%s", pszIdent);
+        perror2(status, "FindPipeByIdent");
+        LogError("id=%s", ident);
         LeaveCriticalSection(&g_PipesCriticalSection);
-        return uResult;
+        return status;
     }
 
-    if (STATE_WAITING_FOR_DAEMON_DECISION != g_Pipes[uPipeNumber].uState)
+    if (STATE_WAITING_FOR_DAEMON_DECISION != g_Pipes[clientIndex].ConnectionState)
     {
-        LogWarning("Wrong pipe state %d, should be %d\n", g_Pipes[uPipeNumber].uState, STATE_WAITING_FOR_DAEMON_DECISION);
+        LogWarning("Wrong pipe state %d, should be %d\n", g_Pipes[clientIndex].ConnectionState, STATE_WAITING_FOR_DAEMON_DECISION);
         LeaveCriticalSection(&g_PipesCriticalSection);
         return ERROR_INVALID_PARAMETER;
     }
 
-    g_Pipes[uPipeNumber].assigned_client_id = assigned_client_id;
+    g_Pipes[clientIndex].ClientId = clientId;
 
     // Signalize that we're allowed to send io handles to qrexec_client_vm.
-    SetEvent(g_hEvents[uPipeNumber]);
+    SetEvent(g_Events[clientIndex]);
 
     LeaveCriticalSection(&g_PipesCriticalSection);
 
     return ERROR_SUCCESS;
 }
 
-ULONG WINAPI WatchForTriggerEvents(void *pParam)
+// fixme: function way too long
+ULONG WINAPI WatchForTriggerEvents(IN void *param)
 {
-    DWORD dwWait, cbRet, cbToWrite, cbRead;
-    ULONG i;
-    ULONG uResult;
-    BOOL fSuccess;
-    IO_HANDLES LocalHandles;
-    ULONG uClientProcessId;
+    DWORD waitResult, cbRet, cbToWrite, cbRead;
+    ULONG clientIndex;
+    ULONG status;
+    BOOL success;
+    IO_HANDLES localHandles;
+    ULONG clientProcessId;
     SECURITY_ATTRIBUTES sa;
-    SECURITY_DESCRIPTOR *pPipeSecurityDescriptor;
-    ACL *pACL;
+    SECURITY_DESCRIPTOR *pipeSecurityDescriptor;
+    ACL *acl;
 
     LogDebug("Init\n");
-    memset(&g_Pipes, 0, sizeof(g_Pipes));
+    ZeroMemory(&g_Pipes, sizeof(g_Pipes));
 
-    uResult = CreatePipeSecurityDescriptor(&pPipeSecurityDescriptor, &pACL);
-    if (ERROR_SUCCESS != uResult)
+    status = CreatePipeSecurityDescriptor(&pipeSecurityDescriptor, &acl);
+    if (ERROR_SUCCESS != status)
     {
-        return perror2(uResult, "CreatePipeSecurityDescriptor");
+        return perror2(status, "CreatePipeSecurityDescriptor");
     }
 
-    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+    sa.nLength = sizeof(sa);
     sa.bInheritHandle = FALSE;
-    sa.lpSecurityDescriptor = pPipeSecurityDescriptor;
+    sa.lpSecurityDescriptor = pipeSecurityDescriptor;
 
     // The initial loop creates several instances of a named pipe
     // along with an event object for each instance. An
     // overlapped ConnectNamedPipe operation is started for
     // each instance.
 
-    for (i = 0; i < INSTANCES; i++)
+    for (clientIndex = 0; clientIndex < TRIGGER_PIPE_INSTANCES; clientIndex++)
     {
         // Create an event object for this instance.
 
-        g_hEvents[i] = CreateEvent(
+        g_Events[clientIndex] = CreateEvent(
             NULL, // default security attribute
             FALSE, // auto-reset event
             FALSE, // initial state = not signaled
             NULL); // unnamed event object
 
-        if (g_hEvents[i] == NULL)
+        if (g_Events[clientIndex] == NULL)
         {
-            uResult = GetLastError();
-            LocalFree(pPipeSecurityDescriptor);
-            LocalFree(pACL);
-            return perror2(uResult, "CreateEvent");
+            status = GetLastError();
+            LocalFree(pipeSecurityDescriptor);
+            LocalFree(acl);
+            return perror2(status, "CreateEvent");
         }
 
-        g_Pipes[i].hPipeInst = CreateNamedPipe(
+        g_Pipes[clientIndex].Pipe = CreateNamedPipe(
             TRIGGER_PIPE_NAME,
             PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-            INSTANCES, // number of instances
+            TRIGGER_PIPE_INSTANCES, // number of instances
             4096, // output buffer size
             4096, // input buffer size
             PIPE_TIMEOUT, // client time-out
             &sa);
 
-        if (INVALID_HANDLE_VALUE == g_Pipes[i].hPipeInst)
+        if (INVALID_HANDLE_VALUE == g_Pipes[clientIndex].Pipe)
         {
-            uResult = GetLastError();
-            LocalFree(pPipeSecurityDescriptor);
-            LocalFree(pACL);
-            return perror2(uResult, "CreateNamedPipe");
+            status = GetLastError();
+            LocalFree(pipeSecurityDescriptor);
+            LocalFree(acl);
+            return perror2(status, "CreateNamedPipe");
         }
 
         // Call the subroutine to connect to the new client
 
-        uResult = ConnectToNewClient(
-            g_Pipes[i].hPipeInst,
-            &g_Pipes[i].oOverlapped,
-            g_hEvents[i],
-            &g_Pipes[i].fPendingIO);
+        status = ConnectToNewClient(
+            g_Pipes[clientIndex].Pipe,
+            &g_Pipes[clientIndex].AsyncState,
+            g_Events[clientIndex],
+            &g_Pipes[clientIndex].PendingIo);
 
-        if (ERROR_SUCCESS != uResult)
+        if (ERROR_SUCCESS != status)
         {
-            LocalFree(pPipeSecurityDescriptor);
-            LocalFree(pACL);
-            return perror2(uResult, "ConnectToNewClient");
+            LocalFree(pipeSecurityDescriptor);
+            LocalFree(acl);
+            return perror2(status, "ConnectToNewClient");
         }
 
-        g_Pipes[i].uState = g_Pipes[i].fPendingIO ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
+        g_Pipes[clientIndex].ConnectionState = g_Pipes[clientIndex].PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
     }
 
-    LocalFree(pPipeSecurityDescriptor);
-    LocalFree(pACL);
+    LocalFree(pipeSecurityDescriptor);
+    LocalFree(acl);
 
     // Last one will signal the service shutdown.
-    g_hEvents[INSTANCES] = g_hStopServiceEvent;
+    g_Events[TRIGGER_PIPE_INSTANCES] = g_StopServiceEvent;
 
     while (TRUE)
     {
@@ -450,17 +446,17 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
         // completion of an overlapped read, write, or
         // connect operation.
 
-        dwWait = WaitForMultipleObjects(
-            INSTANCES + 1, // number of event objects
-            g_hEvents, // array of event objects
+        waitResult = WaitForMultipleObjects(
+            TRIGGER_PIPE_INSTANCES + 1, // number of event objects
+            g_Events, // array of event objects
             FALSE, // does not wait for all
             INFINITE); // waits indefinitely
 
         // dwWait shows which pipe completed the operation.
 
-        i = dwWait - WAIT_OBJECT_0; // determines which pipe
+        clientIndex = waitResult - WAIT_OBJECT_0; // determines which pipe
 
-        if (INSTANCES == i)
+        if (TRIGGER_PIPE_INSTANCES == clientIndex)
         {
             // Service is shuttiung down, close the pipe handles.
             LogInfo("Shutting down\n");
@@ -469,7 +465,7 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
             return ERROR_SUCCESS;
         }
 
-        if (i > (INSTANCES - 1))
+        if (clientIndex > (TRIGGER_PIPE_INSTANCES - 1))
         {
             return perror("WaitForMultipleObjects");
         }
@@ -477,61 +473,61 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
         //lprintf("signaled pipe %d, original state %d\n", i, g_Pipes[i].uState);
 
         // Get the result of the pending operation that has just finished.
-        if (g_Pipes[i].fPendingIO)
+        if (g_Pipes[clientIndex].PendingIo)
         {
-            if (!GetOverlappedResult(g_Pipes[i].hPipeInst, &g_Pipes[i].oOverlapped, &cbRet, FALSE))
+            if (!GetOverlappedResult(g_Pipes[clientIndex].Pipe, &g_Pipes[clientIndex].AsyncState, &cbRet, FALSE))
             {
                 perror("GetOverlappedResult");
-                DisconnectAndReconnect(i);
+                DisconnectAndReconnect(clientIndex);
                 continue;
             }
 
             // Clear the pending operation flag.
-            g_Pipes[i].fPendingIO = FALSE;
+            g_Pipes[clientIndex].PendingIo = FALSE;
 
-            switch (g_Pipes[i].uState)
+            switch (g_Pipes[clientIndex].ConnectionState)
             {
                 // Pending connect operation
             case STATE_WAITING_FOR_CLIENT:
 
-                if (!GetNamedPipeClientProcessId(g_Pipes[i].hPipeInst, &uClientProcessId))
+                if (!GetNamedPipeClientProcessId(g_Pipes[clientIndex].Pipe, &clientProcessId))
                 {
                     perror("GetNamedPipeClientProcessId");
-                    DisconnectAndReconnect(i);
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
-                LogDebug("STATE_WAITING_FOR_CLIENT (pending): Accepted connection from the process %d\n", uClientProcessId);
+                LogDebug("STATE_WAITING_FOR_CLIENT (pending): Accepted connection from the process %d\n", clientProcessId);
 
-                g_Pipes[i].hClientProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, uClientProcessId);
-                if (!g_Pipes[i].hClientProcess)
+                g_Pipes[clientIndex].ClientProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, clientProcessId);
+                if (!g_Pipes[clientIndex].ClientProcess)
                 {
                     perror("OpenProcess");
-                    DisconnectAndReconnect(i);
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
-                g_Pipes[i].uState = STATE_RECEIVING_PARAMETERS;
+                g_Pipes[clientIndex].ConnectionState = STATE_RECEIVING_PARAMETERS;
                 break;
 
                 // Make sure the incoming message has a right size
             case STATE_RECEIVING_PARAMETERS:
-                if (sizeof(g_Pipes[i].params) != cbRet)
+                if (sizeof(g_Pipes[clientIndex].ConnectParams) != cbRet)
                 {
-                    LogWarning("Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(g_Pipes[i].params));
-                    DisconnectAndReconnect(i);
+                    LogWarning("Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(g_Pipes[clientIndex].ConnectParams));
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
                 LogDebug("STATE_RECEIVING_PARAMETERS (pending): Received the parameters, sending them to the daemon\n");
-                uResult = SendParametersToDaemon(i);
-                if (ERROR_SUCCESS != uResult)
+                status = SendParametersToDaemon(clientIndex);
+                if (ERROR_SUCCESS != status)
                 {
-                    perror2(uResult, "SendParametersToDaemon");
-                    DisconnectAndReconnect(i);
+                    perror2(status, "SendParametersToDaemon");
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
-                g_Pipes[i].uState = STATE_WAITING_FOR_DAEMON_DECISION;
+                g_Pipes[clientIndex].ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
                 continue;
 
                 // Pending write operation
@@ -539,12 +535,12 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
                 if (IO_HANDLES_SIZE != cbRet)
                 {
                     LogWarning("Could not send the handles array: sent %d bytes instead of %d\n", cbRet, IO_HANDLES_SIZE);
-                    DisconnectAndReconnect(i);
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
                 LogDebug("STATE_SENDING_IO_HANDLES (pending): IO handles have been sent, waiting for the process handle\n");
-                g_Pipes[i].uState = STATE_RECEIVING_PROCESS_HANDLE;
+                g_Pipes[clientIndex].ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
                 continue;
 
                 // Pending read operation
@@ -552,26 +548,26 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
                 if (sizeof(CREATE_PROCESS_RESPONSE) != cbRet)
                 {
                     LogWarning("Wrong incoming create process response size: %d\n", cbRet);
-                    DisconnectAndReconnect(i);
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
                 LogDebug("STATE_RECEIVING_PROCESS_HANDLE (pending): Received the create process response\n");
 
-                uResult = ConnectExisting(
-                    g_Pipes[i].assigned_client_id,
-                    g_Pipes[i].hClientProcess,
-                    &g_Pipes[i].ClientInfo,
-                    &g_Pipes[i].params,
-                    &g_Pipes[i].CreateProcessResponse);
-                if (ERROR_SUCCESS != uResult)
-                    perror2(uResult, "ConnectExisting");
+                status = ConnectExisting(
+                    g_Pipes[clientIndex].ClientId,
+                    g_Pipes[clientIndex].ClientProcess,
+                    &g_Pipes[clientIndex].ClientInfo,
+                    &g_Pipes[clientIndex].ConnectParams,
+                    &g_Pipes[clientIndex].CreateProcessResponse);
+                if (ERROR_SUCCESS != status)
+                    perror2(status, "ConnectExisting");
 
-                DisconnectAndReconnect(i);
+                DisconnectAndReconnect(clientIndex);
                 continue;
 
             default:
-                LogWarning("Invalid pipe state %d\n", g_Pipes[i].uState);
+                LogWarning("Invalid pipe state %d\n", g_Pipes[clientIndex].ConnectionState);
                 continue;
             }
         }
@@ -579,39 +575,40 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
         //lprintf("pipe %d, state %d\n", i, g_Pipes[i].uState);
 
         // The pipe state determines which operation to do next.
-        switch (g_Pipes[i].uState)
+        switch (g_Pipes[clientIndex].ConnectionState)
         {
         case STATE_RECEIVING_PARAMETERS:
 
-            fSuccess = ReadFile(
-                g_Pipes[i].hPipeInst,
-                &g_Pipes[i].params,
-                sizeof(g_Pipes[i].params),
+            success = ReadFile(
+                g_Pipes[clientIndex].Pipe,
+                &g_Pipes[clientIndex].ConnectParams,
+                sizeof(g_Pipes[clientIndex].ConnectParams),
                 &cbRead,
-                &g_Pipes[i].oOverlapped);
+                &g_Pipes[clientIndex].AsyncState);
 
             // The read operation completed successfully.
 
-            if (fSuccess && sizeof(g_Pipes[i].params) == cbRead)
+            if (success && sizeof(g_Pipes[clientIndex].ConnectParams) == cbRead)
             {
-                // g_hEvents[i] is in the signaled state here, so we must reset it before sending anything to the daemon.
+                // g_Events[clientIndex] is in the signaled state here, so we must reset it before sending anything to the daemon.
                 // If the daemon allows the execution then it will be signaled in ProceedWithExecution() later,
                 // if not, the pipe will be disconnected.
-                ResetEvent(g_hEvents[i]);
+                ResetEvent(g_Events[clientIndex]);
 
                 // Change the pipe state before calling SendParametersToDaemon() because another thread may call
                 // ProceedWithExecution() even before the current thread returns from SendParametersToDaemon().
                 // ProceedWithExecution() checks the pipe state to be STATE_WAITING_FOR_DAEMON_DECISION.
-                g_Pipes[i].fPendingIO = FALSE;
-                g_Pipes[i].uState = STATE_WAITING_FOR_DAEMON_DECISION;
+                g_Pipes[clientIndex].PendingIo = FALSE;
+                g_Pipes[clientIndex].ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
 
-                LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %S, %S\n", g_Pipes[i].params.exec_index, g_Pipes[i].params.target_vmname);
+                LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %S, %S\n",
+                    g_Pipes[clientIndex].ConnectParams.exec_index, g_Pipes[clientIndex].ConnectParams.target_vmname);
 
-                uResult = SendParametersToDaemon(i);
-                if (ERROR_SUCCESS != uResult)
+                status = SendParametersToDaemon(clientIndex);
+                if (ERROR_SUCCESS != status)
                 {
-                    perror2(uResult, "SendParametersToDaemon");
-                    DisconnectAndReconnect(i);
+                    perror2(status, "SendParametersToDaemon");
+                    DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
@@ -620,160 +617,160 @@ ULONG WINAPI WatchForTriggerEvents(void *pParam)
 
             // The read operation is still pending.
 
-            uResult = GetLastError();
-            if (!fSuccess && (ERROR_IO_PENDING == uResult))
+            status = GetLastError();
+            if (!success && (ERROR_IO_PENDING == status))
             {
                 LogDebug("STATE_RECEIVING_PARAMETERS: Read is pending\n");
-                g_Pipes[i].fPendingIO = TRUE;
+                g_Pipes[clientIndex].PendingIo = TRUE;
                 continue;
             }
 
             // An error occurred; disconnect from the client.
-            perror2(uResult, "STATE_RECEIVING_PARAMETERS: ReadFile");
-            DisconnectAndReconnect(i);
+            perror2(status, "STATE_RECEIVING_PARAMETERS: ReadFile");
+            DisconnectAndReconnect(clientIndex);
             break;
 
         case STATE_WAITING_FOR_DAEMON_DECISION:
             LogDebug("STATE_WAITING_FOR_DAEMON_DECISION: Daemon allowed to proceed, sending the IO handles\n");
-            // The pipe in this state should never have fPendingIO flag set.
-            g_Pipes[i].uState = STATE_SENDING_IO_HANDLES;
+            // The pipe in this state should never have PendingIO flag set.
+            g_Pipes[clientIndex].ConnectionState = STATE_SENDING_IO_HANDLES;
             // passthrough
 
         case STATE_SENDING_IO_HANDLES:
 
             cbToWrite = IO_HANDLES_SIZE;
 
-            uResult = CreateClientPipes(
-                &g_Pipes[i].ClientInfo,
-                &LocalHandles.StdinPipe,
-                &LocalHandles.StdoutPipe,
-                &LocalHandles.StderrPipe);
+            status = CreateClientPipes(
+                &g_Pipes[clientIndex].ClientInfo,
+                &localHandles.StdinPipe,
+                &localHandles.StdoutPipe,
+                &localHandles.StderrPipe);
 
-            if (ERROR_SUCCESS != uResult)
+            if (ERROR_SUCCESS != status)
             {
-                perror2(uResult, "CreateClientPipes");
-                DisconnectAndReconnect(i);
+                perror2(status, "CreateClientPipes");
+                DisconnectAndReconnect(clientIndex);
                 continue;
             }
 
             if (!DuplicateHandle(
                 GetCurrentProcess(),
-                LocalHandles.StdinPipe,
-                g_Pipes[i].hClientProcess,
-                &g_Pipes[i].RemoteHandles.StdinPipe,
+                localHandles.StdinPipe,
+                g_Pipes[clientIndex].ClientProcess,
+                &g_Pipes[clientIndex].RemoteHandles.StdinPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
             {
                 perror("DuplicateHandle(stdin)");
-                CloseHandle(LocalHandles.StdoutPipe);
-                CloseHandle(LocalHandles.StderrPipe);
-                DisconnectAndReconnect(i);
+                CloseHandle(localHandles.StdoutPipe);
+                CloseHandle(localHandles.StderrPipe);
+                DisconnectAndReconnect(clientIndex);
                 continue;
             }
 
             if (!DuplicateHandle(
                 GetCurrentProcess(),
-                LocalHandles.StdoutPipe,
-                g_Pipes[i].hClientProcess,
-                &g_Pipes[i].RemoteHandles.StdoutPipe,
+                localHandles.StdoutPipe,
+                g_Pipes[clientIndex].ClientProcess,
+                &g_Pipes[clientIndex].RemoteHandles.StdoutPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
             {
                 perror("DuplicateHandle(stdout)");
-                CloseHandle(LocalHandles.StderrPipe);
-                DisconnectAndReconnect(i);
+                CloseHandle(localHandles.StderrPipe);
+                DisconnectAndReconnect(clientIndex);
                 continue;
             }
 
             if (!DuplicateHandle(
                 GetCurrentProcess(),
-                LocalHandles.StderrPipe,
-                g_Pipes[i].hClientProcess,
-                &g_Pipes[i].RemoteHandles.StderrPipe,
+                localHandles.StderrPipe,
+                g_Pipes[clientIndex].ClientProcess,
+                &g_Pipes[clientIndex].RemoteHandles.StderrPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
             {
                 perror("DuplicateHandle(stderr)");
-                DisconnectAndReconnect(i);
+                DisconnectAndReconnect(clientIndex);
                 continue;
             }
 
-            fSuccess = WriteFile(
-                g_Pipes[i].hPipeInst,
-                &g_Pipes[i].RemoteHandles,
+            success = WriteFile(
+                g_Pipes[clientIndex].Pipe,
+                &g_Pipes[clientIndex].RemoteHandles,
                 IO_HANDLES_SIZE,
                 &cbRet,
-                &g_Pipes[i].oOverlapped);
+                &g_Pipes[clientIndex].AsyncState);
 
-            if (!fSuccess || IO_HANDLES_SIZE != cbRet)
+            if (!success || IO_HANDLES_SIZE != cbRet)
             {
                 // The write operation is still pending.
 
-                uResult = GetLastError();
-                if ((ERROR_IO_PENDING == uResult) && !fSuccess)
+                status = GetLastError();
+                if ((ERROR_IO_PENDING == status) && !success)
                 {
                     LogDebug("STATE_SENDING_IO_HANDLES: Write is pending\n");
-                    g_Pipes[i].fPendingIO = TRUE;
+                    g_Pipes[clientIndex].PendingIo = TRUE;
                     continue;
                 }
 
                 // An error occurred; disconnect from the client.
                 perror("STATE_SENDING_IO_HANDLES: WriteFile");
-                DisconnectAndReconnect(i);
+                DisconnectAndReconnect(clientIndex);
                 break;
             }
 
             // The write operation completed successfully.
             // g_hEvents[i] is in the signaled state here, but the upcoming ReadFile will change its state accordingly.
             LogDebug("STATE_SENDING_IO_HANDLES: IO handles have been sent, waiting for the process handle\n");
-            g_Pipes[i].fPendingIO = FALSE;
-            g_Pipes[i].uState = STATE_RECEIVING_PROCESS_HANDLE;
+            g_Pipes[clientIndex].PendingIo = FALSE;
+            g_Pipes[clientIndex].ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
             // passthrough
 
         case STATE_RECEIVING_PROCESS_HANDLE:
 
-            fSuccess = ReadFile(
-                g_Pipes[i].hPipeInst,
-                &g_Pipes[i].CreateProcessResponse,
+            success = ReadFile(
+                g_Pipes[clientIndex].Pipe,
+                &g_Pipes[clientIndex].CreateProcessResponse,
                 sizeof(CREATE_PROCESS_RESPONSE),
                 &cbRead,
-                &g_Pipes[i].oOverlapped);
+                &g_Pipes[clientIndex].AsyncState);
 
             // The read operation completed successfully.
 
-            if (fSuccess && sizeof(CREATE_PROCESS_RESPONSE) == cbRead)
+            if (success && sizeof(CREATE_PROCESS_RESPONSE) == cbRead)
             {
                 LogDebug("STATE_RECEIVING_PROCESS_HANDLE: Received the create process response\n");
 
-                uResult = ConnectExisting(
-                    g_Pipes[i].assigned_client_id,
-                    g_Pipes[i].hClientProcess,
-                    &g_Pipes[i].ClientInfo,
-                    &g_Pipes[i].params,
-                    &g_Pipes[i].CreateProcessResponse);
-                if (ERROR_SUCCESS != uResult)
-                    perror2(uResult, "ConnectExisting");
+                status = ConnectExisting(
+                    g_Pipes[clientIndex].ClientId,
+                    g_Pipes[clientIndex].ClientProcess,
+                    &g_Pipes[clientIndex].ClientInfo,
+                    &g_Pipes[clientIndex].ConnectParams,
+                    &g_Pipes[clientIndex].CreateProcessResponse);
+                if (ERROR_SUCCESS != status)
+                    perror2(status, "ConnectExisting");
 
-                DisconnectAndReconnect(i);
+                DisconnectAndReconnect(clientIndex);
                 continue;
             }
 
             // The read operation is still pending.
 
-            uResult = GetLastError();
-            if (!fSuccess && (ERROR_IO_PENDING == uResult))
+            status = GetLastError();
+            if (!success && (ERROR_IO_PENDING == status))
             {
                 LogDebug("STATE_RECEIVING_PROCESS_HANDLE: Read is pending\n");
-                g_Pipes[i].fPendingIO = TRUE;
+                g_Pipes[clientIndex].PendingIo = TRUE;
                 continue;
             }
 
             // An error occurred; disconnect from the client.
             perror("STATE_RECEIVING_PROCESS_HANDLE: ReadFile");
-            DisconnectAndReconnect(i);
+            DisconnectAndReconnect(clientIndex);
             break;
 
         default:

@@ -1,4 +1,5 @@
 #pragma once
+#include <windows.h>
 
 #ifndef _PREFAST_
 #pragma warning(disable:4068)
@@ -11,78 +12,72 @@
 
 #define	TRIGGER_PIPE_NAME               TEXT("\\\\.\\pipe\\qrexec_trigger")
 
-//#define DISPLAY_CONSOLE_OUTPUT
-
-//#define START_SERVICE_AFTER_INSTALLATION
-
 // wr_ring_size[=1024] - sizeof(hdr)[=12]
 #define READ_BUFFER_SIZE    1012
 
-typedef enum
+typedef enum _PIPE_TYPE
 {
     PTYPE_INVALID = 0,
     PTYPE_STDOUT,
     PTYPE_STDERR
 } PIPE_TYPE;
 
-
 typedef struct _PIPE_DATA
 {
-    HANDLE      hReadPipe;
-    PIPE_TYPE   bPipeType;
-    BOOLEAN     bReadInProgress;
-    BOOLEAN     bDataIsReady;
-    BOOLEAN     bPipeClosed;
-    BOOLEAN     bVchanWritePending;
-    DWORD       dwSentBytes;
-    OVERLAPPED  olRead;
-    CHAR        ReadBuffer[READ_BUFFER_SIZE + 1];
+    HANDLE      ReadPipe;
+    PIPE_TYPE   PipeType;
+    BOOL        ReadInProgress;
+    BOOL        DataIsReady;
+    BOOL        PipeClosed;
+    BOOL        VchanWritePending;
+    DWORD       cbSentBytes;
+    OVERLAPPED  ReadState;
+    BYTE        ReadBuffer[READ_BUFFER_SIZE + 1];
 } PIPE_DATA;
 
 typedef struct _CLIENT_INFO
 {
-    int	client_id;
-    BOOLEAN	bClientIsReady;
+    UINT ClientId;
+    BOOL ClientIsReady;
 
-    HANDLE	hProcess;
-    HANDLE	hWriteStdinPipe;
-    BOOLEAN	bStdinPipeClosed;
-    BOOLEAN	bChildExited;
-    DWORD	dwExitCode;
+    HANDLE ChildProcess;
+    HANDLE WriteStdinPipe;
+    BOOL StdinPipeClosed;
+    BOOL ChildExited;
+    DWORD ExitCode;
 
-    BOOLEAN	bReadingIsDisabled;
+    BOOL ReadingDisabled;
 
-    PIPE_DATA	Stdout;
-    PIPE_DATA	Stderr;
-
+    PIPE_DATA StdoutData;
+    PIPE_DATA StderrData;
 } CLIENT_INFO;
 
 ULONG AddExistingClient(
-    int client_id,
-    CLIENT_INFO *pClientInfo
+    ULONG clientId,
+    CLIENT_INFO *clientInfo
     );
 
 ULONG CreateClientPipes(
-    CLIENT_INFO *pClientInfo,
-    HANDLE *phPipeStdin,
-    HANDLE *phPipeStdout,
-    HANDLE *phPipeStderr
+    IN OUT CLIENT_INFO *clientInfo,
+    OUT HANDLE *pipeStdin,
+    OUT HANDLE *pipeStdout,
+    OUT HANDLE *pipeStderr
     );
 
 ULONG CloseReadPipeHandles(
-    int client_id,
-    PIPE_DATA *pPipeData
+    IN ULONG clientId,
+    IN OUT PIPE_DATA *data
     );
 
-ULONG ReturnData(
-    int client_id,
-    int type,
-    void *pData,
-    ULONG uDataSize,
-    ULONG *puDataWritten
+ULONG SendMessageToDaemon(
+    IN ULONG clientId,
+    IN UINT messageType,
+    IN const void *data,
+    IN ULONG cbData,
+    OUT ULONG *cbWritten
     );
 
-ULONG send_exit_code(
-    int client_id,
-    int status
+ULONG SendExitCode(
+    IN ULONG clientId,
+    IN int exitCode
     );

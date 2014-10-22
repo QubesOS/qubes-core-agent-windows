@@ -1,14 +1,13 @@
 #include <windows.h>
-#include <tchar.h>
 #include <strsafe.h>
 #include <string.h>
 
-#define FULLSCREEN_ON_EVENT_NAME TEXT("WGA_FULLSCREEN_ON")
+#define FULLSCREEN_ON_EVENT_NAME L"WGA_FULLSCREEN_ON"
 #define FULLSCREEN_ON_COMMAND "FULLSCREEN"
-#define FULLSCREEN_OFF_EVENT_NAME TEXT("WGA_FULLSCREEN_OFF")
+#define FULLSCREEN_OFF_EVENT_NAME L"WGA_FULLSCREEN_OFF"
 #define FULLSCREEN_OFF_COMMAND "SEAMLESS"
 
-int APIENTRY _tWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *lpCommandLine, int nCmdShow)
+int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *commandLine, int showState)
 {
     char param[64] = { 0 };
     DWORD size;
