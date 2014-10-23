@@ -20,6 +20,8 @@ ULONG UpdateServiceStatus(
     ULONG status;
     static DWORD checkPoint = 1;
 
+    LogVerbose("start");
+
     g_ServiceStatus.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
     g_ServiceStatus.dwCurrentState = currentState;
     g_ServiceStatus.dwServiceSpecificExitCode = serviceSpecificExitCode;
@@ -55,6 +57,8 @@ ULONG UpdateServiceStatus(
         return status;
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -67,10 +71,14 @@ static void StopService(void)
 
     if (SERVICE_STOPPED != g_ServiceStatus.dwCurrentState)
         UpdateServiceStatus(SERVICE_STOPPED, NO_ERROR, 0, 0);
+
+    LogVerbose("success");
 }
 
 static void WINAPI ServiceCtrlHandler(IN ULONG controlCode)
 {
+    LogVerbose("code %d", controlCode);
+
     switch (controlCode)
     {
     case SERVICE_CONTROL_SHUTDOWN:
@@ -83,11 +91,15 @@ static void WINAPI ServiceCtrlHandler(IN ULONG controlCode)
     }
 
     UpdateServiceStatus(g_ServiceStatus.dwCurrentState, NO_ERROR, 0, 0);
+
+    LogVerbose("success");
 }
 
 void WINAPI ServiceMain(DWORD argc, WCHAR *argv[])
 {
     ULONG status;
+
+    LogVerbose("start");
 
     // Manual reset, initial state is not signaled
     g_StopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -129,6 +141,8 @@ void WINAPI ServiceMain(DWORD argc, WCHAR *argv[])
 
     CloseHandle(g_ServiceThread);
     CloseHandle(g_StopServiceEvent);
+
+    LogVerbose("success");
 }
 
 static ULONG WaitForService(IN DWORD pendingState, IN DWORD wantedState, IN HANDLE service, OUT DWORD *currentState, OUT DWORD *exitCode)
@@ -138,6 +152,8 @@ static ULONG WaitForService(IN DWORD pendingState, IN DWORD wantedState, IN HAND
     DWORD startTickCount;
     DWORD oldCheckPoint;
     DWORD waitTime;
+
+    LogVerbose("start");
 
     if (!currentState || !exitCode)
         return ERROR_INVALID_PARAMETER;
@@ -217,6 +233,8 @@ static ULONG WaitForService(IN DWORD pendingState, IN DWORD wantedState, IN HAND
     *currentState = serviceStatus.dwCurrentState;
     *exitCode = serviceStatus.dwWin32ExitCode;
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -226,6 +244,8 @@ static ULONG ChangeServiceState(IN DWORD wantedState, IN HANDLE service, OUT DWO
     SERVICE_STATUS_PROCESS statusProcess;
     DWORD bytesNeeded;
     DWORD pendingState;
+
+    LogVerbose("start");
 
     if (!currentState || !exitCode)
         return ERROR_INVALID_PARAMETER;
@@ -271,6 +291,7 @@ static ULONG ChangeServiceState(IN DWORD wantedState, IN HANDLE service, OUT DWO
             }
         }
         break;
+
     case SERVICE_STOPPED:
         pendingState = SERVICE_STOP_PENDING;
 
@@ -287,6 +308,8 @@ static ULONG ChangeServiceState(IN DWORD wantedState, IN HANDLE service, OUT DWO
         break;
     }
 
+    LogVerbose("success");
+
     return WaitForService(pendingState, wantedState, service, currentState, exitCode);
 }
 
@@ -295,6 +318,8 @@ ULONG InstallService(IN const WCHAR *executablePath, IN const WCHAR *serviceName
     SC_HANDLE service;
     SC_HANDLE scm;
     ULONG status;
+
+    LogVerbose("service '%s', path '%s'", serviceName, executablePath);
 
     if (!executablePath || !serviceName)
         return ERROR_INVALID_PARAMETER;
@@ -333,6 +358,8 @@ ULONG InstallService(IN const WCHAR *executablePath, IN const WCHAR *serviceName
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
 
+    LogVerbose("success");
+    
     return ERROR_SUCCESS;
 }
 
@@ -345,6 +372,8 @@ ULONG UninstallService(IN const WCHAR *serviceName)
     DWORD exitCode;
     BOOL nothingToDo;
 
+    LogVerbose("service '%s'", serviceName);
+    
     if (!serviceName)
         return ERROR_INVALID_PARAMETER;
 

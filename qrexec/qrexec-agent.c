@@ -26,6 +26,7 @@ static ULONG CreateAsyncPipe(OUT HANDLE *readPipe, OUT HANDLE *writePipe, IN SEC
     WCHAR pipeName[MAX_PATH + 1];
     ULONG status;
 
+    LogVerbose("start");
     if (!readPipe || !writePipe)
         return ERROR_INVALID_PARAMETER;
 
@@ -62,6 +63,7 @@ static ULONG CreateAsyncPipe(OUT HANDLE *readPipe, OUT HANDLE *writePipe, IN SEC
         return status;
     }
 
+    LogVerbose("success");
     return ERROR_SUCCESS;
 }
 
@@ -69,6 +71,8 @@ static ULONG InitReadPipe(OUT PIPE_DATA *pipeData, OUT HANDLE *writePipe, IN PIP
 {
     SECURITY_ATTRIBUTES sa = { 0 };
     ULONG status;
+
+    LogVerbose("pipe type %d", pipeType);
 
     ZeroMemory(pipeData, sizeof(*pipeData));
     sa.nLength = sizeof(sa);
@@ -93,6 +97,7 @@ static ULONG InitReadPipe(OUT PIPE_DATA *pipeData, OUT HANDLE *writePipe, IN PIP
     SetHandleInformation(pipeData->ReadPipe, HANDLE_FLAG_INHERIT, 0);
 
     pipeData->PipeType = pipeType;
+    LogVerbose("success");
 
     return ERROR_SUCCESS;
 }
@@ -102,6 +107,8 @@ ULONG SendMessageToDaemon(IN ULONG clientId, IN UINT messageType, IN const void 
     struct server_header serverHeader;
     int vchanFreeSpace;
     ULONG status = ERROR_SUCCESS;
+
+    LogVerbose("client %d, msg type %d, data %p, size %d", clientId, messageType, data, cbData);
 
     EnterCriticalSection(&g_VchanCriticalSection);
 
@@ -155,12 +162,17 @@ ULONG SendMessageToDaemon(IN ULONG clientId, IN UINT messageType, IN const void 
     }
 
     LeaveCriticalSection(&g_VchanCriticalSection);
+
+    LogVerbose("success");
+
     return status;
 }
 
 ULONG SendExitCode(IN ULONG clientId, IN int exitCode)
 {
     ULONG status;
+
+    LogVerbose("client %d, code %d", clientId, exitCode);
 
     status = SendMessageToDaemon(clientId, MSG_AGENT_TO_SERVER_EXIT_CODE, &exitCode, sizeof(exitCode), NULL);
     if (ERROR_SUCCESS != status)
@@ -170,6 +182,7 @@ ULONG SendExitCode(IN ULONG clientId, IN int exitCode)
     else
         LogDebug("Send exit code %d for client_id %d\n", exitCode, clientId);
 
+    LogVerbose("success");
     return ERROR_SUCCESS;
 }
 
@@ -177,10 +190,12 @@ static CLIENT_INFO *FindClientById(IN ULONG clientId)
 {
     ULONG clientIndex;
 
+    LogVerbose("client %d", clientId);
     for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
         if (clientId == g_Clients[clientIndex].ClientId)
             return &g_Clients[clientIndex];
 
+    LogVerbose("failed");
     return NULL;
 }
 
@@ -189,9 +204,9 @@ static ULONG SendDataToDaemon(IN ULONG clientId, IN OUT PIPE_DATA *data)
     DWORD cbRead, cbSent;
     UINT messageType;
     CLIENT_INFO *clientInfo;
-    ULONG status;
+    ULONG status = ERROR_SUCCESS;
 
-    status = ERROR_SUCCESS;
+    LogVerbose("client %d", clientId);
 
     if (!data)
         return ERROR_INVALID_PARAMETER;
@@ -244,12 +259,15 @@ static ULONG SendDataToDaemon(IN ULONG clientId, IN OUT PIPE_DATA *data)
         status = ERROR_HANDLE_EOF;
     }
 
+    LogVerbose("status %d", status);
     return status;
 }
 
 ULONG CloseReadPipeHandles(IN ULONG clientId, IN OUT PIPE_DATA *data)
 {
     ULONG status;
+
+    LogVerbose("client %d, pipedata %p", clientId, data);
 
     if (!data)
         return ERROR_INVALID_PARAMETER;
@@ -290,6 +308,7 @@ ULONG CloseReadPipeHandles(IN ULONG clientId, IN OUT PIPE_DATA *data)
         // Can close the pipe only when there is no pending IO in progress.
         CloseHandle(data->ReadPipe);
 
+    LogVerbose("status %d", status);
     return status;
 }
 
@@ -299,6 +318,8 @@ static ULONG Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf
     WCHAR *bufferUtf16 = NULL;
     ULONG status;
     HRESULT hresult;
+
+    LogVerbose("utf8 '%S', size %d", stringUtf8, cbStringUtf8);
 
     if (!stringUtf8 || !cbStringUtf8 || !stringUtf16)
         return ERROR_INVALID_PARAMETER;
@@ -355,6 +376,8 @@ static ULONG Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf
         return perror2(status, "ConvertUTF8ToUTF16");
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -362,6 +385,8 @@ static ULONG ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf
 {
     ULONG status;
     WCHAR *separator = NULL;
+
+    LogVerbose("command '%S'", commandUtf8);
 
     if (!commandUtf8 || !runInteractively)
         return ERROR_INVALID_PARAMETER;
@@ -414,6 +439,8 @@ static ULONG ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf
 
     *commandLine = separator;
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -421,6 +448,8 @@ ULONG CreateClientPipes(IN OUT CLIENT_INFO *clientInfo, OUT HANDLE *pipeStdin, O
 {
     ULONG status;
     SECURITY_ATTRIBUTES sa = { 0 };
+
+    LogVerbose("start");
 
     if (!clientInfo || !pipeStdin || !pipeStdout || !pipeStderr)
         return ERROR_INVALID_PARAMETER;
@@ -460,12 +489,16 @@ ULONG CreateClientPipes(IN OUT CLIENT_INFO *clientInfo, OUT HANDLE *pipeStdin, O
     // Ensure the write handle to the pipe for STDIN is not inherited.
     SetHandleInformation(clientInfo->WriteStdinPipe, HANDLE_FLAG_INHERIT, 0);
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
 // This routine may be called by pipe server threads, hence the critical section around g_Clients array is required.
 static ULONG ReserveClientIndex(IN ULONG clientId, OUT ULONG *clientIndex)
 {
+    LogVerbose("client %d", clientId);
+
     EnterCriticalSection(&g_ClientsCriticalSection);
 
     for (*clientIndex = 0; *clientIndex < MAX_CLIENTS; *clientIndex++)
@@ -492,11 +525,14 @@ static ULONG ReserveClientIndex(IN ULONG clientId, OUT ULONG *clientIndex)
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
+    LogVerbose("success, index = %d", *clientIndex);
     return ERROR_SUCCESS;
 }
 
 static ULONG ReleaseClientIndex(IN ULONG clientIndex)
 {
+    LogVerbose("client index %d", clientIndex);
+
     if (clientIndex >= MAX_CLIENTS)
         return ERROR_INVALID_PARAMETER;
 
@@ -507,11 +543,15 @@ static ULONG ReleaseClientIndex(IN ULONG clientIndex)
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
 static ULONG AddFilledClientInfo(IN ULONG clientIndex, IN const CLIENT_INFO *clientInfo)
 {
+    LogVerbose("client index %d", clientIndex);
+
     if (!clientInfo || clientIndex >= MAX_CLIENTS)
         return ERROR_INVALID_PARAMETER;
 
@@ -521,6 +561,8 @@ static ULONG AddFilledClientInfo(IN ULONG clientIndex, IN const CLIENT_INFO *cli
     g_Clients[clientIndex].ClientIsReady = TRUE;
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
+
+    LogVerbose("success");
 
     return ERROR_SUCCESS;
 }
@@ -533,6 +575,8 @@ static ULONG StartClient(IN ULONG clientId, IN const WCHAR *userName, IN WCHAR *
     HANDLE pipeStderr = INVALID_HANDLE_VALUE;
     HANDLE pipeStdin = INVALID_HANDLE_VALUE;
     ULONG clientIndex;
+
+    LogVerbose("client %d, user '%s', cmd '%s', interactive %d", clientId, userName, commandLine, runInteractively);
 
     // if userName is NULL we run the process on behalf of the current user.
     if (!commandLine)
@@ -632,7 +676,7 @@ static ULONG StartClient(IN ULONG clientId, IN const WCHAR *userName, IN WCHAR *
         return perror2(status, "AddFilledClientInfo");
     }
 
-    LogDebug("New client %d (local id %d)\n", clientId, clientIndex);
+    LogDebug("New client %d (index %d)\n", clientId, clientIndex);
 
     return ERROR_SUCCESS;
 }
@@ -641,6 +685,8 @@ ULONG AddExistingClient(IN ULONG clientId, IN CLIENT_INFO *clientInfo)
 {
     ULONG clientIndex;
     ULONG status;
+
+    LogVerbose("client %d", clientId);
 
     if (!clientInfo)
         return ERROR_INVALID_PARAMETER;
@@ -664,11 +710,15 @@ ULONG AddExistingClient(IN ULONG clientId, IN CLIENT_INFO *clientInfo)
 
     SetEvent(g_AddExistingClientEvent);
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
 static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
 {
+    LogVerbose("client %d", clientInfo->ClientId);
+
     if (!clientInfo || (FREE_CLIENT_SPOT_ID == clientInfo->ClientId))
         return;
 
@@ -684,20 +734,28 @@ static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
 
     clientInfo->ClientId = FREE_CLIENT_SPOT_ID;
     clientInfo->ClientIsReady = FALSE;
+
+    LogVerbose("success");
 }
 
 static void RemoveClient(IN OUT CLIENT_INFO *clientInfo)
 {
+    LogVerbose("client %d", clientInfo->ClientId);
+
     EnterCriticalSection(&g_ClientsCriticalSection);
 
     RemoveClientNoLocks(clientInfo);
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
+
+    LogVerbose("success");
 }
 
 static void RemoveAllClients(void)
 {
     ULONG clientIndex;
+
+    LogVerbose("start");
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 
@@ -706,12 +764,16 @@ static void RemoveAllClients(void)
             RemoveClientNoLocks(&g_Clients[clientIndex]);
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
+
+    LogVerbose("success");
 }
 
 // must be called with g_ClientsCriticalSection
 static ULONG HandleTerminatedClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
 {
     ULONG status;
+
+    LogVerbose("client %d", clientInfo->ClientId);
 
     if (clientInfo->ChildExited && clientInfo->StdoutData.PipeClosed && clientInfo->StderrData.PipeClosed)
     {
@@ -721,21 +783,29 @@ static ULONG HandleTerminatedClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
         RemoveClientNoLocks(clientInfo);
         return status;
     }
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
-ULONG HandleTerminatedClient(IN OUT CLIENT_INFO *cientInfo)
+ULONG HandleTerminatedClient(IN OUT CLIENT_INFO *clientInfo)
 {
     ULONG status;
 
-    if (cientInfo->ChildExited && cientInfo->StdoutData.PipeClosed && cientInfo->StderrData.PipeClosed)
+    LogVerbose("client %d", clientInfo->ClientId);
+
+    if (clientInfo->ChildExited && clientInfo->StdoutData.PipeClosed && clientInfo->StderrData.PipeClosed)
     {
-        status = SendExitCode(cientInfo->ClientId, cientInfo->ExitCode);
+        status = SendExitCode(clientInfo->ClientId, clientInfo->ExitCode);
         // guaranted that all data was already sent (above bPipeClosed==TRUE)
         // so no worry about returning some data after exit code
-        RemoveClient(cientInfo);
+        RemoveClient(clientInfo);
         return status;
     }
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -756,6 +826,8 @@ static ULONG InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
     ULONG status;
     ULONG cbRead;
     ULONG pathLength;
+
+    LogVerbose("cmd '%s'", commandLine);
 
     if (!commandLine || !serviceCommandLine || !sourceDomainName)
         return ERROR_INVALID_PARAMETER;
@@ -906,6 +978,9 @@ static ULONG InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         LogDebug("RPC %s: %s\n", serviceName, serviceFilePath);
         StringCchCopyW(*serviceCommandLine, wcslen(serviceFilePath) + 1, serviceFilePath);
     }
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -915,6 +990,8 @@ ULONG HandleConnectExisting(IN ULONG clientId, IN int cbIdent)
 {
     ULONG status;
     char *ident;
+
+    LogVerbose("client %d, ident size %d", clientId, cbIdent);
 
     if (!cbIdent)
         return ERROR_SUCCESS;
@@ -938,6 +1015,8 @@ ULONG HandleConnectExisting(IN ULONG clientId, IN int cbIdent)
     if (ERROR_SUCCESS != status)
         perror2(status, "ProceedWithExecution");
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -953,6 +1032,8 @@ static ULONG HandleExec(IN ULONG clientId, IN int cbCommandUtf8)
     WCHAR *serviceCommandLine = NULL;
     WCHAR *remoteDomainName = NULL;
     BOOL runInteractively;
+
+    LogVerbose("client %d, cmd size %d", clientId, cbCommandUtf8);
 
     commandUtf8 = malloc(cbCommandUtf8 + 1);
     if (!commandUtf8)
@@ -1013,6 +1094,9 @@ static ULONG HandleExec(IN ULONG clientId, IN int cbCommandUtf8)
         free(serviceCommandLine);
 
     free(command);
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -1029,6 +1113,8 @@ static ULONG HandleJustExec(IN ULONG clientId, IN int cbCommandUtf8)
     WCHAR *remoteDomainName = NULL;
     HANDLE process;
     BOOL runInteractively;
+
+    LogVerbose("client %d, cmd size %d", clientId, cbCommandUtf8);
 
     commandUtf8 = malloc(cbCommandUtf8 + 1);
     if (!commandUtf8)
@@ -1111,6 +1197,9 @@ static ULONG HandleJustExec(IN ULONG clientId, IN int cbCommandUtf8)
         free(serviceCommandLine);
 
     free(command);
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -1122,11 +1211,12 @@ static ULONG HandleInput(IN ULONG clientId, IN int cbInput)
     CLIENT_INFO *clientInfo;
     DWORD cbWritten;
 
+    LogVerbose("client %d, input size %d", clientId, cbInput);
     // If clientInfo is NULL after this it means we couldn't find a specified client.
     // Read and discard any data in the channel in this case.
     clientInfo = FindClientById(clientId);
 
-    if (!cbInput)
+    if (cbInput == 0)
     {
         if (clientInfo)
         {
@@ -1138,7 +1228,8 @@ static ULONG HandleInput(IN ULONG clientId, IN int cbInput)
 
     input = malloc(cbInput + 1);
     if (!input)
-        return ERROR_SUCCESS;
+        return ERROR_NOT_ENOUGH_MEMORY;
+
     input[cbInput] = 0;
 
     if (VchanReceiveBuffer(input, cbInput) <= 0)
@@ -1154,6 +1245,9 @@ static ULONG HandleInput(IN ULONG clientId, IN int cbInput)
     }
 
     free(input);
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -1161,11 +1255,15 @@ static void SetReadingDisabled(IN ULONG clientId, IN BOOLEAN blockOutput)
 {
     CLIENT_INFO *clientInfo;
 
+    LogVerbose("client %d, block %d", clientId, blockOutput);
+    
     clientInfo = FindClientById(clientId);
     if (!clientInfo)
         return;
 
     clientInfo->ReadingDisabled = blockOutput;
+
+    LogVerbose("success");
 }
 
 static ULONG HandleServerMessage(void)
@@ -1173,9 +1271,11 @@ static ULONG HandleServerMessage(void)
     struct server_header header;
     ULONG status;
 
+    LogVerbose("start");
+
     if (VchanReceiveBuffer(&header, sizeof header) <= 0)
     {
-        return perror2(ERROR_INVALID_FUNCTION, "read_all_vchan_ext");
+        return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
     }
 
     switch (header.type)
@@ -1234,6 +1334,8 @@ static ULONG HandleServerMessage(void)
         return ERROR_INVALID_FUNCTION;
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -1241,6 +1343,8 @@ static ULONG HandleServerMessage(void)
 ULONG FillAsyncIoData(IN ULONG eventIndex, IN ULONG clientIndex, IN HANDLE_TYPE handleType, IN OUT PIPE_DATA *pipeData)
 {
     ULONG status;
+
+    LogVerbose("event %d, client %d, handle type %d", eventIndex, clientIndex, handleType);
 
     if (eventIndex >= RTL_NUMBER_OF(g_WatchedEvents) ||
         clientIndex >= RTL_NUMBER_OF(g_Clients) ||
@@ -1297,6 +1401,8 @@ ULONG FillAsyncIoData(IN ULONG eventIndex, IN ULONG clientIndex, IN HANDLE_TYPE 
         return 1;
     }
 
+    LogVerbose("success");
+
     return 0;
 }
 
@@ -1315,6 +1421,8 @@ ULONG WatchForEvents(void)
     ULONG status;
     BOOLEAN vchanReturnedError;
     BOOLEAN vchanClientConnected;
+
+    LogVerbose("start");
 
     // This will not block.
     if (!VchanInitServer(QREXEC_PORT))
@@ -1392,6 +1500,8 @@ ULONG WatchForEvents(void)
         }
         LeaveCriticalSection(&g_ClientsCriticalSection);
 
+        LogVerbose("waiting for event");
+
         signaledEvent = WaitForMultipleObjects(eventIndex, g_WatchedEvents, FALSE, INFINITE);
         if (signaledEvent >= MAXIMUM_WAIT_OBJECTS)
         {
@@ -1444,9 +1554,14 @@ ULONG WatchForEvents(void)
         }
         else
         {
+            LogVerbose("event %d", signaledEvent);
+
             if (0 == signaledEvent)
-                // g_hStopServiceEvent is signaled
+            {
+                LogVerbose("stopping");
+
                 break;
+            }
 
             if (HTYPE_VCHAN != g_HandlesInfo[signaledEvent].Type)
             {
@@ -1480,6 +1595,8 @@ ULONG WatchForEvents(void)
             switch (g_HandlesInfo[signaledEvent].Type)
             {
             case HTYPE_VCHAN:
+
+                LogVerbose("HTYPE_VCHAN");
 
                 // the following will never block; we need to do this to
                 // clear libvchan_fd pending state
@@ -1616,6 +1733,7 @@ ULONG WatchForEvents(void)
                 break;
 
             case HTYPE_STDOUT:
+                LogVerbose("HTYPE_STDOUT");
 #ifdef DISPLAY_CONSOLE_OUTPUT
                 printf("%s", &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].StdoutData.ReadBuffer);
 #endif
@@ -1636,6 +1754,7 @@ ULONG WatchForEvents(void)
                 break;
 
             case HTYPE_STDERR:
+                LogVerbose("HTYPE_STDERR");
 #ifdef DISPLAY_CONSOLE_OUTPUT
                 printf("%s", &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex].StderrData.ReadBuffer);
 #endif
@@ -1657,6 +1776,7 @@ ULONG WatchForEvents(void)
 
             case HTYPE_PROCESS:
 
+                LogVerbose("HTYPE_PROCESS");
                 clientInfo = &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex];
 
                 if (!GetExitCodeProcess(clientInfo->ChildProcess, &exitCode))
@@ -1683,15 +1803,23 @@ ULONG WatchForEvents(void)
             break;
     }
 
+    LogVerbose("loop finished");
+
     if (vchanIoInProgress)
+    {
         if (CancelIo(vchanHandle))
+        {
             // Must wait for the canceled IO to complete, otherwise a race condition may occur on the
             // OVERLAPPED structure.
             WaitForSingleObject(olVchan.hEvent, INFINITE);
+        }
+    }
 
     if (!vchanClientConnected)
+    {
         // Remove the xenstore device/vchan/N entry.
         libvchan_server_handle_connected(g_Vchan);
+    }
 
     // Cancel all other pending IO.
     RemoveAllClients();
@@ -1703,6 +1831,8 @@ ULONG WatchForEvents(void)
     xc_evtchn_close(g_Vchan->evfd);
 
     CloseHandle(olVchan.hEvent);
+
+    LogVerbose("exiting");
 
     return vchanReturnedError ? ERROR_INVALID_FUNCTION : ERROR_SUCCESS;
 }
@@ -1716,11 +1846,16 @@ ULONG CheckForXenInterface(void)
 {
     EVTCHN xc;
 
+    LogVerbose("start");
+
     xc = xc_evtchn_open();
     if (INVALID_HANDLE_VALUE == xc)
         return ERROR_NOT_SUPPORTED;
 
     xc_evtchn_close(xc);
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -1745,6 +1880,8 @@ ULONG WINAPI ServiceExecutionThread(void *param)
         CloseHandle(g_AddExistingClientEvent);
         return perror2(status, "CreateThread");
     }
+
+    LogVerbose("entering loop");
 
     while (TRUE)
     {
@@ -1778,6 +1915,8 @@ ULONG Init(OUT HANDLE *serviceThread)
     ULONG status;
     ULONG clientIndex;
 
+    LogVerbose("start");
+
     *serviceThread = INVALID_HANDLE_VALUE;
 
     status = CheckForXenInterface();
@@ -1799,6 +1938,8 @@ ULONG Init(OUT HANDLE *serviceThread)
         return perror("CreateThread");
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -1819,6 +1960,8 @@ int __cdecl wmain(int argc, WCHAR *argv[])
             { SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain },
             { NULL, NULL }
     };
+
+    LogVerbose("start");
 
     cchUserName = RTL_NUMBER_OF(userName);
     if (!GetUserName(userName, &cchUserName))
@@ -1843,7 +1986,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         }
     }
 
-    memset(fullPath, 0, sizeof(fullPath));
+    ZeroMemory(fullPath, sizeof(fullPath));
     if (!GetModuleFileName(NULL, fullPath, RTL_NUMBER_OF(fullPath) - 1))
     {
         return perror("GetModuleFileName");
@@ -1908,6 +2051,8 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         Usage();
     }
 
+    LogVerbose("status %d", status);
+
     return status;
 }
 
@@ -1970,6 +2115,8 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     ServiceExecutionThread(NULL);
     SetEvent(g_CleanupFinishedEvent);
+
+    LogVerbose("exiting");
 
     return ERROR_SUCCESS;
 }
