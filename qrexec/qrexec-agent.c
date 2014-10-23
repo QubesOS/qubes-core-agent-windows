@@ -715,9 +715,12 @@ ULONG AddExistingClient(IN ULONG clientId, IN CLIENT_INFO *clientInfo)
     return ERROR_SUCCESS;
 }
 
-static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
+static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo OPTIONAL)
 {
-    LogVerbose("client %d", clientInfo->ClientId);
+    if (clientInfo)
+        LogVerbose("client %d", clientInfo->ClientId);
+    else
+        LogVerbose("clientInfo NULL");
 
     if (!clientInfo || (FREE_CLIENT_SPOT_ID == clientInfo->ClientId))
         return;
@@ -738,9 +741,12 @@ static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
     LogVerbose("success");
 }
 
-static void RemoveClient(IN OUT CLIENT_INFO *clientInfo)
+static void RemoveClient(IN OUT CLIENT_INFO *clientInfo OPTIONAL)
 {
-    LogVerbose("client %d", clientInfo->ClientId);
+    if (clientInfo)
+        LogVerbose("client %d", clientInfo->ClientId);
+    else
+        LogVerbose("clientInfo NULL");
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 

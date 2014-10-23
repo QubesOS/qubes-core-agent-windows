@@ -55,7 +55,7 @@ static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurity
 
     // Initialize a security descriptor.
     *pipeSecurityDescriptor = (SECURITY_DESCRIPTOR *)LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
-    if (*pipeSecurityDescriptor = NULL)
+    if (*pipeSecurityDescriptor == NULL)
     {
         perror("LocalAlloc");
         goto cleanup;
@@ -231,7 +231,7 @@ static ULONG ConnectExisting(
     if (!clientInfo || !connectParams || !cpr)
         return ERROR_INVALID_PARAMETER;
 
-    LogDebug("client_id %d: Got the params '%S', vm '%S'\n", clientId, connectParams->exec_index, connectParams->target_vmname);
+    LogDebug("client %d: service '%S', vm '%S'\n", clientId, connectParams->exec_index, connectParams->target_vmname);
 
     if (CPR_TYPE_ERROR_CODE == cpr->ResponseType)
     {
