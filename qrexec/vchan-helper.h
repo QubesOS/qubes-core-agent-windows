@@ -18,6 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  *
  */
+#pragma once
+#include <windows.h>
 
 BOOL VchanInitServer(IN int port);
 int VchanGetReadBufferSize(void);

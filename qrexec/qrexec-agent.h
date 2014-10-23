@@ -7,7 +7,7 @@
 #include "common.h"
 #include "qrexec.h"
 #include "libvchan.h"
-#include "glue.h"
+#include "vchan-helper.h"
 #include "service.h"
 #include "getopt.h"
 #include "exec.h"
