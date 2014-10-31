@@ -15,6 +15,8 @@ BOOL GetCurrentUser(OUT char **userName)
     DWORD cbUserName;
     BOOL found;
 
+    LogVerbose("start");
+
     if (!WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessionInfo, &sessionCount))
     {
         perror("WTSEnumerateSessionsA");
@@ -43,6 +45,9 @@ BOOL GetCurrentUser(OUT char **userName)
 
 cleanup:
     WTSFreeMemory(sessionInfo);
+
+    LogVerbose("found=%d", found);
+
     return found;
 }
 
@@ -50,6 +55,8 @@ cleanup:
 BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 {
     WCHAR *lastBackslash = NULL;
+
+    LogVerbose("exe: '%s'", exeName);
 
     if (!GetModuleFileName(NULL, fullPath, MAX_PATH))
     {
@@ -70,6 +77,9 @@ BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
     *lastBackslash = L'\0';
     // add an executable filename
     PathAppend(fullPath, exeName);
+
+    LogVerbose("success, path: '%s'", fullPath);
+
     return TRUE;
 }
 
@@ -77,6 +87,8 @@ BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 BOOL CheckGuiAgentPresence(void)
 {
     WCHAR serviceFilePath[MAX_PATH + 1];
+
+    LogVerbose("start");
 
     if (!PrepareExePath(serviceFilePath, L"wga.exe"))
         return FALSE;
@@ -89,6 +101,8 @@ BOOL NotifyDom0(void)
     WCHAR qrexecClientVmPath[MAX_PATH + 1];
     STARTUPINFO si = { 0 };
     PROCESS_INFORMATION pi;
+
+    LogVerbose("start");
 
     if (!PrepareExePath(qrexecClientVmPath, L"qrexec-client-vm.exe"))
         return FALSE;
@@ -117,6 +131,8 @@ BOOL NotifyDom0(void)
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 
+    LogVerbose("success");
+
     return TRUE;
 }
 
@@ -126,6 +142,8 @@ ULONG AdvertiseTools(void)
     ULONG status = ERROR_UNIDENTIFIED_ERROR;
     BOOL guiAgentPresent;
     CHAR *userName = NULL;
+
+    LogVerbose("start");
 
     xs = xs_domain_open();
     if (!xs)
@@ -175,6 +193,7 @@ ULONG AdvertiseTools(void)
     }
 
     status = ERROR_SUCCESS;
+    LogVerbose("success");
 
 cleanup:
     if (xs)

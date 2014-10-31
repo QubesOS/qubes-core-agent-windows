@@ -16,6 +16,8 @@ static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurity
     EXPLICIT_ACCESS	ea[2] = { 0 };
     SID_IDENTIFIER_AUTHORITY sidAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
 
+    LogVerbose("start");
+
     if (!pipeSecurityDescriptor || !pipeAcl)
         return ERROR_INVALID_PARAMETER;
 
@@ -40,7 +42,7 @@ static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurity
     ea[0].grfInheritance = NO_INHERITANCE;
     ea[0].Trustee.TrusteeForm = TRUSTEE_IS_SID;
     ea[0].Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-    ea[0].Trustee.ptstrName = (WCHAR *) everyoneSid;
+    ea[0].Trustee.ptstrName = (WCHAR *)everyoneSid;
 
     // Create a new ACL that contains the new ACE.
     status = SetEntriesInAcl(1, ea, NULL, pipeAcl);
@@ -52,8 +54,8 @@ static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurity
     }
 
     // Initialize a security descriptor.
-    *pipeSecurityDescriptor = (SECURITY_DESCRIPTOR *) LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
-    if (*pipeSecurityDescriptor = NULL)
+    *pipeSecurityDescriptor = (SECURITY_DESCRIPTOR *)LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
+    if (*pipeSecurityDescriptor == NULL)
     {
         perror("LocalAlloc");
         goto cleanup;
@@ -72,6 +74,10 @@ static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurity
         goto cleanup;
     }
 
+    status = ERROR_SUCCESS;
+
+    LogVerbose("success");
+
 cleanup:
     if (everyoneSid)
         FreeSid(everyoneSid);
@@ -87,6 +93,8 @@ cleanup:
 // connection has been completed.
 static ULONG ConnectToNewClient(IN HANDLE clientPipe, OUT OVERLAPPED *asyncState, IN HANDLE connectionEvent, OUT BOOL *pendingIo)
 {
+    LogVerbose("start");
+
     if (!pendingIo)
         return ERROR_INVALID_PARAMETER;
 
@@ -118,6 +126,8 @@ static ULONG ConnectToNewClient(IN HANDLE clientPipe, OUT OVERLAPPED *asyncState
         return perror("ConnectNamedPipe");
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -130,7 +140,7 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex)
 {
     ULONG status;
 
-    LogDebug("Disconnecting pipe %lu, state %d\n", clientIndex, g_Pipes[clientIndex].ConnectionState);
+    LogDebug("Disconnecting client %lu, state %d\n", clientIndex, g_Pipes[clientIndex].ConnectionState);
 
     if (g_Pipes[clientIndex].ClientProcess)
         CloseHandle(g_Pipes[clientIndex].ClientProcess);
@@ -170,12 +180,17 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex)
     }
 
     g_Pipes[clientIndex].ConnectionState = g_Pipes[clientIndex].PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
+
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
 static ULONG ClosePipeHandles(void)
 {
     ULONG i;
+
+    LogVerbose("start");
 
     for (i = 0; i < TRIGGER_PIPE_INSTANCES; i++)
     {
@@ -196,6 +211,8 @@ static ULONG ClosePipeHandles(void)
         CloseHandle(g_Events[i]);
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -209,10 +226,12 @@ static ULONG ConnectExisting(
 {
     ULONG status;
 
+    LogVerbose("client %d, ident '%S', vm '%S'", clientId, connectParams->exec_index, connectParams->target_vmname);
+
     if (!clientInfo || !connectParams || !cpr)
         return ERROR_INVALID_PARAMETER;
 
-    LogDebug("client_id %d: Got the params '%S', vm '%S'\n", clientId, connectParams->exec_index, connectParams->target_vmname);
+    LogDebug("client %d: service '%S', vm '%S'\n", clientId, connectParams->exec_index, connectParams->target_vmname);
 
     if (CPR_TYPE_ERROR_CODE == cpr->ResponseType)
     {
@@ -245,7 +264,9 @@ static ULONG ConnectExisting(
     }
 
     // Clear the handles; now the WatchForEvents thread takes care of them.
-    ZeroMemory(clientInfo, sizeof(CLIENT_INFO));
+    ZeroMemory(clientInfo, sizeof(*clientInfo));
+
+    LogVerbose("success");
 
     return ERROR_SUCCESS;
 }
@@ -263,13 +284,15 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
     ULONG status;
     struct trigger_connect_params connectParams;
 
+    LogVerbose("client index %d", clientIndex);
+
     if (clientIndex >= TRIGGER_PIPE_INSTANCES)
         return ERROR_INVALID_PARAMETER;
 
     EnterCriticalSection(&g_PipesCriticalSection);
 
     hresult = StringCchPrintfA(
-        (STRSAFE_LPSTR) &g_Pipes[clientIndex].ConnectParams.process_fds.ident,
+        (STRSAFE_LPSTR)&g_Pipes[clientIndex].ConnectParams.process_fds.ident,
         sizeof(g_Pipes[clientIndex].ConnectParams.process_fds.ident),
         "%I64x",
         g_DaemonRequestsCounter++);
@@ -291,12 +314,16 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
         return perror2(status, "ReturnData");
     }
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
 ULONG FindClientByIdent(IN const char *ident, OUT ULONG *clientIndex)
 {
     ULONG i;
+
+    LogVerbose("ident '%S'", ident);
 
     if (!ident || !clientIndex)
         return ERROR_INVALID_PARAMETER;
@@ -306,10 +333,12 @@ ULONG FindClientByIdent(IN const char *ident, OUT ULONG *clientIndex)
         if (!strcmp(g_Pipes[i].ConnectParams.process_fds.ident, ident))
         {
             *clientIndex = i;
+            LogVerbose("found index %d", i);
             return ERROR_SUCCESS;
         }
     }
 
+    LogVerbose("not found");
     return ERROR_NOT_FOUND;
 }
 
@@ -317,6 +346,8 @@ ULONG ProceedWithExecution(IN ULONG clientId, IN const char *ident)
 {
     ULONG clientIndex;
     ULONG status;
+
+    LogVerbose("client %d, ident '%S'", clientId, ident);
 
     if (!ident)
         return ERROR_INVALID_PARAMETER;
@@ -346,6 +377,8 @@ ULONG ProceedWithExecution(IN ULONG clientId, IN const char *ident)
 
     LeaveCriticalSection(&g_PipesCriticalSection);
 
+    LogVerbose("success");
+
     return ERROR_SUCCESS;
 }
 
@@ -362,7 +395,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
     SECURITY_DESCRIPTOR *pipeSecurityDescriptor;
     ACL *acl;
 
-    LogDebug("Init\n");
+    LogDebug("start");
     ZeroMemory(&g_Pipes, sizeof(g_Pipes));
 
     status = CreatePipeSecurityDescriptor(&pipeSecurityDescriptor, &acl);
@@ -440,11 +473,15 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
     // Last one will signal the service shutdown.
     g_Events[TRIGGER_PIPE_INSTANCES] = g_StopServiceEvent;
 
+    LogVerbose("event loop");
+
     while (TRUE)
     {
         // Wait for the event object to be signaled, indicating
         // completion of an overlapped read, write, or
         // connect operation.
+
+        LogVerbose("waiting for events");
 
         waitResult = WaitForMultipleObjects(
             TRIGGER_PIPE_INSTANCES + 1, // number of event objects
@@ -455,6 +492,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
         // dwWait shows which pipe completed the operation.
 
         clientIndex = waitResult - WAIT_OBJECT_0; // determines which pipe
+
+        LogVerbose("event %d signaled", clientIndex);
 
         if (TRIGGER_PIPE_INSTANCES == clientIndex)
         {
@@ -489,6 +528,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             {
                 // Pending connect operation
             case STATE_WAITING_FOR_CLIENT:
+                LogVerbose("STATE_WAITING_FOR_CLIENT");
 
                 if (!GetNamedPipeClientProcessId(g_Pipes[clientIndex].Pipe, &clientProcessId))
                 {
@@ -512,6 +552,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 // Make sure the incoming message has a right size
             case STATE_RECEIVING_PARAMETERS:
+                LogVerbose("STATE_RECEIVING_PARAMETERS");
+
                 if (sizeof(g_Pipes[clientIndex].ConnectParams) != cbRet)
                 {
                     LogWarning("Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(g_Pipes[clientIndex].ConnectParams));
@@ -532,6 +574,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 // Pending write operation
             case STATE_SENDING_IO_HANDLES:
+                LogVerbose("STATE_SENDING_IO_HANDLES");
+
                 if (IO_HANDLES_SIZE != cbRet)
                 {
                     LogWarning("Could not send the handles array: sent %d bytes instead of %d\n", cbRet, IO_HANDLES_SIZE);
@@ -545,6 +589,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 // Pending read operation
             case STATE_RECEIVING_PROCESS_HANDLE:
+                LogVerbose("STATE_RECEIVING_PROCESS_HANDLE");
+
                 if (sizeof(CREATE_PROCESS_RESPONSE) != cbRet)
                 {
                     LogWarning("Wrong incoming create process response size: %d\n", cbRet);
@@ -560,6 +606,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     &g_Pipes[clientIndex].ClientInfo,
                     &g_Pipes[clientIndex].ConnectParams,
                     &g_Pipes[clientIndex].CreateProcessResponse);
+
                 if (ERROR_SUCCESS != status)
                     perror2(status, "ConnectExisting");
 
@@ -578,6 +625,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
         switch (g_Pipes[clientIndex].ConnectionState)
         {
         case STATE_RECEIVING_PARAMETERS:
+            LogVerbose("STATE_RECEIVING_PARAMETERS (immediate)");
 
             success = ReadFile(
                 g_Pipes[clientIndex].Pipe,
@@ -637,6 +685,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             // passthrough
 
         case STATE_SENDING_IO_HANDLES:
+            LogVerbose("STATE_SENDING_IO_HANDLES (immediate)");
 
             cbToWrite = IO_HANDLES_SIZE;
 
@@ -731,6 +780,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             // passthrough
 
         case STATE_RECEIVING_PROCESS_HANDLE:
+            LogVerbose("STATE_RECEIVING_PROCESS_HANDLE (immediate)");
 
             success = ReadFile(
                 g_Pipes[clientIndex].Pipe,
@@ -751,6 +801,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     &g_Pipes[clientIndex].ClientInfo,
                     &g_Pipes[clientIndex].ConnectParams,
                     &g_Pipes[clientIndex].CreateProcessResponse);
+
                 if (ERROR_SUCCESS != status)
                     perror2(status, "ConnectExisting");
 
@@ -774,10 +825,12 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             break;
 
         default:
-            LogWarning("Invalid pipe state");
+            LogWarning("Invalid pipe state %d", g_Pipes[clientIndex].ConnectionState);
             return ERROR_INVALID_PARAMETER;
         }
     }
+
+    LogVerbose("success");
 
     return ERROR_SUCCESS;
 }
