@@ -143,7 +143,7 @@ int FcReadUntilEof(HANDLE fd, void *buf, int size)
     return got_read;
 }
 
-int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLine, int nCmdShow)
+int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLine, int nCmdShow)
 {
     HWND hMainWindow;
     size_t cbExpectedUserUtf8;
@@ -210,8 +210,8 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, TCHAR *pszCommandLin
     g_sessionFound = FALSE;
     if (!CheckIfUserLoggedIn())
     {
-        BOOL	bRet;
-        MSG		msg;
+        BOOL bRet;
+        MSG msg;
 
 #ifdef DBG
 # ifdef UNICODE

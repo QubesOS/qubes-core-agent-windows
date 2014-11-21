@@ -81,9 +81,9 @@ static ULONG CreatePipeSecurityDescriptor(OUT SECURITY_DESCRIPTOR **pipeSecurity
 cleanup:
     if (everyoneSid)
         FreeSid(everyoneSid);
-    if (status != ERROR_SUCCESS && *pipeAcl)
+    if (status != ERROR_SUCCESS && (*pipeAcl))
         LocalFree(*pipeAcl);
-    if (status != ERROR_SUCCESS && *pipeSecurityDescriptor)
+    if (status != ERROR_SUCCESS && (*pipeSecurityDescriptor))
         LocalFree(*pipeSecurityDescriptor);
     return status;
 }

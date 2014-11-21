@@ -501,7 +501,7 @@ static ULONG ReserveClientIndex(IN ULONG clientId, OUT ULONG *clientIndex)
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    for (*clientIndex = 0; *clientIndex < MAX_CLIENTS; *clientIndex++)
+    for (*clientIndex = 0; *clientIndex < MAX_CLIENTS; (*clientIndex)++)
         if (FREE_CLIENT_SPOT_ID == g_Clients[*clientIndex].ClientId)
             break;
 
