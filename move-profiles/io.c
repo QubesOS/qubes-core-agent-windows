@@ -748,7 +748,7 @@ NTSTATUS FileCopyDirectory(IN const WCHAR *sourcePath, IN const WCHAR *targetPat
         goto cleanup;
     }
 
-    NtLog(TRUE, L"[D] %s\n", sourcePath);
+    NtLog(FALSE, L"[D] %s\n", sourcePath);
 
     status = FileCreateDirectory(targetPath);
     if (!NT_SUCCESS(status))
@@ -927,7 +927,7 @@ NTSTATUS FileDeleteDirectory(IN const WCHAR *path, IN BOOLEAN deleteSelf)
         goto cleanup;
     }
 
-    NtLog(TRUE, L"[~] %s\n", path);
+    NtLog(FALSE, L"[~] %s\n", path);
 
     status = FileOpen(&dir, path, FALSE, FALSE, FALSE);
     if (!NT_SUCCESS(status))
