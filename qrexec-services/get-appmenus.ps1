@@ -51,3 +51,8 @@ $shortcuts | foreach-object {ProcessLink $_  $p }
 $p = $WshShell.SpecialFolders.item("StartMenu")
 $shortcuts = get-childitem -path $p -filter "*.lnk" -rec
 $shortcuts | foreach-object {ProcessLink $_  $p }
+
+# Pinned Start Menu items
+$p = Join-Path $WshShell.SpecialFolders.item("AppData") "Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"
+$shortcuts = get-childitem -path $p -filter "*.lnk" -rec
+$shortcuts | foreach-object {ProcessLink $_  $p }
