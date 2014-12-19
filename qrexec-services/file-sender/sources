@@ -14,7 +14,7 @@ INCLUDES=$(INCLUDES); \
     ..\..\include; \
     $(QUBES_INCLUDES);
     
-SOURCES = file-sender.c gui-progress.c file-sender.rc
+SOURCES = file-sender.c gui-progress.c version.rc
 
 SXS_APPLICATION_MANIFEST = file-sender.exe.manifest
 

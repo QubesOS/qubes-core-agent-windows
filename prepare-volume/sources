@@ -8,7 +8,7 @@ USE_MSVCRT=1
 
 C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE /DINITGUID
 
-SOURCES = device.c disk.c format.c prepare-volume.c wait-for-volume.c
+SOURCES = device.c disk.c format.c prepare-volume.c wait-for-volume.c version.rc
 
 INCLUDES=$(INCLUDES); \
                     $(DDK_INC_PATH); \

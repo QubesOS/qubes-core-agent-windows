@@ -15,7 +15,7 @@ INCLUDES=$(INCLUDES); \
                     ..\..\include; \
                     $(QUBES_INCLUDES);
 
-SOURCES=clipboard-copy.c
+SOURCES=clipboard-copy.c version.rc
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \

@@ -13,7 +13,7 @@ INCLUDES = $(INCLUDES); \
     ..\include; \
     $(QUBES_INCLUDES);
 
-SOURCES = qrexec-client-vm.c
+SOURCES = qrexec-client-vm.c version.rc
 
 TARGETLIBS = \
     $(SDK_LIB_PATH)\kernel32.lib \

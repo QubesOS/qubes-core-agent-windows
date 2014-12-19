@@ -14,7 +14,7 @@ INCLUDES = $(INCLUDES); \
     ..\..\include; \
     $(QUBES_INCLUDES);
     
-SOURCES = file-receiver.c unpack.c
+SOURCES = file-receiver.c unpack.c version.rc
 
 TARGETLIBS = \
     $(SDK_LIB_PATH)\kernel32.lib \

@@ -21,3 +21,5 @@ FONT 8, "Ms Shell Dlg"
     PUSHBUTTON      "Cancel", IDCANCEL, 60, 30, 50, 14
     LTEXT           "Enter destination VM name:", IDC_STATIC, 5, 5, 88, 8, SS_LEFT
 }
+
+#include "version.rc"

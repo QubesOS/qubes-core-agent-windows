@@ -13,7 +13,7 @@ INCLUDES=$(INCLUDES); \
     ..\include; \
     $(QUBES_INCLUDES);
 
-SOURCES = qrexec-agent.c vchan-helper.c service.c pipe-server.c advertise-tools.c
+SOURCES = qrexec-agent.c vchan-helper.c service.c pipe-server.c advertise-tools.c version.rc
 
 TARGETLIBS = \
     $(SDK_LIB_PATH)\kernel32.lib \

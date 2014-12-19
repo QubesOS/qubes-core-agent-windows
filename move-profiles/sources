@@ -16,7 +16,7 @@ MINWIN_SDK_LIB_PATH = $(SDK_LIB_PATH)
 INCLUDES = \
     $(DDK_INC_PATH);
 
-SOURCES = move-profiles.c io.c
+SOURCES = move-profiles.c io.c version.rc
 
 TARGETLIBS = \
     $(DDK_LIB_PATH)\ntdll.lib \

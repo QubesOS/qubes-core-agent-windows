@@ -14,7 +14,7 @@ INCLUDES = $(INCLUDES); \
     ..\include; \
     $(QUBES_INCLUDES);
 
-SOURCES = qubes-network-setup.c service.c
+SOURCES = qubes-network-setup.c service.c version.rc
 
 TARGETLIBS = \
     $(SDK_LIB_PATH)\setupapi.lib \

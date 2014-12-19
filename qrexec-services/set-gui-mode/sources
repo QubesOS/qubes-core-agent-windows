@@ -13,7 +13,7 @@ INCLUDES=$(INCLUDES); \
                     ..\include; \
                     ..\..\include; \
 
-SOURCES=set-gui-mode.c
+SOURCES=set-gui-mode.c version.rc
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \

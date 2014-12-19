@@ -14,7 +14,7 @@ INCLUDES=$(INCLUDES); \
                     ..\..\include; \
                     $(QUBES_INCLUDES);
     
-SOURCES=qopen-in-vm.c
+SOURCES=qopen-in-vm.c version.rc
 
 TARGETLIBS=\
         $(SDK_LIB_PATH)\kernel32.lib \
