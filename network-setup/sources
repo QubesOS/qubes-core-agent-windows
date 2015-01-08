@@ -17,14 +17,9 @@ INCLUDES = $(INCLUDES); \
 SOURCES = qubes-network-setup.c service.c version.rc
 
 TARGETLIBS = \
-    $(SDK_LIB_PATH)\setupapi.lib \
-    $(SDK_LIB_PATH)\kernel32.lib \
-    $(SDK_LIB_PATH)\shlwapi.lib \
-    $(SDK_LIB_PATH)\shell32.lib \
     $(SDK_LIB_PATH)\IPHLPAPI.lib \
     $(SDK_LIB_PATH)\ws2_32.lib \
-    $(QUBES_LIBS)\gntmem.lib \
+    $(SDK_LIB_PATH)\setupapi.lib \
     $(QUBES_LIBS)\evtchn.lib \
     $(QUBES_LIBS)\libxs.lib \
-    $(QUBES_LIBS)\libvchan.lib \
     $(QUBES_LIBS)\windows-utils.lib

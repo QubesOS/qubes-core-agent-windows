@@ -1,26 +1,24 @@
-TARGETNAME=get-image-rgba
-TARGETTYPE=PROGRAM
-TARGETPATH=bin
+TARGETNAME = get-image-rgba
+TARGETTYPE = PROGRAM
+TARGETPATH = bin
 
-UMTYPE=console
-USE_MSVCRT=1
+UMTYPE = console
+USE_MSVCRT = 1
 
 UMENTRY = wmain
-C_DEFINES = $(C_DEFINES)  /D_UNICODE /DUNICODE
+C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
-                    $(SDK_INC_PATH)\..\ddk; \
-                    ..\include; \
-                    ..\..\include; \
-                    $(QUBES_INCLUDES);
+INCLUDES = $(INCLUDES); \
+    $(SDK_INC_PATH)\..\ddk; \
+    ..\include; \
+    ..\..\include; \
+    $(QUBES_INCLUDES);
 
-SOURCES=get-image-rgba.c version.rc
+SOURCES = get-image-rgba.c version.rc
 
-TARGETLIBS=\
-        $(SDK_LIB_PATH)\kernel32.lib \
-        $(SDK_LIB_PATH)\user32.lib \
-        $(SDK_LIB_PATH)\gdi32.lib \
-        $(SDK_LIB_PATH)\shlwapi.lib \
-        $(SDK_LIB_PATH)\shell32.lib \
-        $(SDK_LIB_PATH)\ole32.lib \
-        $(QUBES_LIBS)\windows-utils.lib
+TARGETLIBS = \
+    $(SDK_LIB_PATH)\user32.lib \
+    $(SDK_LIB_PATH)\gdi32.lib \
+    $(SDK_LIB_PATH)\shell32.lib \
+    $(SDK_LIB_PATH)\ole32.lib \
+    $(QUBES_LIBS)\windows-utils.lib

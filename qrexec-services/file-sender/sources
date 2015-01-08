@@ -8,7 +8,7 @@ USE_MSVCRT = 1
 UMENTRY = wmain
 C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE
 
-INCLUDES=$(INCLUDES); \
+INCLUDES = $(INCLUDES); \
     $(SDK_INC_PATH)\..\ddk; \
     ..\filecopy-common; \
     ..\..\include; \
@@ -19,10 +19,8 @@ SOURCES = file-sender.c gui-progress.c version.rc
 SXS_APPLICATION_MANIFEST = file-sender.exe.manifest
 
 TARGETLIBS = \
-    $(SDK_LIB_PATH)\kernel32.lib \
     $(SDK_LIB_PATH)\Shlwapi.lib \
     $(SDK_LIB_PATH)\User32.lib \
     ..\libs\*\filecopy-common.lib \
     $(QUBES_LIBS)\windows-utils.lib \
-    $(SDK_LIB_PATH)\Shell32.lib \
     $(SDK_LIB_PATH)\Comctl32.lib
