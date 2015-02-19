@@ -1,9 +1,9 @@
-TARGETNAME=move-profiles
-TARGETPATH=bin
-TARGETTYPE=PROGRAM
-UMTYPE=nt
-UMENTRY=wmain
-USE_NTDLL=1
+TARGETNAME = move-profiles
+TARGETPATH = bin
+TARGETTYPE = PROGRAM
+UMTYPE = nt
+UMENTRY = wmain
+USE_NTDLL = 1
 
 C_DEFINES = \
     $(C_DEFINES) \
@@ -16,7 +16,7 @@ MINWIN_SDK_LIB_PATH = $(SDK_LIB_PATH)
 INCLUDES = \
     $(DDK_INC_PATH);
 
-SOURCES = move-profiles.c io.c
+SOURCES = move-profiles.c io.c version.rc
 
 TARGETLIBS = \
     $(DDK_LIB_PATH)\ntdll.lib \

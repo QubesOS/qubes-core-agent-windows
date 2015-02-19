@@ -10,6 +10,8 @@
 // from service.c
 DWORD ServiceStartup(void);
 
+#define XEN_ADAPTER_DESCRIPTION "Xen Net Device Driver"
+
 DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT DWORD *interfaceIndex)
 {
     IP_ADAPTER_INFO *adapterInfo = NULL;
@@ -51,35 +53,42 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
     {
         if (adapterInfoCurrent->Type == MIB_IF_TYPE_ETHERNET)
         {
-            addrCurrent = &adapterInfoCurrent->IpAddressList;
-            while (addrCurrent)
+            LogInfo("Adapter %d: %S %S", adapterInfoCurrent->Index, adapterInfoCurrent->AdapterName, adapterInfoCurrent->Description);
+            
+            if (0 == strcmp(adapterInfoCurrent->Description, XEN_ADAPTER_DESCRIPTION))
             {
-                if (0 == strcmp("0.0.0.0", addrCurrent->IpAddress.String))
+                LogDebug("setting interface info");
+                addrCurrent = &adapterInfoCurrent->IpAddressList;
+                while (addrCurrent)
                 {
+                    if (0 == strcmp("0.0.0.0", addrCurrent->IpAddress.String))
+                    {
+                        addrCurrent = addrCurrent->Next;
+                        continue;
+                    }
+
+                    LogInfo("Deleting IP %S", addrCurrent->IpAddress.String);
+                    status = DeleteIPAddress(addrCurrent->Context);
+                    if (status != ERROR_SUCCESS)
+                    {
+                        perror2(status, "DeleteIPAddress");
+                        goto cleanup;
+                    }
                     addrCurrent = addrCurrent->Next;
-                    continue;
                 }
 
-                LogInfo("Deleting IP %S", addrCurrent->IpAddress.String);
-                status = DeleteIPAddress(addrCurrent->Context);
+                LogInfo("Adding IP 0x%x (0x%x)", ip, netmask);
+                status = AddIPAddress(ip, netmask, adapterInfoCurrent->Index, &nteContext, &nteInstance);
                 if (status != ERROR_SUCCESS)
                 {
-                    perror2(status, "DeleteIPAddress");
+                    perror2(status, "AddIPAddress");
                     goto cleanup;
                 }
-                addrCurrent = addrCurrent->Next;
-            }
 
-            status = AddIPAddress(ip, netmask, adapterInfoCurrent->Index, &nteContext, &nteInstance);
-            if (status != ERROR_SUCCESS)
-            {
-                perror2(status, "AddIPAddress");
-                goto cleanup;
+                ipForwardRow.dwForwardIfIndex = adapterInfoCurrent->Index;
+                if (interfaceIndex)
+                    *interfaceIndex = ipForwardRow.dwForwardIfIndex;
             }
-
-            ipForwardRow.dwForwardIfIndex = adapterInfoCurrent->Index;
-            if (interfaceIndex)
-                *interfaceIndex = ipForwardRow.dwForwardIfIndex;
         }
         adapterInfoCurrent = adapterInfoCurrent->Next;
     }

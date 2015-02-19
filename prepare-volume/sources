@@ -1,23 +1,23 @@
-TARGETNAME=prepare-volume
-TARGETTYPE=PROGRAM
-TARGETPATH=bin
+TARGETNAME = prepare-volume
+TARGETTYPE = PROGRAM
+TARGETPATH = bin
 
-UMTYPE=console
-UMENTRY=wmain
-USE_MSVCRT=1
+UMTYPE = console
+UMENTRY = wmain
+USE_MSVCRT = 1
 
 C_DEFINES = $(C_DEFINES) /D_UNICODE /DUNICODE /DINITGUID
 
-SOURCES = device.c disk.c format.c prepare-volume.c wait-for-volume.c
+SOURCES = device.c disk.c format.c prepare-volume.c wait-for-volume.c version.rc
 
-INCLUDES=$(INCLUDES); \
-                    $(DDK_INC_PATH); \
-                    $(QUBES_INCLUDES);
+INCLUDES = $(INCLUDES); \
+    $(DDK_INC_PATH); \
+    $(QUBES_INCLUDES);
 
-TARGETLIBS = $(QUBES_LIBS)\windows-utils.lib \
-    $(SDK_LIB_PATH)\shlwapi.lib \
+TARGETLIBS = \
+    $(QUBES_LIBS)\windows-utils.lib \
+    $(SDK_LIB_PATH)\user32.lib \
     $(SDK_LIB_PATH)\shell32.lib \
     $(SDK_LIB_PATH)\setupapi.lib \
     $(SDK_LIB_PATH)\rpcrt4.lib \
-    $(SDK_LIB_PATH)\ole32.lib \
-    $(SDK_LIB_PATH)\user32.lib \
+    $(SDK_LIB_PATH)\ole32.lib

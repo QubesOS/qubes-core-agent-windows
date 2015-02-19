@@ -13,12 +13,7 @@ INCLUDES = $(INCLUDES); \
     ..\include; \
     $(QUBES_INCLUDES);
 
-SOURCES = qrexec-client-vm.c
+SOURCES = qrexec-client-vm.c version.rc
 
 TARGETLIBS = \
-    $(SDK_LIB_PATH)\kernel32.lib \
-    $(SDK_LIB_PATH)\user32.lib \
-    $(SDK_LIB_PATH)\userenv.lib \
-    $(SDK_LIB_PATH)\shlwapi.lib \
-    $(SDK_LIB_PATH)\wtsapi32.lib \
     $(QUBES_LIBS)\windows-utils.lib
