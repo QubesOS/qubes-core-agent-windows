@@ -24,19 +24,18 @@
 
 #include "libvchan.h"
 
-struct libvchan *g_Vchan;
 
-int VchanSendBuffer(IN const void *buffer, IN int size)
+int VchanSendBuffer(IN libvchan_t *vchan, IN const void *buffer, IN int size)
 {
     int written = 0;
     int status;
 
-    if (!g_Vchan)
+    if (!vchan)
         return -1;
 
     while (written < size)
     {
-        status = libvchan_write(g_Vchan, (char *) buffer + written, size - written);
+        status = libvchan_write(vchan, (char *) buffer + written, size - written);
         if (status <= 0)
             return status;
 
@@ -46,14 +45,14 @@ int VchanSendBuffer(IN const void *buffer, IN int size)
     return size;
 }
 
-int VchanReceiveBuffer(OUT void *buffer, IN int size)
+int VchanReceiveBuffer(IN libvchan_t *vchan, OUT void *buffer, IN int size)
 {
     int written = 0;
     int status;
 
     while (written < size)
     {
-        status = libvchan_read(g_Vchan, (char *) buffer + written, size - written);
+        status = libvchan_read(vchan, (char *) buffer + written, size - written);
         if (status <= 0)
             return status;
 
@@ -62,20 +61,20 @@ int VchanReceiveBuffer(OUT void *buffer, IN int size)
     return size;
 }
 
-int VchanGetReadBufferSize(void)
+int VchanGetReadBufferSize(IN libvchan_t *vchan)
 {
-    return libvchan_data_ready(g_Vchan);
+    return libvchan_data_ready(vchan);
 }
 
-int VchanGetWriteBufferSize(void)
+int VchanGetWriteBufferSize(IN libvchan_t *vchan)
 {
-    return libvchan_buffer_space(g_Vchan);
+    return libvchan_buffer_space(vchan);
 }
 
-BOOL VchanInitServer(IN int port)
+BOOL VchanInitServer(OUT libvchan_t **vchan, IN int port)
 {
-    g_Vchan = libvchan_server_init(port);
-    if (!g_Vchan)
+    *vchan = libvchan_server_init(port);
+    if (*vchan == NULL)
         return FALSE;
 
     return TRUE;

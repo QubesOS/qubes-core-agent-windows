@@ -20,12 +20,13 @@
  */
 #pragma once
 #include <windows.h>
+#include "libvchan.h"
 
 BOOL VchanInitServer(IN int port);
 int VchanGetReadBufferSize(void);
-int VchanReceiveBuffer(OUT void *buffer, IN int size);
-int VchanSendBuffer(IN const void *buffer, IN int size);
-int VchanGetWriteBufferSize(void);
+BOOL VchanReceiveBuffer(IN libvchan_t *vchan, OUT void *buffer, IN int size);
+BOOL VchanSendBuffer(IN libvchan_t *vchan, IN const void *buffer, IN int size);
+int VchanGetWriteBufferSize(IN libvchan_t *vchan);
 
 enum
 {
@@ -33,5 +34,3 @@ enum
     WRITE_STDIN_BUFFERED,
     WRITE_STDIN_ERROR
 };
-
-extern struct libvchan *g_Vchan;

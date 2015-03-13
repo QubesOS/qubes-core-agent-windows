@@ -25,8 +25,8 @@ typedef struct _PIPE_INSTANCE
     HANDLE Pipe;
     CONNECTION_STATE ConnectionState;
     BOOL PendingIo;
-    UINT ClientId;
-    struct trigger_connect_params ConnectParams;
+    libvchan_t *Vchan;
+    struct trigger_service_params ConnectParams;
 
     CLIENT_INFO ClientInfo;
     IO_HANDLES RemoteHandles;
@@ -40,8 +40,9 @@ ULONG WINAPI WatchForTriggerEvents(
     );
 
 ULONG ProceedWithExecution(
-    IN ULONG clientId,
-    IN const char *ident
+    IN libvchan_t *vchan,
+    IN const char *ident,
+    BOOL isVchanServer
     );
 
 extern CRITICAL_SECTION	g_PipesCriticalSection;

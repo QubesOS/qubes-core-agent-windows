@@ -44,7 +44,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     BOOL success = FALSE;
     DWORD cbRead, cbWritten, pipeMode;
     LPTSTR pipeName = L"\\\\.\\pipe\\qrexec_trigger";
-    struct trigger_connect_params connectParams = { 0 };
+    struct trigger_service_params connectParams = { 0 };
     ULONG status;
     UCHAR *argumentUtf8;
     WCHAR *localProgram;
@@ -67,7 +67,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         return perror2(status, "ConvertUTF16ToUTF8");
     }
 
-    hresult = StringCchCopyA(connectParams.exec_index, sizeof(connectParams.exec_index), argumentUtf8);
+    hresult = StringCchCopyA(connectParams.service_name, sizeof(connectParams.service_name), argumentUtf8);
     if (FAILED(hresult))
     {
         return perror2(hresult, "StringCchCopyA");
@@ -82,7 +82,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         return perror2(status, "ConvertUTF16ToUTF8");
     }
 
-    hresult = StringCchCopyA(connectParams.target_vmname, sizeof(connectParams.target_vmname), argumentUtf8);
+    hresult = StringCchCopyA(connectParams.target_domain, sizeof(connectParams.target_domain), argumentUtf8);
     if (FAILED(hresult))
     {
         return perror2(hresult, "StringCchCopyA");

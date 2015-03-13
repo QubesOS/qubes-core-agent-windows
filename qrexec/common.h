@@ -1,9 +1,7 @@
 #pragma once
 #include <windows.h>
 
-#ifndef _PREFAST_
-#pragma warning(disable:4068)
-#endif
+#include "libvchan.h"
 
 #define BUILD_AS_SERVICE
 
@@ -12,8 +10,11 @@
 
 #define	TRIGGER_PIPE_NAME               TEXT("\\\\.\\pipe\\qrexec_trigger")
 
-// wr_ring_size[=1024] - sizeof(hdr)[=12]
-#define READ_BUFFER_SIZE    1012
+#define READ_BUFFER_SIZE 65536
+
+#define VCHAN_BUFFER_SIZE 65536
+#define PIPE_BUFFER_SIZE 65536
+#define PIPE_DEFAULT_TIMEOUT 50
 
 typedef enum _PIPE_TYPE
 {
@@ -22,6 +23,7 @@ typedef enum _PIPE_TYPE
     PTYPE_STDERR
 } PIPE_TYPE;
 
+// child i/o state for a single pipe
 typedef struct _PIPE_DATA
 {
     HANDLE      ReadPipe;
@@ -35,9 +37,9 @@ typedef struct _PIPE_DATA
     BYTE        ReadBuffer[READ_BUFFER_SIZE + 1];
 } PIPE_DATA;
 
+// state of a child process
 typedef struct _CLIENT_INFO
 {
-    UINT ClientId;
     BOOL ClientIsReady;
 
     HANDLE ChildProcess;
@@ -50,10 +52,15 @@ typedef struct _CLIENT_INFO
 
     PIPE_DATA StdoutData;
     PIPE_DATA StderrData;
+
+    libvchan_t *Vchan; // associated client's vchan for i/o data exchange
+
+    // Usually qrexec-client is the vchan server, but in vm/vm connections
+    // two agents are connected. This field is TRUE if we're the server.
+    BOOL IsVchanServer;
 } CLIENT_INFO;
 
 ULONG AddExistingClient(
-    ULONG clientId,
     CLIENT_INFO *clientInfo
     );
 
@@ -65,19 +72,25 @@ ULONG CreateClientPipes(
     );
 
 ULONG CloseReadPipeHandles(
-    IN ULONG clientId,
+    CLIENT_INFO *clientInfo,
     IN OUT PIPE_DATA *data
     );
 
-ULONG SendMessageToDaemon(
-    IN ULONG clientId,
+ULONG SendMessageToVchan(
+    IN libvchan_t *vchan,
     IN UINT messageType,
     IN const void *data,
     IN ULONG cbData,
-    OUT ULONG *cbWritten
+    OUT ULONG *cbWritten,
+    IN const WCHAR *what
+    );
+
+ULONG SendExitCodeVchan(
+    IN libvchan_t *vchan,
+    IN int exitCode
     );
 
 ULONG SendExitCode(
-    IN ULONG clientId,
+    IN const CLIENT_INFO *clientInfo,
     IN int exitCode
     );
