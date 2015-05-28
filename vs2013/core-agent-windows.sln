@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "network-setup", "network-se
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "prepare-volume", "prepare-volume\prepare-volume.vcxproj", "{FBF4EEC5-B31D-4F4E-A553-AE878DC1A081}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "qrexec-agent", "qrexec-agent\qrexec-agent.vcxproj", "{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -43,6 +45,14 @@ Global
 		{FBF4EEC5-B31D-4F4E-A553-AE878DC1A081}.Release|Win32.Build.0 = Release|Win32
 		{FBF4EEC5-B31D-4F4E-A553-AE878DC1A081}.Release|x64.ActiveCfg = Release|x64
 		{FBF4EEC5-B31D-4F4E-A553-AE878DC1A081}.Release|x64.Build.0 = Release|x64
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Debug|Win32.Build.0 = Debug|Win32
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Debug|x64.ActiveCfg = Debug|x64
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Debug|x64.Build.0 = Debug|x64
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Release|Win32.ActiveCfg = Release|Win32
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Release|Win32.Build.0 = Release|Win32
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Release|x64.ActiveCfg = Release|x64
+		{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

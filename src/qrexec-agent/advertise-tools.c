@@ -1,7 +1,8 @@
 #include <windows.h>
 #include <shlwapi.h>
-#include <xenctrl_native.h>
 #include <Wtsapi32.h>
+
+#include <xencontrol.h>
 #include "log.h"
 
 #define XS_TOOLS_PREFIX "qubes-tools/"

@@ -1013,7 +1013,7 @@ static ULONG InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         }
 
         // strip white chars (especially end-of-line) from string
-        pathLength = wcslen(rawServiceFilePath);
+        pathLength = (ULONG) wcslen(rawServiceFilePath);
         while (iswspace(rawServiceFilePath[pathLength - 1]))
         {
             pathLength--;

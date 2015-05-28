@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 
-#include "libvchan.h"
+#include <libvchan.h>
 
 #define BUILD_AS_SERVICE
 
