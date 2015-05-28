@@ -1,6 +1,5 @@
 #include "wait-for-volume.h"
 #include <dbt.h>
-#include <winioctl.h>
 
 // All functions except WaitForVolume run in a separate thread.
 

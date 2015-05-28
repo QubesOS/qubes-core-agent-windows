@@ -1,15 +1,19 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdlib.h>
 #include <stdio.h>
-#include <xenstore.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
+
+#include <xencontrol.h>
 
 #include "log.h"
 
 // from service.c
 DWORD ServiceStartup(void);
 
+// FIXME: new pvdrivers
 #define XEN_ADAPTER_DESCRIPTION "Xen Net Device Driver"
 
 DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT DWORD *interfaceIndex)
@@ -169,35 +173,37 @@ cleanup:
 
 DWORD SetupNetwork(void)
 {
-    struct xs_handle *xs;
+    HANDLE xif = NULL;
     int interfaceIndex;
-    char *qubesIp = NULL;
-    char *qubesNetmask = NULL;
-    char *qubesGateway = NULL;
+    char qubesIp[64];
+    char qubesNetmask[64];
+    char qubesGateway[64];
     DWORD status = ERROR_UNIDENTIFIED_ERROR;
     char cmdline[255];
 
-    xs = xs_domain_open();
-    if (!xs)
+    status = XenifaceOpen(&xif);
+    if (status != ERROR_SUCCESS)
     {
-        LogError("Failed to open xenstore connection\n");
+        perror("XenifaceOpen");
         goto cleanup;
     }
 
-    qubesIp = xs_read(xs, XBT_NULL, "qubes-ip", NULL);
-    if (!qubesIp)
+    status = StoreRead(xif, "qubes-ip", sizeof(qubesIp), qubesIp);
+    if (status != ERROR_SUCCESS)
     {
         LogError("Failed to get qubes-ip\n");
         goto cleanup;
     }
-    qubesNetmask = xs_read(xs, XBT_NULL, "qubes-netmask", NULL);
-    if (!qubesNetmask)
+
+    status = StoreRead(xif, "qubes-netmask", sizeof(qubesNetmask), qubesNetmask);
+    if (status != ERROR_SUCCESS)
     {
         LogError("Failed to get qubes-netmask\n");
         goto cleanup;
     }
-    qubesGateway = xs_read(xs, XBT_NULL, "qubes-gateway", NULL);
-    if (!qubesGateway)
+
+    status = StoreRead(xif, "qubes-gateway", sizeof(qubesGateway), qubesGateway);
+    if (status != ERROR_SUCCESS)
     {
         LogError("Failed to get qubes-gateway\n");
         goto cleanup;
@@ -236,8 +242,8 @@ cleanup:
     if (qubesGateway)
         free(qubesGateway);
 
-    if (xs)
-        xs_daemon_close(xs);
+    if (xif)
+        XenifaceClose(xif);
 
     return status;
 }

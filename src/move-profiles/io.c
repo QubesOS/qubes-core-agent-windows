@@ -653,9 +653,9 @@ NTSTATUS FileCopyReparsePoint(IN const WCHAR *sourcePath, IN const WCHAR *target
     {
     case IO_REPARSE_TAG_SYMLINK:
 
-        memcpy(dest, rdb->SymbolicLinkReparseBuffer.PathBuffer +
-            rdb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(WCHAR),
-            rdb->SymbolicLinkReparseBuffer.PrintNameLength);
+        RtlCopyMemory(dest, rdb->SymbolicLinkReparseBuffer.PathBuffer +
+                      rdb->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(WCHAR),
+                      rdb->SymbolicLinkReparseBuffer.PrintNameLength);
         dest[rdb->SymbolicLinkReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
 
         NtLog(FALSE, L"[*] Symlink: '%s' -> '%s'\n", sourcePath, dest);
@@ -663,9 +663,9 @@ NTSTATUS FileCopyReparsePoint(IN const WCHAR *sourcePath, IN const WCHAR *target
 
     case IO_REPARSE_TAG_MOUNT_POINT:
 
-        memcpy(dest, rdb->MountPointReparseBuffer.PathBuffer +
-            rdb->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR),
-            rdb->MountPointReparseBuffer.PrintNameLength);
+        RtlCopyMemory(dest, rdb->MountPointReparseBuffer.PathBuffer +
+                      rdb->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR),
+                      rdb->MountPointReparseBuffer.PrintNameLength);
         dest[rdb->MountPointReparseBuffer.PrintNameLength / sizeof(WCHAR)] = 0;
 
         NtLog(FALSE, L"[*] Mount point: '%s' -> '%s'\n", sourcePath, dest);

@@ -2,27 +2,6 @@
 #include "format.h"
 #include "wait-for-volume.h"
 
-#if !(defined(_MSC_VER) && (_MSC_VER >= 1600))
-
-// Definitions from winioctl.h/ntdddisk.h, with these includes fails to build with DDK
-#define IOCTL_DISK_SET_DISK_ATTRIBUTES      CTL_CODE(IOCTL_DISK_BASE, 0x003d, METHOD_BUFFERED, FILE_READ_ACCESS | FILE_WRITE_ACCESS)
-
-#define DISK_ATTRIBUTE_OFFLINE              0x0000000000000001
-#define DISK_ATTRIBUTE_READ_ONLY            0x0000000000000002
-
-typedef struct _SET_DISK_ATTRIBUTES
-{
-    ULONG Version;
-    BOOLEAN Persist;
-    BOOLEAN RelinquishOwnership;
-    BOOLEAN Reserved1[2];
-    UINT64 Attributes;
-    UINT64 AttributesMask;
-    GUID Owner;
-} SET_DISK_ATTRIBUTES;
-
-#endif
-
 // without braces
 PWCHAR DISK_CLASS_GUID = L"4d36e967-e325-11ce-bfc1-08002be10318";
 

@@ -1,4 +1,5 @@
 #pragma once
+#define _CRT_SECURE_NO_WARNINGS
 #include "nt.h"
 #include <stdio.h>
 #include <stdarg.h>

@@ -149,7 +149,7 @@ int wmain(int argc, WCHAR *argv[])
 
     memcpy(valueData + size / sizeof(WCHAR) - 1, command, (wcslen(command) + 2) * sizeof(WCHAR));
 
-    status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE) valueData, (wcslen(command) + 1) * sizeof(WCHAR) + size);
+    status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE) valueData, (DWORD) (wcslen(command) + 1) * sizeof(WCHAR) + size);
     if (ERROR_SUCCESS != status)
     {
         perror2(status, "RegSetValueEx");

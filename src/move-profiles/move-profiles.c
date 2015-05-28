@@ -4,6 +4,9 @@
 
 HANDLE g_Heap;
 
+// needed to not link with CRT
+#pragma check_stack(off)
+
 void Sleep(ULONG milliseconds)
 {
     LARGE_INTEGER sleepInterval;
@@ -166,13 +169,6 @@ NTSTATUS wmain(INT argc, WCHAR *argv[], WCHAR *envp[], ULONG DebugFlag OPTIONAL)
     TIME_FIELDS tf;
     LARGE_INTEGER systemTime, localTime;
 
-    g_Heap = InitHeap();
-    if (!g_Heap)
-    {
-        status = STATUS_NO_MEMORY;
-        goto cleanup;
-    }
-
     NtLog(FALSE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
 
     status = EnablePrivileges();
@@ -260,9 +256,125 @@ cleanup:
     // Remove itself from BootExecute.
     RemoveBootExecuteEntry();
 
-    if (g_Heap)
-        FreeHeap(g_Heap);
-    NtTerminateProcess(NtCurrentProcess(), status);
-
     return status;
+}
+
+static
+VOID FASTCALL EnvironmentStringToUnicodeString(IN WCHAR *wsIn, OUT UNICODE_STRING *usOut)
+{
+    if (wsIn)
+    {
+        WCHAR *CurrentChar = wsIn;
+
+        while (*CurrentChar)
+        {
+            while (*CurrentChar++);
+        }
+
+        CurrentChar++;
+
+        usOut->Buffer = wsIn;
+        usOut->MaximumLength = usOut->Length = (CurrentChar - wsIn) * sizeof(WCHAR);
+    }
+    else
+    {
+        usOut->Buffer = NULL;
+        usOut->Length = usOut->MaximumLength = 0;
+    }
+}
+
+void NtProcessStartup(PPEB Peb)
+{
+    NTSTATUS Status;
+    PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
+    UNICODE_STRING *CmdLineString;
+    UNICODE_STRING UnicodeEnvironment;
+    PWCHAR NullPointer = NULL;
+    INT argc = 0;
+    PWCHAR *argv;
+    PWCHAR *envp;
+    PWCHAR *ArgumentList;
+    PWCHAR Source, Destination;
+    ULONG Length;
+
+    /* Normalize and get the Process Parameters */
+    ProcessParameters = RtlNormalizeProcessParams(Peb->ProcessParameters);
+
+    Status = STATUS_NO_MEMORY;
+    g_Heap = InitHeap();
+    if (!g_Heap)
+        goto fail;
+
+    /* Allocate memory for the argument list, enough for 512 tokens */
+    //FIXME: what if 512 is not enough????
+    ArgumentList = RtlAllocateHeap(g_Heap, 0, 512 * sizeof(PWCHAR));
+    if (!ArgumentList)
+        goto fail;
+
+    /* Use a null pointer as default */
+    argv = &NullPointer;
+    envp = &NullPointer;
+
+    /* Set the first pointer to NULL, and set the argument array to the buffer */
+    *ArgumentList = NULL;
+    argv = ArgumentList;
+
+    /* Get the pointer to the Command Line */
+    CmdLineString = &ProcessParameters->CommandLine;
+
+    /* If we don't have a command line, use the image path instead */
+    if (!CmdLineString->Buffer || !CmdLineString->Length)
+    {
+        CmdLineString = &ProcessParameters->ImagePathName;
+    }
+
+    /* Save parameters for parsing */
+    Source = CmdLineString->Buffer;
+    Length = CmdLineString->Length;
+
+    /* Ensure it's valid */
+    if (Source)
+    {
+        /* Allocate a buffer for the destination */
+        Destination = RtlAllocateHeap(g_Heap, 0, (Length + 1) * sizeof(WCHAR));
+        if (!Destination)
+            goto fail;
+
+        /* Start parsing */
+        while (*Source)
+        {
+            /* Skip the white space. */
+            while (*Source && *Source <= L' ') Source++;
+
+            /* Copy until the next white space is reached */
+            if (*Source)
+            {
+                /* Save one token pointer */
+                *ArgumentList++ = Destination;
+
+                /* Increase one token count */
+                argc++;
+
+                /* Copy token until white space */
+                while (*Source > L' ')
+                    *Destination++ = *Source++;
+
+                /* Null terminate it */
+                *Destination++ = L'\0';
+            }
+        }
+    }
+
+    /* Null terminate the token pointer list */
+    *ArgumentList++ = NULL;
+
+    /* Now handle the enviornment, point the envp at our current list location. */
+    envp = ArgumentList;
+
+    /* Call the Main Function */
+    Status = wmain(argc, argv, envp, 0);
+
+fail:
+    /* We're done here */
+    NtTerminateProcess(NtCurrentProcess(), Status);
 }

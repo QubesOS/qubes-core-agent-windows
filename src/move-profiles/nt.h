@@ -1,14 +1,15 @@
 #pragma once
 
-#ifndef WIN32_NO_STATUS
-#define WIN32_NO_STATUS
-#endif
+#include <ntdef.h>
+#include <ntddk.h> // include this for its native functions and defn's
+#include <stdio.h>
 
-#include <windef.h>
+//#include <ntstatus.h>
+//#include <windef.h>
 #undef WIN32_NO_STATUS
-#include <ntstatus.h>
-#include <winioctl.h>
+//#include <winioctl.h>
 
+#if 0
 #define FASTCALL
 #define NT_SUCCESS(Status)              (((NTSTATUS)(Status)) >= 0)
 
@@ -231,6 +232,8 @@ typedef struct _REPARSE_DATA_BUFFER
     };
 } REPARSE_DATA_BUFFER;
 
+#endif
+
 typedef void
 (NTAPI *PIO_APC_ROUTINE)(
     IN void *ApcContext,
@@ -356,7 +359,7 @@ NtWriteFile(
 );
 
 /////////////////// Ob ///////////////////
-
+#if 0
 //
 // Definitions for Object Creation
 //
@@ -378,6 +381,7 @@ NtWriteFile(
     (p)->SecurityDescriptor = (s);              \
     (p)->SecurityQualityOfService = NULL;       \
 }
+#endif
 
 NTSYSCALLAPI
 NTSTATUS
@@ -392,7 +396,7 @@ NTAPI
 NtQuerySecurityObject(
     IN HANDLE Handle,
     IN SECURITY_INFORMATION SecurityInformation,
-    OUT OPTIONAL SECURITY_DESCRIPTOR *SecurityDescriptor,
+    OUT SECURITY_DESCRIPTOR *SecurityDescriptor OPTIONAL,
     IN ULONG Length,
     OUT ULONG *LengthNeeded
 );
@@ -674,3 +678,48 @@ NTAPI
 NtQuerySystemTime(
     OUT LARGE_INTEGER *CurrentTime
 );
+
+// startup parameters
+
+typedef struct _PEB_LDR_DATA
+{
+    BYTE       Reserved1[8];
+    PVOID      Reserved2[3];
+    LIST_ENTRY InMemoryOrderModuleList;
+} PEB_LDR_DATA, *PPEB_LDR_DATA;
+
+typedef struct _RTL_USER_PROCESS_PARAMETERS
+{
+    BYTE           Reserved1[16];
+    PVOID          Reserved2[10];
+    UNICODE_STRING ImagePathName;
+    UNICODE_STRING CommandLine;
+} RTL_USER_PROCESS_PARAMETERS, *PRTL_USER_PROCESS_PARAMETERS;
+
+struct _PEB32
+{
+    BYTE                          Reserved1[2];
+    BYTE                          BeingDebugged;
+    BYTE                          Reserved2[1];
+    PVOID                         Reserved3[2];
+    PPEB_LDR_DATA                 LoaderData;
+    PRTL_USER_PROCESS_PARAMETERS  ProcessParameters;
+};
+
+struct _PEB64
+{
+    BYTE Reserved1[2];
+    BYTE BeingDebugged;
+    BYTE Reserved2[21];
+    PPEB_LDR_DATA LoaderData;
+    PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
+};
+
+#ifdef AMD64
+typedef struct _PEB64 PEB, *PPEB;
+#else
+typedef struct _PEB32 PEB, *PPEB;
+#endif
+
+PRTL_USER_PROCESS_PARAMETERS NTAPI RtlNormalizeProcessParams(PRTL_USER_PROCESS_PARAMETERS Params);
+

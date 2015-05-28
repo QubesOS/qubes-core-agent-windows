@@ -1,6 +1,6 @@
 #include <windows.h>
 #include <shlwapi.h>
-#include <xenstore.h>
+#include <xenctrl_native.h>
 #include <Wtsapi32.h>
 #include "log.h"
 
@@ -138,32 +138,37 @@ BOOL NotifyDom0(void)
 
 ULONG AdvertiseTools(void)
 {
-    struct xs_handle *xs;
+    HANDLE xif = NULL;
     ULONG status = ERROR_UNIDENTIFIED_ERROR;
     BOOL guiAgentPresent;
     CHAR *userName = NULL;
 
     LogVerbose("start");
 
-    xs = xs_domain_open();
-    if (!xs)
+    status = XenifaceOpen(&xif);
+    if (status != ERROR_SUCCESS)
     {
-        /* error message already printed to stderr */
+        perror("XenifaceOpen");
         goto cleanup;
     }
 
     /* for now mostly hardcoded values, but this can change in the future */
-    if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "version", "1", 1))
+    status = StoreWrite(xif, XS_TOOLS_PREFIX "version", "1");
+    if (status != ERROR_SUCCESS)
     {
         perror("write 'version' entry");
         goto cleanup;
     }
-    if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "os", "Windows", strlen("Windows")))
+    
+    status = StoreWrite(xif, XS_TOOLS_PREFIX "os", "Windows");
+    if (status != ERROR_SUCCESS)
     {
         perror("write 'os' entry");
         goto cleanup;
     }
-    if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "qrexec", "1", 1))
+
+    status = StoreWrite(xif, XS_TOOLS_PREFIX "qrexec", "1");
+    if (status != ERROR_SUCCESS)
     {
         perror("write 'qrexec' entry");
         goto cleanup;
@@ -171,7 +176,8 @@ ULONG AdvertiseTools(void)
 
     guiAgentPresent = CheckGuiAgentPresence();
 
-    if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "gui", guiAgentPresent ? "1" : "0", 1))
+    status = StoreWrite(xif, XS_TOOLS_PREFIX "gui", guiAgentPresent ? "1" : "0");
+    if (status != ERROR_SUCCESS)
     {
         perror("write 'gui' entry");
         goto cleanup;
@@ -179,7 +185,8 @@ ULONG AdvertiseTools(void)
 
     if (GetCurrentUser(&userName))
     {
-        if (!xs_write(xs, XBT_NULL, XS_TOOLS_PREFIX "default-user", userName, strlen(userName)))
+        status = StoreWrite(xif, XS_TOOLS_PREFIX "default-user", userName);
+        if (status != ERROR_SUCCESS)
         {
             perror("write 'default-user' entry");
             goto cleanup;
@@ -196,8 +203,8 @@ ULONG AdvertiseTools(void)
     LogVerbose("success");
 
 cleanup:
-    if (xs)
-        xs_daemon_close(xs);
+    if (xif)
+        XenifaceClose(xif);
     if (userName)
         WTSFreeMemory(userName);
     return status;
