@@ -1,1 +1,0 @@
-DIRS = qrexec qrexec-client-vm qrexec-services ask-vm-and-run network-setup move-profiles prepare-volume
