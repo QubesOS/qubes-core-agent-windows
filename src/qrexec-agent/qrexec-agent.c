@@ -167,7 +167,7 @@ ULONG SendMessageToVchan(
     header.type = messageType;
     header.len = cbData;
 
-    if (!VchanSendBuffer(vchan, &header, sizeof(header), L"header") <= 0)
+    if (!VchanSendBuffer(vchan, &header, sizeof(header), L"header"))
     {
         LogError("VchanSendBuffer(header for %s) failed", what);
         LeaveCriticalSection(&g_DaemonCriticalSection);
@@ -180,7 +180,7 @@ ULONG SendMessageToVchan(
         return ERROR_SUCCESS;
     }
 
-    if (VchanSendBuffer(vchan, data, cbData, what) <= 0)
+    if (!VchanSendBuffer(vchan, data, cbData, what))
     {
         LogError("VchanSendBuffer(%s, %d)", what, cbData);
         LeaveCriticalSection(&g_DaemonCriticalSection);
@@ -1399,7 +1399,7 @@ return ERROR_NOT_ENOUGH_MEMORY;
 
 input[cbInput] = 0;
 
-if (VchanReceiveBuffer(input, cbInput) <= 0)
+if (!VchanReceiveBuffer(input, cbInput))
 {
 free(input);
 return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
@@ -2018,7 +2018,6 @@ ULONG WatchForEvents(void)
             EnterCriticalSection(&g_DaemonCriticalSection);
             if (!daemonConnected)
             {
-                libvchan_wait(g_DaemonVchan); // ACK
                 LogInfo("qrexec-daemon has connected (event %d)", signaledEvent);
 
                 if (!SendHelloToVchan(g_DaemonVchan))
@@ -2046,13 +2045,8 @@ ULONG WatchForEvents(void)
                 break;
             }
 
-            // libvchan_wait can block if there is no data available
             if (VchanGetReadBufferSize(g_DaemonVchan) > 0)
             {
-                LogVerbose("HTYPE_CONTROL_VCHAN event: libvchan_wait...");
-                libvchan_wait(g_DaemonVchan);
-                LogVerbose("done");
-
                 // handle data from daemon
                 while (VchanGetReadBufferSize(g_DaemonVchan) > 0)
                 {
@@ -2102,9 +2096,6 @@ ULONG WatchForEvents(void)
             // libvchan_wait can block if there is no data available
             if (VchanGetReadBufferSize(dataVchan) > 0)
             {
-                LogVerbose("HTYPE_DATA_VCHAN event: libvchan_wait...");
-                libvchan_wait(dataVchan);
-                LogVerbose("done");
                 // handle data from vchan peer
 
                 // don't handle more than one message at once because vchan may be invalidated in the meantime
@@ -2262,12 +2253,6 @@ ULONG WatchForEvents(void)
     WaitForSingleObject(olVchan.hEvent, INFINITE);
     }
     }
-
-    if (!vchanClientConnected)
-    {
-    // Remove the xenstore device/vchan/N entry.
-    libvchan_server_handle_connected(g_Vchan);
-    }
     */
 
     RemoveAllClients();
@@ -2282,25 +2267,7 @@ void Usage(void)
 {
     LogError("qrexec agent service\n\nUsage: qrexec_agent <-i|-u>\n");
 }
-/*
-// shouldn't be needed in Odyssey: libvchan acts as abstraction
-ULONG CheckForXenInterface(void)
-{
-EVTCHN xc;
 
-LogVerbose("start");
-
-xc = xc_evtchn_open();
-if (INVALID_HANDLE_VALUE == xc)
-return ERROR_NOT_SUPPORTED;
-
-xc_evtchn_close(xc);
-
-LogVerbose("success");
-
-return ERROR_SUCCESS;
-}
-*/
 ULONG WINAPI ServiceExecutionThread(void *param)
 {
     ULONG status;
@@ -2359,13 +2326,7 @@ ULONG Init(OUT HANDLE *serviceThread)
     LogVerbose("start");
 
     *serviceThread = INVALID_HANDLE_VALUE;
-    /*
-    status = CheckForXenInterface();
-    if (ERROR_SUCCESS != status)
-    {
-    return perror2(status, "CheckForXenInterface");
-    }
-    */
+
     InitializeCriticalSection(&g_ClientsCriticalSection);
     InitializeCriticalSection(&g_DaemonCriticalSection);
     InitializeCriticalSection(&g_PipesCriticalSection);
