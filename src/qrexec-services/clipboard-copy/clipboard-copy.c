@@ -3,9 +3,9 @@
 #include <strsafe.h>
 #include <stdlib.h>
 
-#include "ioall.h"
-#include "utf8-conv.h"
-#include "log.h"
+#include <qubes-io.h>
+#include <utf8-conv.h>
+#include <log.h>
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -49,9 +49,9 @@ BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
         return FALSE;
     }
 
-    if (!FcWriteBuffer(outputFile, clipTextUtf8, cbTextUtf8))
+    if (!QioWriteBuffer(outputFile, clipTextUtf8, (DWORD)cbTextUtf8))
     {
-        LogError("write failed");
+        perror("QioWriteBuffer");
         GlobalUnlock(clipData);
         CloseClipboard();
         return FALSE;

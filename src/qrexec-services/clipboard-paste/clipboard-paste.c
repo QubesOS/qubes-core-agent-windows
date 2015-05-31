@@ -3,9 +3,9 @@
 #include <strsafe.h>
 #include <stdlib.h>
 
-#include "ioall.h"
-#include "utf8-conv.h"
-#include "log.h"
+#include <qubes-io.h>
+#include <utf8-conv.h>
+#include <log.h>
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
@@ -19,10 +19,10 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
     size_t cchText;
     DWORD cbRead;
 
-    cbRead = FcReadUntilEof(inputFile, inputText, sizeof(inputText) - 1);
+    cbRead = QioReadUntilEof(inputFile, inputText, sizeof(inputText) - 1);
     if (cbRead == 0)
     {
-        perror("ReadUntilEOF");
+        LogError("QioReadUntilEof returned 0");
         return FALSE;
     }
 

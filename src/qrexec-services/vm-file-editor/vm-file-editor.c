@@ -6,11 +6,11 @@
 #include <Shellapi.h>
 #include <rpc.h>
 
-#include "ioall.h"
-#include "dvm2.h"
+#include <log.h>
+#include <utf8-conv.h>
+#include <qubes-io.h>
 
-#include "log.h"
-#include "utf8-conv.h"
+#include "dvm2.h"
 
 HANDLE g_stdIn = INVALID_HANDLE_VALUE;
 HANDLE g_stdOut = INVALID_HANDLE_VALUE;
@@ -42,7 +42,7 @@ BOOL GetTempDirectory(OUT WCHAR **dirPath, OUT size_t *cchDirPath)
     if (!subdirPath)
         goto cleanup;
 
-    cchPath = GetTempPath(cchPath, subdirPath);
+    cchPath = GetTempPath((DWORD)cchPath, subdirPath);
     if (!cchPath)
         goto cleanup;
 
@@ -79,9 +79,10 @@ WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
     WCHAR *fullPath;
     size_t cchFileName, cchFullPath, cchTempDirPath;
     int i;
+    DWORD read = 0;
 
     // read file name from stdin
-    if (!FcReadBuffer(g_stdIn, fileNameUtf8, DVM_FILENAME_SIZE))
+    if (!ReadFile(g_stdIn, fileNameUtf8, DVM_FILENAME_SIZE, &read, NULL) || read != DVM_FILENAME_SIZE)
     {
         fprintf(stderr, "Failed get filename: 0x%x\n", GetLastError());
         return NULL;
@@ -144,7 +145,7 @@ BOOL ReceiveFile(IN const WCHAR *localFilePath)
         goto cleanup;
     }
 
-    if (!FcCopyUntilEof(localFile, g_stdIn))
+    if (!QioCopyUntilEof(localFile, g_stdIn))
     {
         fprintf(stderr, "Failed to read/write file: 0x%x\n", GetLastError());
         goto cleanup;
@@ -174,7 +175,7 @@ BOOL SendFile(IN const WCHAR *localFilePath)
         goto cleanup;
     }
 
-    if (!FcCopyUntilEof(g_stdOut, localFile))
+    if (!QioCopyUntilEof(g_stdOut, localFile))
     {
         fprintf(stderr, "Failed read/write file: 0x%x\n", GetLastError());
         goto cleanup;

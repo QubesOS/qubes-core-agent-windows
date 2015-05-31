@@ -4,10 +4,11 @@
 #include <Wtsapi32.h>
 #include <Shlwapi.h>
 
-#include "utf8-conv.h"
-#include "log.h"
+#include <qubes-io.h>
+#include <utf8-conv.h>
+#include <log.h>
 
-TCHAR *g_expectedUser;
+WCHAR *g_expectedUser;
 BOOL g_sessionFound = FALSE;
 
 BOOL CheckSession(DWORD	sessionId)
@@ -119,30 +120,6 @@ HWND CreateMainWindow(HINSTANCE instance)
         NULL);
 }
 
-int FcReadUntilEof(HANDLE fd, void *buf, int size)
-{
-    int got_read = 0;
-    int ret;
-
-    while (got_read < size)
-    {
-        if (!ReadFile(fd, (char *) buf + got_read, size - got_read, &ret, NULL))
-        {
-            if (GetLastError() == ERROR_BROKEN_PIPE)
-                return got_read;
-            return -1;
-        }
-
-        if (ret == 0)
-        {
-            return got_read;
-        }
-
-        got_read += ret;
-    }
-    return got_read;
-}
-
 int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLine, int nCmdShow)
 {
     HWND hMainWindow;
@@ -160,14 +137,14 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
         hStdIn = GetStdHandle(STD_INPUT_HANDLE);
         if (hStdIn == INVALID_HANDLE_VALUE)
         {
-            // some error handler?
+            perror("GetStdHandle");
             return 1;
         }
 
-        cbExpectedUserUtf8 = FcReadUntilEof(hStdIn, pszExpectedUserUtf8, sizeof(pszExpectedUserUtf8));
-        if (cbExpectedUserUtf8 <= 0 || cbExpectedUserUtf8 >= sizeof(pszExpectedUserUtf8))
+        cbExpectedUserUtf8 = QioReadUntilEof(hStdIn, pszExpectedUserUtf8, sizeof(pszExpectedUserUtf8));
+        if (cbExpectedUserUtf8 == 0)
         {
-            fprintf(stderr, "Failed to read the user name\n");
+            LogError("Failed to read the user name");
             return 1;
         }
 
@@ -180,29 +157,24 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
             cbExpectedUserUtf8--;
         pszExpectedUserUtf8[cbExpectedUserUtf8] = '\0';
 
-#ifdef UNICODE
-        if (FAILED(ConvertUTF8ToUTF16(pszExpectedUserUtf8, &g_expectedUser, &cchExpectedUser)))
+        if (ERROR_SUCCESS != ConvertUTF8ToUTF16(pszExpectedUserUtf8, &g_expectedUser, &cchExpectedUser))
         {
-            fprintf(stderr, "Failed to convert the user name to UTF16\n");
+            perror("Converting user name to UTF16");
             return 1;
         }
-#else
-        g_expectedUser = pszExpectedUserUtf8;
-        cchExpectedUser = cbExpectedUserUtf8;
-#endif
     }
 
     hMainWindow = CreateMainWindow(hInst);
 
     if (hMainWindow == INVALID_HANDLE_VALUE)
     {
-        fprintf(stderr, "Failed to create main window: 0x%x\n", GetLastError());
+        perror("Creating main window");
         return 1;
     }
 
-    if (FAILED(WTSRegisterSessionNotification(hMainWindow, NOTIFY_FOR_ALL_SESSIONS)))
+    if (!WTSRegisterSessionNotification(hMainWindow, NOTIFY_FOR_ALL_SESSIONS))
     {
-        fprintf(stderr, "Failed to register session notification: 0x%x\n", GetLastError());
+        perror("WTSRegisterSessionNotification");
         DestroyWindow(hMainWindow);
         return 1;
     }
@@ -213,13 +185,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
         BOOL bRet;
         MSG msg;
 
-#ifdef DBG
-# ifdef UNICODE
-        fprintf(stderr, "Waiting for user %S\n", g_expectedUser);
-# else
-        fprintf(stderr, "Waiting for user %s\n", g_expectedUser);
-# endif
-#endif
+        LogDebug("Waiting for user '%s'", g_expectedUser);
         while ((bRet = GetMessage(&msg, hMainWindow, 0, 0)) != 0)
         {
             if (bRet == -1)
@@ -240,9 +206,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
     WTSUnRegisterSessionNotification(hMainWindow);
     DestroyWindow(hMainWindow);
 
-#ifdef UNICODE
     if (cchExpectedUser)
         free(g_expectedUser);
-#endif
     return 0;
 }

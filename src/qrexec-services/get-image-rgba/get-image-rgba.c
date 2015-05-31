@@ -6,8 +6,9 @@
 #include <io.h>
 #include <fcntl.h>
 
-#include "utf8-conv.h"
-#include "log.h"
+#include <qubes-io.h>
+#include <utf8-conv.h>
+#include <log.h>
 
 #define APP_MAP_KEY L"Software\\Invisible Things Lab\\Qubes Tools\\AppMap"
 #define MAX_PATH_LONG 32768
@@ -25,9 +26,10 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     // Input is in the form of: xdgicon:name
     // Name is a sha1 hash of the file in this case, we'll look it up in the registry.
     // It's set by GetAppMenus Qubes service.
-    if (!ReadFile(GetStdHandle(STD_INPUT_HANDLE), param, RTL_NUMBER_OF(param) - 1, &size, NULL))
+    size = QioReadUntilEof(GetStdHandle(STD_INPUT_HANDLE), param, sizeof(param) - 1);
+    if (size == 0)
     {
-        status = perror("ReadFile(stdin)");
+        status = perror("QioReadUntilEof(stdin)");
         goto cleanup;
     }
 

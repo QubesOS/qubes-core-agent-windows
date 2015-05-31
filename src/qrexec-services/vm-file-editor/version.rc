@@ -3,7 +3,7 @@
 
 // version.h is generated during build by set_version.ps1
 // it contains definition of QTW_* macros
-#include "..\..\version.h"
+#include "..\..\..\version.h"
 
 #if defined(DBG) || defined(DEBUG) || defined(_DEBUG)
 #define VER_DBG VS_FF_DEBUG
