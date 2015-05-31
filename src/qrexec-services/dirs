@@ -1,1 +1,0 @@
-DIRS= filecopy-common file-sender file-receiver clipboard-copy clipboard-paste set-gui-mode vm-file-editor open-in-vm wait-for-logon get-image-rgba
