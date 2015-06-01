@@ -31,6 +31,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "file-receiver", "qrexec-ser
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "file-sender", "qrexec-services\file-sender\file-sender.vcxproj", "{4692A6F3-4980-438C-A5A7-6A3F346F2820}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "open-in-vm", "qrexec-services\open-in-vm\open-in-vm.vcxproj", "{0D3808B3-DD2B-4A89-A30F-02579B946315}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -145,6 +147,14 @@ Global
 		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|Win32.Build.0 = Release|Win32
 		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|x64.ActiveCfg = Release|x64
 		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|x64.Build.0 = Release|x64
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Debug|Win32.Build.0 = Debug|Win32
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Debug|x64.ActiveCfg = Debug|x64
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Debug|x64.Build.0 = Debug|x64
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Release|Win32.ActiveCfg = Release|Win32
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Release|Win32.Build.0 = Release|Win32
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Release|x64.ActiveCfg = Release|x64
+		{0D3808B3-DD2B-4A89-A30F-02579B946315}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -158,5 +168,6 @@ Global
 		{EB9CDF07-6759-4E26-93E5-C31C5B19E445} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
 		{CF169B8A-E3B4-49FC-832F-DAB3242CF226} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
 		{4692A6F3-4980-438C-A5A7-6A3F346F2820} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
+		{0D3808B3-DD2B-4A89-A30F-02579B946315} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
 	EndGlobalSection
 EndGlobal

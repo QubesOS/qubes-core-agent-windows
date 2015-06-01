@@ -19,9 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{4692A6F3-4980-438C-A5A7-6A3F346F2820}</ProjectGuid>
+    <ProjectGuid>{0D3808B3-DD2B-4A89-A30F-02579B946315}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>filesender</RootNamespace>
+    <RootNamespace>openinvm</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -95,7 +95,6 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Comctl32.lib;xencontrol.lib;windows-utils.lib;ws2_32.lib;Iphlpapi.lib;shlwapi.lib;wtsapi32.lib;userenv.lib;version.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -111,7 +110,6 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>Comctl32.lib;xencontrol.lib;windows-utils.lib;ws2_32.lib;Iphlpapi.lib;shlwapi.lib;wtsapi32.lib;userenv.lib;version.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -131,7 +129,6 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Comctl32.lib;xencontrol.lib;windows-utils.lib;ws2_32.lib;Iphlpapi.lib;shlwapi.lib;wtsapi32.lib;userenv.lib;version.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -151,26 +148,17 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Comctl32.lib;xencontrol.lib;windows-utils.lib;ws2_32.lib;Iphlpapi.lib;shlwapi.lib;wtsapi32.lib;userenv.lib;version.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\..\src\qrexec-services\common\filecopy-error.c" />
-    <ClCompile Include="..\..\..\src\qrexec-services\common\filecopy.c" />
-    <ClCompile Include="..\..\..\src\qrexec-services\file-sender\file-sender.c" />
-    <ClCompile Include="..\..\..\src\qrexec-services\file-sender\gui-progress.c" />
+    <ClCompile Include="..\..\..\src\qrexec-services\open-in-vm\qopen-in-vm.c" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="..\..\..\src\qrexec-services\file-sender\version.rc" />
+    <ResourceCompile Include="..\..\..\src\qrexec-services\open-in-vm\version.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\qrexec-services\common\filecopy-error.h" />
-    <ClInclude Include="..\..\..\src\qrexec-services\file-sender\gui-progress.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Manifest Include="..\..\..\src\qrexec-services\file-sender\file-sender.exe.manifest">
-      <SubType>Designer</SubType>
-    </Manifest>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

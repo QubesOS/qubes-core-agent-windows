@@ -4,11 +4,11 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "ioall.h"
+#include <utf8-conv.h>
+#include <qubes-io.h>
+
 #include "filecopy-error.h"
 #include "dvm2.h"
-
-#include "utf8-conv.h"
 
 void SendFile(IN const WCHAR *filePath)
 {
@@ -48,10 +48,10 @@ void SendFile(IN const WCHAR *filePath)
 
     free(baseUtf8);
 
-    if (!FcWriteBuffer(stdOut, basePadded, DVM_FILENAME_SIZE))
+    if (!QioWriteBuffer(stdOut, basePadded, DVM_FILENAME_SIZE))
         FcReportError(GetLastError(), TRUE, L"send filename to dispVM");
 
-    if (!FcCopyUntilEof(stdOut, file))
+    if (!QioCopyUntilEof(stdOut, file))
         FcReportError(GetLastError(), TRUE, L"send file to dispVM");
 
     CloseHandle(file);
@@ -83,7 +83,7 @@ void ReceiveFile(IN const WCHAR *fileName)
     if (tempFile == INVALID_HANDLE_VALUE)
         FcReportError(GetLastError(), TRUE, L"Failed to open temp file");
 
-    if (!FcCopyUntilEof(tempFile, stdIn))
+    if (!QioCopyUntilEof(tempFile, stdIn))
         FcReportError(GetLastError(), TRUE, L"receiving file from dispVM");
 
     if (!GetFileSizeEx(tempFile, &fileSize))

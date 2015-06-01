@@ -21,10 +21,10 @@
     <ClCompile Include="..\..\..\src\qrexec-services\file-sender\gui-progress.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\qrexec-services\file-sender\filecopy-error.c">
+    <ClCompile Include="..\..\..\src\qrexec-services\common\filecopy.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\src\qrexec-services\common\filecopy.c">
+    <ClCompile Include="..\..\..\src\qrexec-services\common\filecopy-error.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -37,7 +37,7 @@
     <ClInclude Include="..\..\..\src\qrexec-services\file-sender\gui-progress.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\src\qrexec-services\file-sender\filecopy-error.h">
+    <ClInclude Include="..\..\..\src\qrexec-services\common\filecopy-error.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
