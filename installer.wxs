@@ -1,10 +1,8 @@
 <?xml version='1.0' encoding='windows-1252'?>
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-  <?if $(env._BUILDARCH) = x86 ?>
-    <?define ARCHDIR = i386 ?>
+  <?if $(env.DDK_ARCH) = x86 ?>
     <?define PFILESDIR = ProgramFilesFolder ?>
-  <?elseif $(env._BUILDARCH) = AMD64 ?>
-    <?define ARCHDIR = amd64 ?>
+  <?elseif $(env.DDK_ARCH) = x64 ?>
     <?define PFILESDIR = ProgramFiles64Folder ?>
   <?endif ?>
 
@@ -31,7 +29,7 @@
           <Directory Id='QubesProgramFilesDir' Name='Qubes'>
             <Directory Id='BinDir' Name='bin'>
               <Component Id='QrexecAgent' Guid='0e26617f-e5d9-4943-a08e-cf29013e9d72'>
-                <File Id='qrexec_agent.exe' Name='qrexec-agent.exe' DiskId='1' Source='qrexec\bin\$(var.ARCHDIR)\qrexec-agent.exe' KeyPath="yes"/>
+                <File Id='qrexec_agent.exe' Name='qrexec-agent.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\qrexec-agent.exe' KeyPath="yes"/>
                 <ServiceInstall
                 Id="ServiceInstaller"
                 Type="ownProcess"
@@ -47,14 +45,14 @@
                 <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="QrexecAgent" Wait="yes" />
               </Component>
               <Component Id='QrexecClientVM' Guid='1e74cee2-523b-4870-8e24-49d4945c4a5c'>
-                <File Id='qrexec_client_vm.exe' Name='qrexec-client-vm.exe' DiskId='1' Source='qrexec-client-vm\bin\$(var.ARCHDIR)\qrexec-client-vm.exe' KeyPath="no">
+                <File Id='qrexec_client_vm.exe' Name='qrexec-client-vm.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\qrexec-client-vm.exe' KeyPath="no">
                   <Shortcut Id='qopen_dvm_sendto_shortcut' Name='Edit in DispVM' Directory='SendToFolder' Arguments='$dispvm qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no" Show="minimized"/>
                 </File>
                 <!-- Wix recommends to use registry entry as key-path for files with non-advertised shortcuts -->
                 <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-client-vm" Type="integer" Value="1" KeyPath="yes"/>
               </Component>
               <Component Id='AskVMClientWrapper' Guid='b5700d68-2ceb-4764-9e4b-11ae33b2d05b'>
-                <File Id='ask_vm_and_run.exe' Name='ask-vm-and-run.exe' DiskId='1' Source='ask-vm-and-run\bin\$(var.ARCHDIR)\ask-vm-and-run.exe' KeyPath="no">
+                <File Id='ask_vm_and_run.exe' Name='ask-vm-and-run.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\ask-vm-and-run.exe' KeyPath="no">
                   <Shortcut Id='file_sendto_shortcut' Name='Copy to other AppVM' Directory='SendToFolder' Arguments='qubes.Filecopy "[QubesRPCServicesDir]\file-sender.exe"' Advertise="no"/>
                   <Shortcut Id='open_sendto_shortcut' Name='Edit in VM' Directory='SendToFolder' Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"' Advertise="no"/>
                 </File>
@@ -62,7 +60,7 @@
                 <RegistryValue Root="HKCU" Key="Software\Invisible Things Lab\Qubes" Name="qrexec-filecopy-wrapper-installed" Type="integer" Value="1" KeyPath="yes"/>
               </Component>
               <Component Id='networkSetup' Guid='7201739e-35fb-11e3-9760-00163e5e6c10'>
-                <File Id='qubes_network_setup.exe' DiskId='1' Source='network-setup\bin\$(var.ARCHDIR)\qubes-network-setup.exe' KeyPath="yes"/>
+                <File Id='network_setup.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\network-setup.exe' KeyPath="yes"/>
                 <ServiceInstall
                 Id="SetupServiceInst"
                 Type="ownProcess"
@@ -83,29 +81,29 @@
             </Directory>
             <Directory Id='QubesRPCDir' Name='qubes-rpc'>
               <Component Id='QrexecServicesConfig' Guid='9efff253-25a8-40ed-861a-0d576f0ca439'>
-                <File Id='qubes.Filecopy' Name='qubes.Filecopy' DiskId='1' Source='qrexec-services\qubes.Filecopy' KeyPath="yes"/>
-                <File Id='qubes.ClipboardCopy' Name='qubes.ClipboardCopy' DiskId='1' Source='qrexec-services\qubes.ClipboardCopy' KeyPath="no"/>
-                <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='qrexec-services\qubes.ClipboardPaste' KeyPath="no"/>
-                <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='qrexec-services\qubes.VMShell' KeyPath="no"/>
-                <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='qrexec-services\qubes.OpenInVM' KeyPath="no"/>
-                <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='qrexec-services\qubes.WaitForSession' KeyPath="no"/>
-                <File Id='qubes.SetGuiMode' Name='qubes.SetGuiMode' DiskId='1' Source='qrexec-services\qubes.SetGuiMode' KeyPath="no"/>
-                <File Id='qubes.GetAppMenus' Name='qubes.GetAppMenus' DiskId='1' Source='qrexec-services\qubes.GetAppMenus' KeyPath="no"/>
-                <File Id='qubes.GetImageRGBA' Name='qubes.GetImageRGBA' DiskId='1' Source='qrexec-services\qubes.GetImageRGBA' KeyPath="no"/>
+                <File Id='qubes.Filecopy' Name='qubes.Filecopy' DiskId='1' Source='src\qrexec-services\qubes.Filecopy' KeyPath="yes"/>
+                <File Id='qubes.ClipboardCopy' Name='qubes.ClipboardCopy' DiskId='1' Source='src\qrexec-services\qubes.ClipboardCopy' KeyPath="no"/>
+                <File Id='qubes.ClipboardPaste' Name='qubes.ClipboardPaste' DiskId='1' Source='src\qrexec-services\qubes.ClipboardPaste' KeyPath="no"/>
+                <File Id='qubes.VMShell' Name='qubes.VMShell' DiskId='1' Source='src\qrexec-services\qubes.VMShell' KeyPath="no"/>
+                <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' DiskId='1' Source='src\qrexec-services\qubes.OpenInVM' KeyPath="no"/>
+                <File Id='qubes.WaitForSession' Name='qubes.WaitForSession' DiskId='1' Source='src\qrexec-services\qubes.WaitForSession' KeyPath="no"/>
+                <File Id='qubes.SetGuiMode' Name='qubes.SetGuiMode' DiskId='1' Source='src\qrexec-services\qubes.SetGuiMode' KeyPath="no"/>
+                <File Id='qubes.GetAppMenus' Name='qubes.GetAppMenus' DiskId='1' Source='src\qrexec-services\qubes.GetAppMenus' KeyPath="no"/>
+                <File Id='qubes.GetImageRGBA' Name='qubes.GetImageRGBA' DiskId='1' Source='src\qrexec-services\qubes.GetImageRGBA' KeyPath="no"/>
               </Component>
             </Directory>
             <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
               <Component Id='QrexecServices' Guid='2543621b-2d67-4726-9a3b-7a1c471a1e19'>
-                <File Id='file_sender.exe' Name='file-sender.exe' DiskId='1' Source='qrexec-services\file-sender\bin\$(var.ARCHDIR)\file-sender.exe' KeyPath="yes"/>
-                <File Id='file_receiver.exe' Name='file-receiver.exe' DiskId='1' Source='qrexec-services\file-receiver\bin\$(var.ARCHDIR)\file-receiver.exe' KeyPath="no"/>
-                <File Id='clipboard_copy.exe' Name='clipboard-copy.exe' DiskId='1' Source='qrexec-services\clipboard-copy\bin\$(var.ARCHDIR)\clipboard-copy.exe' KeyPath="no"/>
-                <File Id='clipboard_paste.exe' Name='clipboard-paste.exe' DiskId='1' Source='qrexec-services\clipboard-paste\bin\$(var.ARCHDIR)\clipboard-paste.exe' KeyPath="no"/>
-                <File Id='vm_file_editor.exe' Name='vm-file-editor.exe' DiskId='1' Source='qrexec-services\vm-file-editor\bin\$(var.ARCHDIR)\vm-file-editor.exe' KeyPath="no"/>
-                <File Id='open_in_vm.exe' Name='open-in-vm.exe' DiskId='1' Source='qrexec-services\open-in-vm\bin\$(var.ARCHDIR)\open-in-vm.exe' KeyPath="no"/>
-                <File Id='wait_for_logon.exe' Name='wait-for-logon.exe' DiskId='1' Source='qrexec-services\wait-for-logon\bin\$(var.ARCHDIR)\wait-for-logon.exe' KeyPath="no"/>
-                <File Id='set_gui_mode.exe' Name='set-gui-mode.exe' DiskId='1' Source='qrexec-services\set-gui-mode\bin\$(var.ARCHDIR)\set-gui-mode.exe' KeyPath="no"/>
-                <File Id='get_appmenus.ps1' Name='get-appmenus.ps1' DiskId='1' Source='qrexec-services\get-appmenus.ps1' KeyPath="no"/>
-                <File Id='get_image_rgba.exe' Name='get_image_rgba.exe' DiskId='1' Source='qrexec-services\get-image-rgba\bin\$(var.ARCHDIR)\get-image-rgba.exe' KeyPath="no"/>
+                <File Id='file_sender.exe' Name='file-sender.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\file-sender.exe' KeyPath="yes"/>
+                <File Id='file_receiver.exe' Name='file-receiver.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\file-receiver.exe' KeyPath="no"/>
+                <File Id='clipboard_copy.exe' Name='clipboard-copy.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\clipboard-copy.exe' KeyPath="no"/>
+                <File Id='clipboard_paste.exe' Name='clipboard-paste.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\clipboard-paste.exe' KeyPath="no"/>
+                <File Id='vm_file_editor.exe' Name='vm-file-editor.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\vm-file-editor.exe' KeyPath="no"/>
+                <File Id='open_in_vm.exe' Name='open-in-vm.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\open-in-vm.exe' KeyPath="no"/>
+                <File Id='wait_for_logon.exe' Name='wait-for-logon.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\wait-for-logon.exe' KeyPath="no"/>
+                <File Id='set_gui_mode.exe' Name='set-gui-mode.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\set-gui-mode.exe' KeyPath="no"/>
+                <File Id='get_appmenus.ps1' Name='get-appmenus.ps1' DiskId='1' Source='src\qrexec-services\get-appmenus.ps1' KeyPath="no"/>
+                <File Id='get_image_rgba.exe' Name='get_image_rgba.exe' DiskId='1' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe' KeyPath="no"/>
               </Component>
             </Directory>
           </Directory>
