@@ -1,11 +1,8 @@
 #pragma once
 
-#define EPERM            1      /* Operation not permitted */
-#define EIO              5      /* I/O error */
-#define EACCES          13      /* Permission denied */
-#define EEXIST          17      /* File exists */
-#define ENOTDIR         20      /* Not a directory */
-#define EINVAL          22      /* Invalid argument */
+#define UNIX_EPOCH_OFFSET 11644478640LL
+
+#pragma warning(suppress:4005) // macro redefinition: ENAMETOOLONG is defined as 38 in crt's errno.h even though MSDN claims it should be Unix compatible
 #define ENAMETOOLONG    36      /* File name too long */
 #define EDQUOT          122     /* Quota exceeded */
 

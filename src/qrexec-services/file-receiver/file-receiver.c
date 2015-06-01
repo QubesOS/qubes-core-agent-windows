@@ -6,14 +6,9 @@
 #include <shlobj.h>
 #include <Shellapi.h>
 
-#include "ioall.h"
-#include "filecopy-error.h"
-#include "wdk.h"
-#include "linux.h"
-#include "filecopy.h"
-#include "crc32.h"
+#include <log.h>
 
-#include "log.h"
+#include "wdk.h"
 
 HANDLE g_stdin = INVALID_HANDLE_VALUE;
 HANDLE g_stdout = INVALID_HANDLE_VALUE;
@@ -63,7 +58,7 @@ ULONG MapDriveLetter(IN const WCHAR *targetDirectory, OUT WCHAR *driveLetter)
         return perror2(hresult, "StringCchCopyN");
     }
 
-    memset(&devicePath, 0, sizeof(devicePath));
+    ZeroMemory(&devicePath, sizeof(devicePath));
     if (!QueryDosDevice(targetDirectoryDriveLetter, devicePath, RTL_NUMBER_OF(devicePath)))
     {
         return perror("QueryDosDevice");

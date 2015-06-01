@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <Strsafe.h>
 
-#include "filecopy-error.h"
+#include <log.h>
 
-#include "log.h"
+#include "filecopy-error.h"
 
 HWND g_parentWindow;
 

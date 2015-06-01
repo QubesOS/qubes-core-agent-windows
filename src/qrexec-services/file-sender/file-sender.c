@@ -1,19 +1,21 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <Strsafe.h>
 #include <Shlwapi.h>
 #include <Shellapi.h>
 
+#include <log.h>
+#include <utf8-conv.h>
+#include <qubes-io.h>
+#include <crc32.h>
+
 #include "filecopy.h"
-#include "ioall.h"
 #include "linux.h"
 #include "filecopy-error.h"
 #include "gui-progress.h"
-#include "crc32.h"
-
-#include "log.h"
-#include "utf8-conv.h"
 
 HANDLE g_stdin = INVALID_HANDLE_VALUE;
 HANDLE g_stdout = INVALID_HANDLE_VALUE;
@@ -26,7 +28,7 @@ UINT32 g_crc32 = 0;
 static BOOL WriteWithCrc(IN HANDLE output, IN const void *buffer, IN DWORD size)
 {
     g_crc32 = Crc32_ComputeBuf(g_crc32, buffer, size);
-    return FcWriteBuffer(output, buffer, size);
+    return QioWriteBuffer(output, buffer, size);
 }
 
 static void NotifyProgress(IN DWORD size, IN FC_PROGRESS_TYPE progressType)
@@ -49,13 +51,13 @@ static void WaitForResult(void)
     char lastFilename[MAX_PATH + 1];
     char lastFilenamePrefix[] = "; Last file: ";
 
-    if (!FcReadBuffer(g_stdin, &hdr, sizeof(hdr)))
+    if (!QioReadBuffer(g_stdin, &hdr, sizeof(hdr)))
     {
         LogError("FcReadBuffer failed");
         exit(1);	// hopefully remote has produced error message
     }
 
-    if (!FcReadBuffer(g_stdin, &hdr_ext, sizeof(hdr_ext)))
+    if (!QioReadBuffer(g_stdin, &hdr_ext, sizeof(hdr_ext)))
     {
         // remote used old result_header struct
         hdr_ext.last_namelen = 0;
@@ -67,7 +69,7 @@ static void WaitForResult(void)
         hdr_ext.last_namelen = MAX_PATH;
     }
 
-    if (!FcReadBuffer(g_stdin, lastFilename, hdr_ext.last_namelen))
+    if (!QioReadBuffer(g_stdin, lastFilename, hdr_ext.last_namelen))
     {
         fprintf(stderr, "Failed to get last filename\n");
         LogError("Failed to get last filename");
@@ -103,8 +105,6 @@ static void WaitForResult(void)
     }
 }
 
-#define UNIX_EPOCH_OFFSET 11644478640LL
-
 static void WindowTimeToUnix(IN FILETIME *windowsTime, OUT unsigned int *unixTime, OUT unsigned int *unixTimeNsec)
 {
     ULARGE_INTEGER tmp;
@@ -124,7 +124,7 @@ static void WriteHeaders(IN struct file_header *hdr, IN const WCHAR *fileName)
     if (ERROR_SUCCESS != ConvertUTF16ToUTF8(fileName, &fileNameUtf8, &cbFileNameUtf8))
         FcReportError(GetLastError(), TRUE, L"Cannot convert path '%s' to UTF-8", fileName);
 
-    hdr->namelen = cbFileNameUtf8;
+    hdr->namelen = (UINT32)cbFileNameUtf8;
 
     if (!WriteWithCrc(g_stdout, hdr, sizeof(*hdr)) || !WriteWithCrc(g_stdout, fileNameUtf8, hdr->namelen))
     {

@@ -1,10 +1,10 @@
 #include <windows.h>
 #include <commctrl.h>
 
+#include <log.h>
+
 #include "filecopy-error.h"
 #include "gui-progress.h"
-
-#include "log.h"
 
 extern INT64 g_totalSize;
 extern BOOL g_cancelOperation;

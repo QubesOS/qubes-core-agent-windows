@@ -1,16 +1,16 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <Strsafe.h>
 #include <Shlwapi.h>
-#include <Shellapi.h>
 
-#include "ioall.h"
-#include "filecopy-error.h"
+#include <utf8-conv.h>
+#include <qubes-io.h>
+#include <crc32.h>
+
 #include "linux.h"
 #include "filecopy.h"
-#include "crc32.h"
-#include "utf8-conv.h"
 
 char g_untrustedName[MAX_PATH_LENGTH];
 INT64 g_bytesLimit = 0;
@@ -33,7 +33,7 @@ BOOL ReadWithCrc(IN HANDLE input, OUT void *buffer, IN DWORD bufferSize)
 {
     BOOL ret;
 
-    ret = FcReadBuffer(input, buffer, bufferSize);
+    ret = QioReadBuffer(input, buffer, bufferSize);
     if (ret)
         g_crc32 = Crc32_ComputeBuf(g_crc32, buffer, bufferSize);
 
@@ -47,16 +47,16 @@ void SendStatusAndCrc(IN UINT32 statusCode, IN const char *lastFileName OPTIONAL
 
     header.error_code = statusCode;
     header.crc32 = g_crc32;
-    if (!FcWriteBuffer(g_stdout, &header, sizeof(header)))
+    if (!QioWriteBuffer(g_stdout, &header, sizeof(header)))
     {
 
     }
 
     if (lastFileName)
     {
-        headerExt.last_namelen = strlen(lastFileName);
-        FcWriteBuffer(g_stdout, &headerExt, sizeof(headerExt));
-        FcWriteBuffer(g_stdout, lastFileName, headerExt.last_namelen);
+        headerExt.last_namelen = (UINT32)strlen(lastFileName);
+        QioWriteBuffer(g_stdout, &headerExt, sizeof(headerExt));
+        QioWriteBuffer(g_stdout, lastFileName, headerExt.last_namelen);
     }
 }
 

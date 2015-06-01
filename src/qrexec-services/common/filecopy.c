@@ -1,10 +1,10 @@
 #include <Windows.h>
 
-#include "ioall.h"
 #include "filecopy.h"
 #include "crc32.h"
 
-#include "log.h"
+#include <qubes-io.h>
+#include <log.h>
 
 FC_COPY_STATUS FcCopyFile(IN HANDLE output, IN HANDLE input, IN UINT64 size, OUT UINT32 *crc32 OPTIONAL, IN fNotifyProgressCallback progressCallback OPTIONAL)
 {
@@ -33,7 +33,7 @@ FC_COPY_STATUS FcCopyFile(IN HANDLE output, IN HANDLE input, IN UINT64 size, OUT
         if (crc32)
             *crc32 = Crc32_ComputeBuf(*crc32, buffer, cbRead);
 
-        if (!FcWriteBuffer(output, buffer, cbRead))
+        if (!QioWriteBuffer(output, buffer, cbRead))
             return COPY_FILE_WRITE_ERROR;
 
         if (progressCallback)

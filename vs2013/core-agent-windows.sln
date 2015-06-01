@@ -27,6 +27,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wait-for-logon", "qrexec-se
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vm-file-editor", "qrexec-services\vm-file-editor\vm-file-editor.vcxproj", "{EB9CDF07-6759-4E26-93E5-C31C5B19E445}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "file-receiver", "qrexec-services\file-receiver\file-receiver.vcxproj", "{CF169B8A-E3B4-49FC-832F-DAB3242CF226}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "file-sender", "qrexec-services\file-sender\file-sender.vcxproj", "{4692A6F3-4980-438C-A5A7-6A3F346F2820}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -125,6 +129,22 @@ Global
 		{EB9CDF07-6759-4E26-93E5-C31C5B19E445}.Release|Win32.Build.0 = Release|Win32
 		{EB9CDF07-6759-4E26-93E5-C31C5B19E445}.Release|x64.ActiveCfg = Release|x64
 		{EB9CDF07-6759-4E26-93E5-C31C5B19E445}.Release|x64.Build.0 = Release|x64
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Debug|Win32.ActiveCfg = Debug|Win32
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Debug|Win32.Build.0 = Debug|Win32
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Debug|x64.ActiveCfg = Debug|x64
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Debug|x64.Build.0 = Debug|x64
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Release|Win32.ActiveCfg = Release|Win32
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Release|Win32.Build.0 = Release|Win32
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Release|x64.ActiveCfg = Release|x64
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226}.Release|x64.Build.0 = Release|x64
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Debug|Win32.Build.0 = Debug|Win32
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Debug|x64.ActiveCfg = Debug|x64
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Debug|x64.Build.0 = Debug|x64
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|Win32.ActiveCfg = Release|Win32
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|Win32.Build.0 = Release|Win32
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|x64.ActiveCfg = Release|x64
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -136,5 +156,7 @@ Global
 		{3B426721-35D6-4207-9A27-9972AABBB444} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
 		{E5CA9F27-69BA-49A8-93D9-2ADD41A70C17} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
 		{EB9CDF07-6759-4E26-93E5-C31C5B19E445} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
+		{CF169B8A-E3B4-49FC-832F-DAB3242CF226} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
+		{4692A6F3-4980-438C-A5A7-6A3F346F2820} = {5B72526F-14EE-4FC5-9311-5C59F5783F9D}
 	EndGlobalSection
 EndGlobal
