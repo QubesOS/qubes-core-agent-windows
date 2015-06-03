@@ -1562,6 +1562,12 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
             return ERROR_INVALID_FUNCTION;
         }
 
+        if (!clientInfo->IsVchanServer) // we're vchan client, reply with HELLO
+        {
+            if (!SendHelloToVchan(vchan))
+                return ERROR_INVALID_FUNCTION;
+
+        }
         break;
 
     case MSG_DATA_STDIN:
