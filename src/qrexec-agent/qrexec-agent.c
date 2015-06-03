@@ -1,6 +1,6 @@
 #include "qrexec-agent.h"
 #include <Shlwapi.h>
-#include "utf8-conv.h"
+#include <utf8-conv.h>
 
 libvchan_t *g_DaemonVchan;
 HANDLE g_AddExistingClientEvent;
@@ -430,6 +430,7 @@ static ULONG Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf
     return ERROR_SUCCESS;
 }
 
+// caller must free commandUtf16 on success, userName and commandLine are pointers inside commandUtf16
 static ULONG ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf16, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively)
 {
     ULONG status;
@@ -924,7 +925,7 @@ static ULONG InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             {
                 return perror2(ERROR_NOT_ENOUGH_MEMORY, "_wcsdup");
             }
-            LogDebug("source domain: '%s'", sourceDomainName);
+            LogDebug("source domain: '%s'", *sourceDomainName);
         }
         else
         {
@@ -1190,8 +1191,7 @@ ULONG HandleServiceRefused(IN const struct msg_header *header)
 // Returns vchan for qrexec-client/peer that initiated the request.
 // Fails only if vchan fails.
 // Returns TRUE and sets vchan to NULL if cmdline parsing failed (caller should return with success status).
-BOOL HandleExecCommon(
-    IN int len, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively, OUT libvchan_t **peerVchan)
+BOOL HandleExecCommon(IN int len, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively, OUT libvchan_t **peerVchan)
 {
     struct exec_params *exec = NULL;
     ULONG status;
@@ -1205,7 +1205,7 @@ BOOL HandleExecCommon(
     exec = ReceiveCmdline(len);
     if (!exec)
     {
-        LogError("recv_cmdline failed");
+        LogError("ReceiveCmdline failed");
         return FALSE;
     }
 
@@ -1240,6 +1240,7 @@ BOOL HandleExecCommon(
     }
 
     free(exec);
+    LogDebug("command: '%s', user: '%s', parsed: '%s'", command, *userName, *commandLine);
 
     // serviceCommandLine and remoteDomainName are allocated in the call
     status = InterceptRPCRequest(*commandLine, &serviceCommandLine, &remoteDomainName);
@@ -1254,12 +1255,14 @@ BOOL HandleExecCommon(
 
     if (remoteDomainName)
     {
+        LogDebug("RPC domain: '%s'", remoteDomainName);
         SetEnvironmentVariableW(L"QREXEC_REMOTE_DOMAIN", remoteDomainName);
         free(remoteDomainName);
     }
 
     if (serviceCommandLine)
     {
+        LogDebug("RPC command: '%s'", serviceCommandLine);
         *commandLine = serviceCommandLine;
     }
     else
@@ -1270,6 +1273,7 @@ BOOL HandleExecCommon(
 
     *userName = _wcsdup(*userName);
     free(command);
+    LogDebug("success: cmd '%s', user '%s'", *commandLine, *userName);
 
     return TRUE;
 }
@@ -1329,7 +1333,7 @@ static ULONG HandleJustExec(IN const struct msg_header *header)
     if (!vchan) // cmdline parsing failed
         return ERROR_SUCCESS;
 
-    LogDebug("executing '%s'", commandLine);
+    LogDebug("executing '%s' as '%s'", commandLine, userName);
 
 #ifdef BUILD_AS_SERVICE
     // Create a process which IO is not redirected anywhere.
@@ -1557,6 +1561,7 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
             LogWarning("incompatible protocol version (got %d, expected %d)", peerInfo.version, QREXEC_PROTOCOL_VERSION);
             return ERROR_INVALID_FUNCTION;
         }
+
         break;
 
     case MSG_DATA_STDIN:
