@@ -59,16 +59,22 @@ void SendFile(IN const WCHAR *filePath)
     CloseHandle(stdOut);
 }
 
+#define MAX_PATH_LONG 32768
 void ReceiveFile(IN const WCHAR *fileName)
 {
     HANDLE tempFile;
-    WCHAR tempDirPath[32768];
-    WCHAR tempFilePath[32768];
+    WCHAR *tempDirPath = NULL;
+    WCHAR *tempFilePath = NULL;
     LARGE_INTEGER fileSize;
     HANDLE stdIn = GetStdHandle(STD_INPUT_HANDLE);
 
+    tempDirPath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
+    tempFilePath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
+    if (!tempDirPath || !tempFilePath)
+        FcReportError(GetLastError(), TRUE, L"allocate memory");
+
     // prepare temporary path
-    if (!GetTempPath(RTL_NUMBER_OF(tempDirPath), tempDirPath))
+    if (!GetTempPath(MAX_PATH_LONG, tempDirPath))
     {
         FcReportError(GetLastError(), TRUE, L"Failed to get temp dir");
     }
@@ -94,11 +100,15 @@ void ReceiveFile(IN const WCHAR *fileName)
     if (fileSize.QuadPart == 0)
     {
         DeleteFile(tempFilePath);
-        return;
+        goto cleanup;
     }
 
     if (!MoveFileEx(tempFilePath, fileName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
         FcReportError(GetLastError(), TRUE, L"rename");
+
+cleanup:
+    free(tempDirPath);
+    free(tempFilePath);
 }
 
 int __cdecl wmain(int argc, WCHAR *argv[])

@@ -15,15 +15,21 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
 {
     HANDLE clipData;
     WCHAR *text, *textLocked;
-    char inputText[MAX_CLIPBOARD_SIZE + 1] = { 0 };
+    char *inputText;
     size_t cchText;
     DWORD cbRead;
 
-    cbRead = QioReadUntilEof(inputFile, inputText, sizeof(inputText) - 1);
+    inputText = malloc(MAX_CLIPBOARD_SIZE + 1);
+    if (!inputText)
+        goto fail;
+
+    ZeroMemory(inputText, MAX_CLIPBOARD_SIZE + 1);
+
+    cbRead = QioReadUntilEof(inputFile, inputText, MAX_CLIPBOARD_SIZE);
     if (cbRead == 0)
     {
         LogError("QioReadUntilEof returned 0");
-        return FALSE;
+        goto fail;
     }
 
     inputText[cbRead] = '\0';
@@ -31,14 +37,14 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
     if (ERROR_SUCCESS != ConvertUTF8ToUTF16(inputText, &text, &cchText))
     {
         perror("ConvertUTF8ToUTF16");
-        return FALSE;
+        goto fail;
     }
 
     clipData = GlobalAlloc(GMEM_MOVEABLE, (cchText + 1) * sizeof(WCHAR));
     if (!clipData)
     {
         perror("GlobalAlloc");
-        return FALSE;
+        goto fail;
     }
 
     textLocked = GlobalLock(clipData);
@@ -46,7 +52,7 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
     {
         perror("GlobalLock");
         GlobalFree(clipData);
-        return FALSE;
+        goto fail;
     }
 
     memcpy(textLocked, text, (cchText + 1) * sizeof(WCHAR));
@@ -58,7 +64,7 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
     {
         perror("OpenClipboard");
         GlobalFree(clipData);
-        return FALSE;
+        goto fail;
     }
 
     if (!EmptyClipboard())
@@ -66,7 +72,7 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
         perror("EmptyClipboard");
         GlobalFree(clipData);
         CloseClipboard();
-        return FALSE;
+        goto fail;
     }
 
     if (!SetClipboardData(CLIPBOARD_FORMAT, clipData))
@@ -74,11 +80,15 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
         perror("SetClipboardData");
         GlobalFree(clipData);
         CloseClipboard();
-        return FALSE;
+        goto fail;
     }
 
     CloseClipboard();
     return TRUE;
+
+fail:
+    free(inputText);
+    return FALSE;
 }
 
 HWND CreateMainWindow(IN HINSTANCE instance)

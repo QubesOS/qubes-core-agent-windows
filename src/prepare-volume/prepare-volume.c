@@ -58,8 +58,8 @@ int wmain(int argc, WCHAR *argv[])
     HKEY key;
     DWORD valueType;
     DWORD size;
-    WCHAR valueData[MAX_PATH_LONG];
-    WCHAR command[MAX_PATH_LONG];
+    WCHAR *valueData;
+    WCHAR *command;
     WCHAR msg[1024];
 
     if (argc < 2)
@@ -122,9 +122,12 @@ int wmain(int argc, WCHAR *argv[])
         return 6;
     }
 
+    size = MAX_PATH_LONG*sizeof(WCHAR);
+    valueData = malloc(size);
+    command = malloc(size);
+
     // Get current value (usually filesystem autocheck).
-    size = sizeof(valueData);
-    status = RegQueryValueEx(key, L"BootExecute", NULL, &valueType, (PBYTE) valueData, &size);
+    status = RegQueryValueEx(key, L"BootExecute", NULL, &valueType, (PBYTE)valueData, &size);
     if (ERROR_SUCCESS != status)
     {
         perror2(status, "RegQueryValueEx");
@@ -132,7 +135,7 @@ int wmain(int argc, WCHAR *argv[])
     }
 
     // Format the command.
-    if (FAILED(StringCchPrintf(command, RTL_NUMBER_OF(command), L"move-profiles %s %s\0", usersPath, toPath)))
+    if (FAILED(StringCchPrintf(command, MAX_PATH_LONG, L"move-profiles %s %s\0", usersPath, toPath)))
     {
         LogError("StringCchPrintf(command) failed");
         return 8;
@@ -141,7 +144,7 @@ int wmain(int argc, WCHAR *argv[])
     CoTaskMemFree(usersPath);
 
     // Append the command to the current value.
-    if ((wcslen(command) + 1) * sizeof(WCHAR) + size > sizeof(valueData))
+    if ((wcslen(command) + 1) * sizeof(WCHAR) + size > MAX_PATH_LONG*sizeof(WCHAR))
     {
         LogError("Buffer too small for BootExecute entry");
         return 9;

@@ -607,7 +607,7 @@ static ULONG AddFilledClientInfo(IN ULONG clientIndex, IN const CLIENT_INFO *cli
 
     EnterCriticalSection(&g_ClientsCriticalSection);
 
-    g_Clients[clientIndex] = *clientInfo;
+    memcpy(&g_Clients[clientIndex], clientInfo, sizeof(*clientInfo));
     g_Clients[clientIndex].ClientIsReady = TRUE;
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
@@ -621,7 +621,7 @@ static ULONG AddFilledClientInfo(IN ULONG clientIndex, IN const CLIENT_INFO *cli
 static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHAR *commandLine, IN BOOL runInteractively)
 {
     ULONG status;
-    CLIENT_INFO clientInfo;
+    CLIENT_INFO *clientInfo = NULL;
     HANDLE pipeStdout = INVALID_HANDLE_VALUE;
     HANDLE pipeStderr = INVALID_HANDLE_VALUE;
     HANDLE pipeStdin = INVALID_HANDLE_VALUE;
@@ -632,6 +632,10 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
     // if userName is NULL we run the process on behalf of the current user.
     if (!commandLine)
         return ERROR_INVALID_PARAMETER;
+
+    clientInfo = malloc(sizeof(*clientInfo));
+    if (!clientInfo)
+        return ERROR_OUTOFMEMORY;
 
     status = ReserveClientIndex(vchan, &clientIndex);
     if (ERROR_SUCCESS != status)
@@ -650,13 +654,14 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
 #endif
     }
 
-    ZeroMemory(&clientInfo, sizeof(clientInfo));
-    clientInfo.Vchan = vchan;
+    ZeroMemory(clientInfo, sizeof(*clientInfo));
+    clientInfo->Vchan = vchan;
 
-    status = CreateClientPipes(&clientInfo, &pipeStdin, &pipeStdout, &pipeStderr);
+    status = CreateClientPipes(clientInfo, &pipeStdin, &pipeStdout, &pipeStderr);
     if (ERROR_SUCCESS != status)
     {
         ReleaseClientIndex(clientIndex);
+        free(clientInfo);
         return perror2(status, "CreateClientPipes");
     }
 
@@ -671,7 +676,7 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
             pipeStdin,
             pipeStdout,
             pipeStderr,
-            &clientInfo.ChildProcess);
+            &clientInfo->ChildProcess);
     }
     else
     {
@@ -680,7 +685,7 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
             pipeStdin,
             pipeStdout,
             pipeStderr,
-            &clientInfo.ChildProcess);
+            &clientInfo->ChildProcess);
     }
 #else
     status = CreatePipedProcessAsCurrentUser(
@@ -689,7 +694,7 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
         pipeStdin,
         pipeStdout,
         pipeStderr,
-        &clientInfo.ChildProcess);
+        &clientInfo->ChildProcess);
 #endif
 
     CloseHandle(pipeStdout);
@@ -700,10 +705,11 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
     {
         ReleaseClientIndex(clientIndex);
 
-        CloseHandle(clientInfo.WriteStdinPipe);
-        CloseHandle(clientInfo.StdoutData.ReadPipe);
-        CloseHandle(clientInfo.StderrData.ReadPipe);
+        CloseHandle(clientInfo->WriteStdinPipe);
+        CloseHandle(clientInfo->StdoutData.ReadPipe);
+        CloseHandle(clientInfo->StderrData.ReadPipe);
 
+        free(clientInfo);
 #ifdef BUILD_AS_SERVICE
         if (userName)
             return perror2(status, "CreatePipedProcessAsUser");
@@ -715,22 +721,24 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
     }
 
     // we're the data client
-    clientInfo.IsVchanServer = FALSE;
-    status = AddFilledClientInfo(clientIndex, &clientInfo);
+    clientInfo->IsVchanServer = FALSE;
+    status = AddFilledClientInfo(clientIndex, clientInfo);
     if (ERROR_SUCCESS != status)
     {
         ReleaseClientIndex(clientIndex);
 
-        CloseHandle(clientInfo.WriteStdinPipe);
-        CloseHandle(clientInfo.StdoutData.ReadPipe);
-        CloseHandle(clientInfo.StderrData.ReadPipe);
-        CloseHandle(clientInfo.ChildProcess);
+        CloseHandle(clientInfo->WriteStdinPipe);
+        CloseHandle(clientInfo->StdoutData.ReadPipe);
+        CloseHandle(clientInfo->StderrData.ReadPipe);
+        CloseHandle(clientInfo->ChildProcess);
 
+        free(clientInfo);
         return perror2(status, "AddFilledClientInfo");
     }
 
     LogDebug("New client vchan %p (index %d)", vchan, clientIndex);
 
+    free(clientInfo);
     return ERROR_SUCCESS;
 }
 

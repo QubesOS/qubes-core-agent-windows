@@ -92,7 +92,7 @@ cleanup:
 
 int wmain(int argc, WCHAR *argv[])
 {
-    WCHAR linkPath[MAX_PATH_LONG];
+    WCHAR *linkPath = NULL;
     WORD pi = -1;
     ICONINFO ii;
     SHFILEINFO shfi = { 0 };
@@ -109,11 +109,15 @@ int wmain(int argc, WCHAR *argv[])
     FILE *f1;
 #endif
 
+    linkPath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
+    if (!linkPath)
+        goto cleanup;
+
     // Set stdout to binary mode to prevent newline conversions.
     _setmode(_fileno(stdout), _O_BINARY);
 
     // Read input and convert it to the shortcut path.
-    if (ERROR_SUCCESS != GetShortcutPath(linkPath, RTL_NUMBER_OF(linkPath)))
+    if (ERROR_SUCCESS != GetShortcutPath(linkPath, MAX_PATH_LONG))
     {
         perror("GetShortcutPath");
         goto cleanup;
@@ -215,7 +219,7 @@ int wmain(int argc, WCHAR *argv[])
 #endif
 
 cleanup:
-    if (status != ERROR_SUCCESS)
+    if (status != ERROR_SUCCESS && linkPath)
         LogError("LinkPath: %s", linkPath);
     // Everything will be cleaned up upon process exit.
     return status;
