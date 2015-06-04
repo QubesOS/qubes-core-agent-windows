@@ -690,7 +690,6 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
 #else
     status = CreatePipedProcessAsCurrentUser(
         commandLine,
-        runInteractively,
         pipeStdin,
         pipeStdout,
         pipeStderr,
@@ -2507,12 +2506,6 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     ULONG clientIndex;
 
     wprintf(L"\nqrexec agent console application\n\n");
-
-    if (ERROR_SUCCESS != CheckForXenInterface())
-    {
-        LogError("Could not find Xen interface\n");
-        return ERROR_NOT_SUPPORTED;
-    }
 
     // Manual reset, initial state is not signaled
     g_StopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
