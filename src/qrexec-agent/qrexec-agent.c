@@ -2374,8 +2374,7 @@ ULONG Init(OUT HANDLE *serviceThread)
 // This is the entry point for a service module (BUILD_AS_SERVICE defined).
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    ULONG option;
-    WCHAR *param = NULL;
+    WCHAR option;
     WCHAR userName[UNLEN + 1] = { 0 };
     WCHAR fullPath[MAX_PATH + 1];
     DWORD cchUserName;
@@ -2426,7 +2425,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     while (!stopParsing)
     {
-        option = GetOption(argc, argv, TEXT("iua:"), &param);
+        option = getopt(argc, argv, L"iua:");
         switch (option)
         {
         case 0:
@@ -2441,13 +2440,13 @@ int __cdecl wmain(int argc, WCHAR *argv[])
                 stopParsing = TRUE;
             }
             else
-                command = (TCHAR) option;
+                command = option;
 
             break;
 
         case L'a':
-            if (param)
-                accountName = param;
+            if (optarg)
+                accountName = optarg;
             break;
 
         default:
