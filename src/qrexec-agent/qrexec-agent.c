@@ -1154,15 +1154,20 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
         if (libvchan_wait(peerVchan) < 0)
         {
             LogError("libvchan_wait failed");
+            libvchan_close(peerVchan);
             return ERROR_INVALID_FUNCTION;
         }
         LogDebug("target agent (data client) connected");
         if (!SendHelloToVchan(peerVchan))
+        {
+            libvchan_close(peerVchan);
             return ERROR_INVALID_FUNCTION;
+        }
     }
 
     LogDebug("vchan %p, request id '%S'", peerVchan, params->cmdline);
 
+    // peerVchan will be closed by DisconnectAndReconnect in pipe-server.c
     status = ProceedWithExecution(peerVchan, params->cmdline, isVchanServer);
     free(params);
 
@@ -1242,6 +1247,7 @@ BOOL HandleExecCommon(IN int len, OUT WCHAR **userName, OUT WCHAR **commandLine,
         LogError("ParseUtf8Command failed");
         free(exec);
         SendExitCodeVchan(*peerVchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        libvchan_close(*peerVchan);
         *peerVchan = NULL;
         return TRUE;
     }
@@ -1255,6 +1261,7 @@ BOOL HandleExecCommon(IN int len, OUT WCHAR **userName, OUT WCHAR **commandLine,
     {
         LogError("InterceptRPCRequest failed");
         SendExitCodeVchan(*peerVchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+        libvchan_close(*peerVchan);
         *peerVchan = NULL;
         free(command);
         return TRUE;
@@ -1372,6 +1379,7 @@ static ULONG HandleJustExec(IN const struct msg_header *header)
 
     // send status to qrexec-client (not real *exit* code, but we can at least return that process creation failed)
     SendExitCodeVchan(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, status));
+    libvchan_close(vchan);
 
     free(commandLine);
     free(userName);

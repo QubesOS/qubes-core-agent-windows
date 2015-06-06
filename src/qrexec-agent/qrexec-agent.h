@@ -5,13 +5,14 @@
 #include <strsafe.h>
 
 #include "common.h"
-#include "qrexec.h"
-#include "libvchan.h"
-#include "vchan-common.h"
 #include "service.h"
-#include "getopt.h"
-#include "exec.h"
 #include "pipe-server.h"
+
+#include <qrexec.h>
+#include <libvchan.h>
+#include <vchan-common.h>
+#include <getopt.h>
+#include <exec.h>
 
 typedef enum _HANDLE_TYPE
 {

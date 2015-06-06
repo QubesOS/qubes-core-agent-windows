@@ -165,6 +165,7 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex)
     ZeroMemory(&g_Pipes[clientIndex].ClientInfo, sizeof(g_Pipes[clientIndex].ClientInfo));
     ZeroMemory(&g_Pipes[clientIndex].RemoteHandles, sizeof(g_Pipes[clientIndex].RemoteHandles));
     ZeroMemory(&g_Pipes[clientIndex].ConnectParams, sizeof(g_Pipes[clientIndex].ConnectParams));
+    libvchan_close(g_Pipes[clientIndex].Vchan);
     g_Pipes[clientIndex].Vchan = NULL;
 
     // Disconnect the pipe instance.
@@ -220,7 +221,7 @@ static ULONG ClosePipeHandles(void)
 static ULONG ConnectExisting(
     IN libvchan_t *vchan,
     IN HANDLE clientProcess,
-    OUT CLIENT_INFO *clientInfo,
+    IN OUT CLIENT_INFO *clientInfo,
     IN const struct trigger_service_params *connectParams,
     IN const CREATE_PROCESS_RESPONSE *cpr
     )
@@ -313,7 +314,7 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
     status = SendMessageToVchan(g_DaemonVchan, MSG_TRIGGER_SERVICE, &connectParams, sizeof(connectParams), NULL, L"trigger_service_params");
     if (ERROR_SUCCESS != status)
     {
-        return perror2(status, "ReturnData");
+        return perror2(status, "SendMessageToVchan");
     }
 
     LogVerbose("success");
@@ -366,6 +367,7 @@ ULONG ProceedWithExecution(
         perror2(status, "FindPipeByIdent");
         LogError("id=%s", ident);
         LeaveCriticalSection(&g_PipesCriticalSection);
+        libvchan_close(vchan);
         return status;
     }
 
@@ -373,6 +375,7 @@ ULONG ProceedWithExecution(
     {
         LogWarning("Wrong pipe state %d, should be %d", g_Pipes[clientIndex].ConnectionState, STATE_WAITING_FOR_DAEMON_DECISION);
         LeaveCriticalSection(&g_PipesCriticalSection);
+        libvchan_close(vchan);
         return ERROR_INVALID_PARAMETER;
     }
 
