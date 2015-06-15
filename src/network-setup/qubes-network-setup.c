@@ -6,9 +6,8 @@
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
 
-#include <xencontrol.h>
-
-#include "log.h"
+#include <qubesdb-client.h>
+#include <log.h>
 
 // from service.c
 DWORD ServiceStartup(void);
@@ -173,36 +172,36 @@ cleanup:
 
 DWORD SetupNetwork(void)
 {
-    HANDLE xif = NULL;
+    qdb_handle_t qdb = NULL;
     int interfaceIndex;
-    char qubesIp[64];
-    char qubesNetmask[64];
-    char qubesGateway[64];
+    char *qubesIp = NULL;
+    char *qubesNetmask = NULL;
+    char *qubesGateway = NULL;
     DWORD status = ERROR_UNIDENTIFIED_ERROR;
     char cmdline[255];
 
-    status = XenifaceOpen(&xif);
-    if (status != ERROR_SUCCESS)
+    qdb = qdb_open(NULL);
+    if (!qdb)
     {
-        perror("XenifaceOpen");
+        perror("qdb_open");
         goto cleanup;
     }
 
-    status = StoreRead(xif, "qubes-ip", sizeof(qubesIp), qubesIp);
-    if (status != ERROR_SUCCESS)
+    qubesIp = qdb_read(qdb, "/qubes-ip", NULL);
+    if (!qubesIp)
     {
-        LogError("Failed to get qubes-ip\n");
+        LogError("Failed to get qubes-ip");
         goto cleanup;
     }
 
-    status = StoreRead(xif, "qubes-netmask", sizeof(qubesNetmask), qubesNetmask);
+    qubesNetmask = qdb_read(qdb, "/qubes-netmask", NULL);
     if (status != ERROR_SUCCESS)
     {
         LogError("Failed to get qubes-netmask\n");
         goto cleanup;
     }
 
-    status = StoreRead(xif, "qubes-gateway", sizeof(qubesGateway), qubesGateway);
+    qubesGateway = qdb_read(qdb, "/qubes-gateway", NULL);
     if (status != ERROR_SUCCESS)
     {
         LogError("Failed to get qubes-gateway\n");
@@ -228,7 +227,7 @@ DWORD SetupNetwork(void)
 
     if (system(cmdline) != 0)
     {
-        LogError("Failed to set DNS address by calling: %S\n", cmdline);
+        LogError("Failed to set DNS address by calling: %S", cmdline);
         goto cleanup;
     }
 
@@ -242,8 +241,8 @@ cleanup:
     if (qubesGateway)
         free(qubesGateway);
 
-    if (xif)
-        XenifaceClose(xif);
+    if (qdb)
+        qdb_close(qdb);
 
     return status;
 }

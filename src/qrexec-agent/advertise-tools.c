@@ -2,10 +2,8 @@
 #include <shlwapi.h>
 #include <Wtsapi32.h>
 
-#include <xencontrol.h>
-#include "log.h"
-
-#define XS_TOOLS_PREFIX "qubes-tools/"
+#include <qubesdb-client.h>
+#include <log.h>
 
 // userName needs to be freed with WtsFreeMemory
 BOOL GetCurrentUser(OUT char **userName)
@@ -114,7 +112,7 @@ BOOL NotifyDom0(void)
 
     if (!CreateProcess(
         qrexecClientVmPath,
-        TEXT("qrexec-client-vm.exe dom0 qubes.NotifyTools dummy"),
+        L"qrexec-client-vm.exe dom0 qubes.NotifyTools dummy",
         NULL,
         NULL,
         FALSE,
@@ -137,39 +135,41 @@ BOOL NotifyDom0(void)
     return TRUE;
 }
 
+BOOL QdbWrite(qdb_handle_t qdb, char *path, char *value)
+{
+    return qdb_write(qdb, path, value, (int)strlen(value));
+}
+
 ULONG AdvertiseTools(void)
 {
-    HANDLE xif = NULL;
+    qdb_handle_t qdb = NULL;
     ULONG status = ERROR_UNIDENTIFIED_ERROR;
     BOOL guiAgentPresent;
     CHAR *userName = NULL;
 
     LogVerbose("start");
 
-    status = XenifaceOpen(&xif);
-    if (status != ERROR_SUCCESS)
+    qdb = qdb_open(NULL);
+    if (!qdb)
     {
-        perror("XenifaceOpen");
+        perror("qdb_open");
         goto cleanup;
     }
 
     /* for now mostly hardcoded values, but this can change in the future */
-    status = StoreWrite(xif, XS_TOOLS_PREFIX "version", "1");
-    if (status != ERROR_SUCCESS)
+    if (!QdbWrite(qdb, "/version", "1"))
     {
         perror("write 'version' entry");
         goto cleanup;
     }
     
-    status = StoreWrite(xif, XS_TOOLS_PREFIX "os", "Windows");
-    if (status != ERROR_SUCCESS)
+    if (!QdbWrite(qdb, "/os", "Windows"))
     {
         perror("write 'os' entry");
         goto cleanup;
     }
 
-    status = StoreWrite(xif, XS_TOOLS_PREFIX "qrexec", "1");
-    if (status != ERROR_SUCCESS)
+    if (!QdbWrite(qdb, "/qrexec", "1"))
     {
         perror("write 'qrexec' entry");
         goto cleanup;
@@ -177,8 +177,7 @@ ULONG AdvertiseTools(void)
 
     guiAgentPresent = CheckGuiAgentPresence();
 
-    status = StoreWrite(xif, XS_TOOLS_PREFIX "gui", guiAgentPresent ? "1" : "0");
-    if (status != ERROR_SUCCESS)
+    if (!QdbWrite(qdb, "/gui", guiAgentPresent ? "1" : "0"))
     {
         perror("write 'gui' entry");
         goto cleanup;
@@ -186,8 +185,7 @@ ULONG AdvertiseTools(void)
 
     if (GetCurrentUser(&userName))
     {
-        status = StoreWrite(xif, XS_TOOLS_PREFIX "default-user", userName);
-        if (status != ERROR_SUCCESS)
+        if (!QdbWrite(qdb, "default-user", userName))
         {
             perror("write 'default-user' entry");
             goto cleanup;
@@ -204,8 +202,8 @@ ULONG AdvertiseTools(void)
     LogVerbose("success");
 
 cleanup:
-    if (xif)
-        XenifaceClose(xif);
+    if (qdb)
+        qdb_close(qdb);
     if (userName)
         WTSFreeMemory(userName);
     return status;
