@@ -140,48 +140,51 @@ static ULONG ConnectToNewClient(IN HANDLE clientPipe, OUT OVERLAPPED *asyncState
 ULONG DisconnectAndReconnect(IN ULONG clientIndex)
 {
     ULONG status;
+    PIPE_INSTANCE *client = &(g_Pipes[clientIndex]);
 
-    LogDebug("Disconnecting client %lu, state %d\n", clientIndex, g_Pipes[clientIndex].ConnectionState);
+    LogDebug("Disconnecting client %lu, state %d\n", clientIndex, client->ConnectionState);
 
-    if (g_Pipes[clientIndex].ClientProcess)
-        CloseHandle(g_Pipes[clientIndex].ClientProcess);
-    g_Pipes[clientIndex].ClientProcess = 0;
+    if (client->ClientProcess)
+    {
+        CloseHandle(client->ClientProcess);
+        client->ClientProcess = NULL;
+    }
 
-    g_Pipes[clientIndex].CreateProcessResponse.ResponseType = CPR_TYPE_NONE;
+    client->CreateProcessResponse.ResponseType = CPR_TYPE_NONE;
 
-    if (g_Pipes[clientIndex].ClientInfo.WriteStdinPipe)
-        CloseHandle(g_Pipes[clientIndex].ClientInfo.WriteStdinPipe);
+    if (client->ClientInfo.WriteStdinPipe)
+        CloseHandle(client->ClientInfo.WriteStdinPipe);
 
     // There is no IO going in these pipes, so we can safely pass any
     // client_id to CloseReadPipeHandles - it will not be used anywhere.
     // Once a pipe becomes watched, these handles are moved to g_Clients,
     // and these structures are zeroed.
-    if (g_Pipes[clientIndex].ClientInfo.StdoutData.ReadPipe)
-        CloseReadPipeHandles(NULL, &g_Pipes[clientIndex].ClientInfo.StdoutData);
+    if (client->ClientInfo.StdoutData.ReadPipe)
+        CloseReadPipeHandles(NULL, &client->ClientInfo.StdoutData);
 
-    if (g_Pipes[clientIndex].ClientInfo.StderrData.ReadPipe)
-        CloseReadPipeHandles(NULL, &g_Pipes[clientIndex].ClientInfo.StderrData);
+    if (client->ClientInfo.StderrData.ReadPipe)
+        CloseReadPipeHandles(NULL, &client->ClientInfo.StderrData);
 
-    ZeroMemory(&g_Pipes[clientIndex].ClientInfo, sizeof(g_Pipes[clientIndex].ClientInfo));
-    ZeroMemory(&g_Pipes[clientIndex].RemoteHandles, sizeof(g_Pipes[clientIndex].RemoteHandles));
-    ZeroMemory(&g_Pipes[clientIndex].ConnectParams, sizeof(g_Pipes[clientIndex].ConnectParams));
-    libvchan_close(g_Pipes[clientIndex].Vchan);
-    g_Pipes[clientIndex].Vchan = NULL;
+    ZeroMemory(&client->ClientInfo, sizeof(client->ClientInfo));
+    ZeroMemory(&client->RemoteHandles, sizeof(client->RemoteHandles));
+    ZeroMemory(&client->ConnectParams, sizeof(client->ConnectParams));
+    libvchan_close(client->Vchan);
+    client->Vchan = NULL;
 
     // Disconnect the pipe instance.
-    if (!DisconnectNamedPipe(g_Pipes[clientIndex].Pipe))
+    if (!DisconnectNamedPipe(client->Pipe))
     {
         return perror("DisconnectNamedPipe");
     }
 
     // Call a subroutine to connect to the new client.
-    status = ConnectToNewClient(g_Pipes[clientIndex].Pipe, &g_Pipes[clientIndex].AsyncState, g_Events[clientIndex], &g_Pipes[clientIndex].PendingIo);
+    status = ConnectToNewClient(client->Pipe, &client->AsyncState, g_Events[clientIndex], &client->PendingIo);
     if (ERROR_SUCCESS != status)
     {
         return perror2(status, "ConnectToNewClient");
     }
 
-    g_Pipes[clientIndex].ConnectionState = g_Pipes[clientIndex].PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
+    client->ConnectionState = client->PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
 
     LogVerbose("success");
 
@@ -237,7 +240,7 @@ static ULONG ConnectExisting(
 
     if (CPR_TYPE_ERROR_CODE == cpr->ResponseType)
     {
-        LogWarning("vchan %p0: Process creation failed, got the error code %u", vchan, cpr->ResponseData.ErrorCode);
+        LogWarning("vchan %p: Process creation failed, got the error code %u", vchan, cpr->ResponseData.ErrorCode);
 
         status = SendExitCode(clientInfo, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, cpr->ResponseData.ErrorCode));
         if (ERROR_SUCCESS != status)
@@ -285,6 +288,7 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
     HRESULT hresult;
     ULONG status;
     struct trigger_service_params connectParams;
+    PIPE_INSTANCE *client = &(g_Pipes[clientIndex]);
 
     LogVerbose("client index %d", clientIndex);
 
@@ -294,8 +298,8 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
     EnterCriticalSection(&g_PipesCriticalSection);
 
     hresult = StringCchPrintfA(
-        (STRSAFE_LPSTR)&g_Pipes[clientIndex].ConnectParams.request_id.ident,
-        sizeof(g_Pipes[clientIndex].ConnectParams.request_id.ident),
+        (STRSAFE_LPSTR)&client->ConnectParams.request_id.ident,
+        sizeof(client->ConnectParams.request_id.ident),
         "%I64x",
         g_DaemonRequestsCounter++);
 
@@ -306,11 +310,10 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
         return hresult;
     }
 
-    connectParams = g_Pipes[clientIndex].ConnectParams;
+    connectParams = client->ConnectParams;
 
     LeaveCriticalSection(&g_PipesCriticalSection);
 
-    //uResult = send_msg_to_vchan(g_daemon_vchan, MSG_TRIGGER_SERVICE, &params, sizeof(params), NULL, TEXT("trigger_service_params"));
     status = SendMessageToVchan(g_DaemonVchan, MSG_TRIGGER_SERVICE, &connectParams, sizeof(connectParams), NULL, L"trigger_service_params");
     if (ERROR_SUCCESS != status)
     {
@@ -353,6 +356,7 @@ ULONG ProceedWithExecution(
 {
     ULONG clientIndex;
     ULONG status;
+    PIPE_INSTANCE *client;
 
     LogVerbose("vchan %p, ident '%S'", vchan, ident);
 
@@ -371,9 +375,10 @@ ULONG ProceedWithExecution(
         return status;
     }
 
-    if (STATE_WAITING_FOR_DAEMON_DECISION != g_Pipes[clientIndex].ConnectionState)
+    client = &(g_Pipes[clientIndex]);
+    if (STATE_WAITING_FOR_DAEMON_DECISION != client->ConnectionState)
     {
-        LogWarning("Wrong pipe state %d, should be %d", g_Pipes[clientIndex].ConnectionState, STATE_WAITING_FOR_DAEMON_DECISION);
+        LogWarning("Wrong pipe state %d, should be %d", client->ConnectionState, STATE_WAITING_FOR_DAEMON_DECISION);
         LeaveCriticalSection(&g_PipesCriticalSection);
         libvchan_close(vchan);
         return ERROR_INVALID_PARAMETER;
@@ -403,6 +408,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
     SECURITY_ATTRIBUTES sa;
     SECURITY_DESCRIPTOR *pipeSecurityDescriptor;
     ACL *acl;
+    PIPE_INSTANCE *client;
 
     LogDebug("start");
     ZeroMemory(&g_Pipes, sizeof(g_Pipes));
@@ -424,6 +430,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
     for (clientIndex = 0; clientIndex < TRIGGER_PIPE_INSTANCES; clientIndex++)
     {
+        client = &(g_Pipes[clientIndex]);
         // Create an event object for this instance.
 
         g_Events[clientIndex] = CreateEvent(
@@ -440,7 +447,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             return perror2(status, "CreateEvent");
         }
 
-        g_Pipes[clientIndex].Pipe = CreateNamedPipe(
+        client->Pipe = CreateNamedPipe(
             TRIGGER_PIPE_NAME,
             PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
@@ -450,7 +457,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             PIPE_TIMEOUT, // client time-out
             &sa);
 
-        if (INVALID_HANDLE_VALUE == g_Pipes[clientIndex].Pipe)
+        if (INVALID_HANDLE_VALUE == client->Pipe)
         {
             status = GetLastError();
             LocalFree(pipeSecurityDescriptor);
@@ -461,10 +468,10 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
         // Call the subroutine to connect to the new client
 
         status = ConnectToNewClient(
-            g_Pipes[clientIndex].Pipe,
-            &g_Pipes[clientIndex].AsyncState,
+            client->Pipe,
+            &client->AsyncState,
             g_Events[clientIndex],
-            &g_Pipes[clientIndex].PendingIo);
+            &client->PendingIo);
 
         if (ERROR_SUCCESS != status)
         {
@@ -473,7 +480,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             return perror2(status, "ConnectToNewClient");
         }
 
-        g_Pipes[clientIndex].ConnectionState = g_Pipes[clientIndex].PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
+        client->ConnectionState = client->PendingIo ? STATE_WAITING_FOR_CLIENT : STATE_SENDING_IO_HANDLES;
     }
 
     LocalFree(pipeSecurityDescriptor);
@@ -518,10 +525,11 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             return perror("WaitForMultipleObjects");
         }
 
+        client = &(g_Pipes[clientIndex]);
         // Get the result of the pending operation that has just finished.
-        if (g_Pipes[clientIndex].PendingIo)
+        if (client->PendingIo)
         {
-            if (!GetOverlappedResult(g_Pipes[clientIndex].Pipe, &g_Pipes[clientIndex].AsyncState, &cbRet, FALSE))
+            if (!GetOverlappedResult(client->Pipe, &client->AsyncState, &cbRet, FALSE))
             {
                 perror("GetOverlappedResult");
                 DisconnectAndReconnect(clientIndex);
@@ -529,15 +537,15 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             }
 
             // Clear the pending operation flag.
-            g_Pipes[clientIndex].PendingIo = FALSE;
+            client->PendingIo = FALSE;
 
-            switch (g_Pipes[clientIndex].ConnectionState)
+            switch (client->ConnectionState)
             {
                 // Pending connect operation
             case STATE_WAITING_FOR_CLIENT:
                 LogVerbose("STATE_WAITING_FOR_CLIENT");
 
-                if (!GetNamedPipeClientProcessId(g_Pipes[clientIndex].Pipe, &clientProcessId))
+                if (!GetNamedPipeClientProcessId(client->Pipe, &clientProcessId))
                 {
                     perror("GetNamedPipeClientProcessId");
                     DisconnectAndReconnect(clientIndex);
@@ -546,24 +554,24 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 LogDebug("STATE_WAITING_FOR_CLIENT (pending): Accepted connection from the process %d\n", clientProcessId);
 
-                g_Pipes[clientIndex].ClientProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, clientProcessId);
-                if (!g_Pipes[clientIndex].ClientProcess)
+                client->ClientProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, clientProcessId);
+                if (!client->ClientProcess)
                 {
                     perror("OpenProcess");
                     DisconnectAndReconnect(clientIndex);
                     continue;
                 }
 
-                g_Pipes[clientIndex].ConnectionState = STATE_RECEIVING_PARAMETERS;
+                client->ConnectionState = STATE_RECEIVING_PARAMETERS;
                 break;
 
                 // Make sure the incoming message has right size
             case STATE_RECEIVING_PARAMETERS:
                 LogVerbose("STATE_RECEIVING_PARAMETERS");
 
-                if (sizeof(g_Pipes[clientIndex].ConnectParams) != cbRet)
+                if (sizeof(client->ConnectParams) != cbRet)
                 {
-                    LogWarning("Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(g_Pipes[clientIndex].ConnectParams));
+                    LogWarning("Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(client->ConnectParams));
                     DisconnectAndReconnect(clientIndex);
                     continue;
                 }
@@ -576,7 +584,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     DisconnectAndReconnect(clientIndex);
                     continue;
                 }
-                g_Pipes[clientIndex].ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
+                client->ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
                 continue;
 
                 // Pending write operation
@@ -591,7 +599,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 }
 
                 LogDebug("STATE_SENDING_IO_HANDLES (pending): IO handles have been sent, waiting for the process handle\n");
-                g_Pipes[clientIndex].ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
+                client->ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
                 continue;
 
                 // Pending read operation
@@ -608,11 +616,11 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 LogDebug("STATE_RECEIVING_PROCESS_HANDLE (pending): Received the create process response\n");
 
                 status = ConnectExisting(
-                    g_Pipes[clientIndex].Vchan,
-                    g_Pipes[clientIndex].ClientProcess,
-                    &g_Pipes[clientIndex].ClientInfo,
-                    &g_Pipes[clientIndex].ConnectParams,
-                    &g_Pipes[clientIndex].CreateProcessResponse);
+                    client->Vchan,
+                    client->ClientProcess,
+                    &client->ClientInfo,
+                    &client->ConnectParams,
+                    &client->CreateProcessResponse);
 
                 if (ERROR_SUCCESS != status)
                     perror2(status, "ConnectExisting");
@@ -621,27 +629,27 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 continue;
 
             default:
-                LogWarning("Invalid pipe state %d\n", g_Pipes[clientIndex].ConnectionState);
+                LogWarning("Invalid pipe state %d\n", client->ConnectionState);
                 continue;
             }
         }
 
         // The pipe state determines which operation to do next.
-        switch (g_Pipes[clientIndex].ConnectionState)
+        switch (client->ConnectionState)
         {
         case STATE_RECEIVING_PARAMETERS:
             LogVerbose("STATE_RECEIVING_PARAMETERS (immediate)");
 
             success = ReadFile(
-                g_Pipes[clientIndex].Pipe,
-                &g_Pipes[clientIndex].ConnectParams,
-                sizeof(g_Pipes[clientIndex].ConnectParams),
+                client->Pipe,
+                &client->ConnectParams,
+                sizeof(client->ConnectParams),
                 &cbRead,
-                &g_Pipes[clientIndex].AsyncState);
+                &client->AsyncState);
 
             // The read operation completed successfully.
 
-            if (success && sizeof(g_Pipes[clientIndex].ConnectParams) == cbRead)
+            if (success && sizeof(client->ConnectParams) == cbRead)
             {
                 // g_Events[clientIndex] is in the signaled state here, so we must reset it before sending anything to the daemon.
                 // If the daemon allows the execution then it will be signaled in ProceedWithExecution() later,
@@ -651,11 +659,11 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 // Change the pipe state before calling SendParametersToDaemon() because another thread may call
                 // ProceedWithExecution() even before the current thread returns from SendParametersToDaemon().
                 // ProceedWithExecution() checks the pipe state to be STATE_WAITING_FOR_DAEMON_DECISION.
-                g_Pipes[clientIndex].PendingIo = FALSE;
-                g_Pipes[clientIndex].ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
+                client->PendingIo = FALSE;
+                client->ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
 
                 LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %S, %S\n",
-                    g_Pipes[clientIndex].ConnectParams.service_name, g_Pipes[clientIndex].ConnectParams.target_domain);
+                         client->ConnectParams.service_name, client->ConnectParams.target_domain);
 
                 status = SendParametersToDaemon(clientIndex);
                 if (ERROR_SUCCESS != status)
@@ -674,7 +682,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (!success && (ERROR_IO_PENDING == status))
             {
                 LogDebug("STATE_RECEIVING_PARAMETERS: Read is pending\n");
-                g_Pipes[clientIndex].PendingIo = TRUE;
+                client->PendingIo = TRUE;
                 continue;
             }
 
@@ -684,19 +692,19 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             break;
 
         case STATE_WAITING_FOR_DAEMON_DECISION:
-            if (!g_Pipes[clientIndex].Vchan)
+            if (!client->Vchan)
             {
                 LogInfo("Service request '%S' (request_id '%S') denied by daemon, disconnecting client-vm\n",
-                    g_Pipes[clientIndex].ConnectParams.service_name, g_Pipes[clientIndex].ConnectParams.request_id.ident);
+                        client->ConnectParams.service_name, client->ConnectParams.request_id.ident);
                 DisconnectAndReconnect(clientIndex);
                 continue;
             }
             else
             {
                 LogDebug("Service request '%S' (request_id '%S') allowed by daemon, sending IO handles",
-                    g_Pipes[clientIndex].ConnectParams.service_name, g_Pipes[clientIndex].ConnectParams.request_id.ident);
+                         client->ConnectParams.service_name, client->ConnectParams.request_id.ident);
                 // The pipe in this state should never have PendingIO flag set.
-                g_Pipes[clientIndex].ConnectionState = STATE_SENDING_IO_HANDLES;
+                client->ConnectionState = STATE_SENDING_IO_HANDLES;
                 // passthrough
             }
 
@@ -706,7 +714,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             cbToWrite = IO_HANDLES_SIZE;
 
             status = CreateClientPipes(
-                &g_Pipes[clientIndex].ClientInfo,
+                &client->ClientInfo,
                 &localHandles.StdinPipe,
                 &localHandles.StdoutPipe,
                 &localHandles.StderrPipe);
@@ -721,8 +729,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (!DuplicateHandle(
                 GetCurrentProcess(),
                 localHandles.StdinPipe,
-                g_Pipes[clientIndex].ClientProcess,
-                &g_Pipes[clientIndex].RemoteHandles.StdinPipe,
+                client->ClientProcess,
+                &client->RemoteHandles.StdinPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
@@ -737,8 +745,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (!DuplicateHandle(
                 GetCurrentProcess(),
                 localHandles.StdoutPipe,
-                g_Pipes[clientIndex].ClientProcess,
-                &g_Pipes[clientIndex].RemoteHandles.StdoutPipe,
+                client->ClientProcess,
+                &client->RemoteHandles.StdoutPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
@@ -752,8 +760,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (!DuplicateHandle(
                 GetCurrentProcess(),
                 localHandles.StderrPipe,
-                g_Pipes[clientIndex].ClientProcess,
-                &g_Pipes[clientIndex].RemoteHandles.StderrPipe,
+                client->ClientProcess,
+                &client->RemoteHandles.StderrPipe,
                 0,
                 TRUE,
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
@@ -764,11 +772,11 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             }
 
             success = WriteFile(
-                g_Pipes[clientIndex].Pipe,
-                &g_Pipes[clientIndex].RemoteHandles,
+                client->Pipe,
+                &client->RemoteHandles,
                 IO_HANDLES_SIZE,
                 &cbRet,
-                &g_Pipes[clientIndex].AsyncState);
+                &client->AsyncState);
 
             if (!success || IO_HANDLES_SIZE != cbRet)
             {
@@ -778,7 +786,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 if ((ERROR_IO_PENDING == status) && !success)
                 {
                     LogDebug("STATE_SENDING_IO_HANDLES: Write is pending\n");
-                    g_Pipes[clientIndex].PendingIo = TRUE;
+                    client->PendingIo = TRUE;
                     continue;
                 }
 
@@ -791,19 +799,19 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             // The write operation completed successfully.
             // g_hEvents[i] is in the signaled state here, but the upcoming ReadFile will change its state accordingly.
             LogDebug("STATE_SENDING_IO_HANDLES: IO handles have been sent, waiting for the process handle\n");
-            g_Pipes[clientIndex].PendingIo = FALSE;
-            g_Pipes[clientIndex].ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
+            client->PendingIo = FALSE;
+            client->ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
             // passthrough
 
         case STATE_RECEIVING_PROCESS_HANDLE:
             LogVerbose("STATE_RECEIVING_PROCESS_HANDLE (immediate)");
 
             success = ReadFile(
-                g_Pipes[clientIndex].Pipe,
-                &g_Pipes[clientIndex].CreateProcessResponse,
+                client->Pipe,
+                &client->CreateProcessResponse,
                 sizeof(CREATE_PROCESS_RESPONSE),
                 &cbRead,
-                &g_Pipes[clientIndex].AsyncState);
+                &client->AsyncState);
 
             // The read operation completed successfully.
 
@@ -812,11 +820,11 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 LogDebug("STATE_RECEIVING_PROCESS_HANDLE: Received the create process response\n");
 
                 status = ConnectExisting(
-                    g_Pipes[clientIndex].Vchan,
-                    g_Pipes[clientIndex].ClientProcess,
-                    &g_Pipes[clientIndex].ClientInfo,
-                    &g_Pipes[clientIndex].ConnectParams,
-                    &g_Pipes[clientIndex].CreateProcessResponse);
+                    client->Vchan,
+                    client->ClientProcess,
+                    &client->ClientInfo,
+                    &client->ConnectParams,
+                    &client->CreateProcessResponse);
 
                 if (ERROR_SUCCESS != status)
                     perror2(status, "ConnectExisting");
@@ -831,7 +839,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (!success && (ERROR_IO_PENDING == status))
             {
                 LogDebug("STATE_RECEIVING_PROCESS_HANDLE: Read is pending\n");
-                g_Pipes[clientIndex].PendingIo = TRUE;
+                client->PendingIo = TRUE;
                 continue;
             }
 
@@ -841,7 +849,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             break;
 
         default:
-            LogWarning("Invalid pipe state %d", g_Pipes[clientIndex].ConnectionState);
+            LogWarning("Invalid pipe state %d", client->ConnectionState);
             return ERROR_INVALID_PARAMETER;
         }
     }

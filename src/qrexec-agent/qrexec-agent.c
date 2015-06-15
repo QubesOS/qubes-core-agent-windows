@@ -80,7 +80,7 @@ static ULONG CreateAsyncPipe(OUT HANDLE *readPipe, OUT HANDLE *writePipe, IN SEC
     return ERROR_SUCCESS;
 }
 
-static ULONG InitReadPipe(OUT PIPE_DATA *pipeData, OUT HANDLE *writePipe, IN PIPE_TYPE pipeType)
+static ULONG InitReadPipe(IN OUT PIPE_DATA *pipeData, OUT HANDLE *writePipe, IN PIPE_TYPE pipeType)
 {
     SECURITY_ATTRIBUTES sa = { 0 };
     ULONG status;
@@ -1388,70 +1388,7 @@ static ULONG HandleJustExec(IN const struct msg_header *header)
 
     return ERROR_SUCCESS;
 }
-/*
-// This will return error only if vchan fails.
-// receive input data from daemon and pipe it to client
-static ULONG HandleInput(IN ULONG clientId, IN int cbInput)
-{
-char *input;
-CLIENT_INFO *clientInfo;
-DWORD cbWritten;
 
-LogVerbose("client %d, input size %d", clientId, cbInput);
-// If clientInfo is NULL after this it means we couldn't find a specified client.
-// Read and discard any data in the channel in this case.
-clientInfo = FindClientById(clientId);
-
-if (cbInput == 0)
-{
-if (clientInfo)
-{
-CloseHandle(clientInfo->WriteStdinPipe);
-clientInfo->StdinPipeClosed = TRUE;
-}
-return ERROR_SUCCESS;
-}
-
-input = malloc(cbInput + 1);
-if (!input)
-return ERROR_NOT_ENOUGH_MEMORY;
-
-input[cbInput] = 0;
-
-if (!VchanReceiveBuffer(input, cbInput))
-{
-free(input);
-return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
-}
-
-if (clientInfo && !clientInfo->StdinPipeClosed)
-{
-if (!WriteFile(clientInfo->WriteStdinPipe, input, cbInput, &cbWritten, NULL))
-perror("WriteFile");
-}
-
-free(input);
-
-LogVerbose("success");
-
-return ERROR_SUCCESS;
-}
-
-static void SetReadingDisabled(IN ULONG clientId, IN BOOLEAN blockOutput)
-{
-CLIENT_INFO *clientInfo;
-
-LogVerbose("client %d, block %d", clientId, blockOutput);
-
-clientInfo = FindClientById(clientId);
-if (!clientInfo)
-return;
-
-clientInfo->ReadingDisabled = blockOutput;
-
-LogVerbose("success");
-}
-*/
 ULONG HandleDaemonHello(struct msg_header *header)
 {
     struct peer_info info;
@@ -1886,11 +1823,10 @@ ULONG WatchForEvents(void)
     while (TRUE)
     {
         LogVerbose("loop start");
-        eventIndex = 0;
 
         // Order matters.
-        g_WatchedEvents[eventIndex++] = g_StopServiceEvent;
-        g_WatchedEvents[eventIndex++] = g_AddExistingClientEvent;
+        g_WatchedEvents[0] = g_StopServiceEvent;
+        g_WatchedEvents[1] = g_AddExistingClientEvent;
 
         g_HandlesInfo[0].Type = g_HandlesInfo[1].Type = HTYPE_INVALID;
 
@@ -1903,39 +1839,41 @@ ULONG WatchForEvents(void)
             break;
         }
 
-        g_HandlesInfo[eventIndex].ClientIndex = -1;
-        g_HandlesInfo[eventIndex].Type = HTYPE_CONTROL_VCHAN;
-        g_WatchedEvents[eventIndex++] = vchanEvent;
+        g_HandlesInfo[2].ClientIndex = -1;
+        g_HandlesInfo[2].Type = HTYPE_CONTROL_VCHAN;
+        g_WatchedEvents[2] = vchanEvent;
 
         EnterCriticalSection(&g_ClientsCriticalSection);
 
+        eventIndex = 3;
         // prepare child events
         for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
         {
+            clientInfo = &g_Clients[clientIndex];
             if (g_Clients[clientIndex].ClientIsReady)
             {
                 // process exit event
-                if (!g_Clients[clientIndex].ChildExited)
+                if (!clientInfo->ChildExited)
                 {
                     g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
                     g_HandlesInfo[eventIndex].Type = HTYPE_PROCESS;
-                    g_WatchedEvents[eventIndex++] = g_Clients[clientIndex].ChildProcess;
+                    g_WatchedEvents[eventIndex++] = clientInfo->ChildProcess;
                 }
 
                 // event for associated data vchan peer
-                if (g_Clients[clientIndex].Vchan && !g_Clients[clientIndex].StdinPipeClosed)
+                if (clientInfo->Vchan && !clientInfo->StdinPipeClosed)
                 {
                     g_HandlesInfo[eventIndex].Type = HTYPE_DATA_VCHAN;
                     g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
-                    g_WatchedEvents[eventIndex++] = libvchan_fd_for_select(g_Clients[clientIndex].Vchan);
+                    g_WatchedEvents[eventIndex++] = libvchan_fd_for_select(clientInfo->Vchan);
                 }
 
                 // Skip those clients which have received MSG_XOFF.
-                if (!g_Clients[clientIndex].ReadingDisabled)
+                if (!clientInfo->ReadingDisabled)
                 {
                     // process output from child
-                    eventIndex += FillAsyncIoData(eventIndex, clientIndex, HTYPE_STDOUT, &g_Clients[clientIndex].StdoutData);
-                    eventIndex += FillAsyncIoData(eventIndex, clientIndex, HTYPE_STDERR, &g_Clients[clientIndex].StderrData);
+                    eventIndex += FillAsyncIoData(eventIndex, clientIndex, HTYPE_STDOUT, &clientInfo->StdoutData);
+                    eventIndex += FillAsyncIoData(eventIndex, clientIndex, HTYPE_STDERR, &clientInfo->StderrData);
                 }
             }
         }
@@ -1978,7 +1916,7 @@ ULONG WatchForEvents(void)
             {
                 clientInfo = &g_Clients[clientIndex];
 
-                if (!g_Clients[clientIndex].ClientIsReady)
+                if (!clientInfo->ClientIsReady)
                     continue;
 
                 if (!GetExitCodeProcess(clientInfo->ChildProcess, &exitCode))
