@@ -5,10 +5,10 @@
 
 #define BUILD_AS_SERVICE
 
-#define SERVICE_NAME                    TEXT("qrexec_agent")
+#define SERVICE_NAME                    L"QrexecAgent"
 #define DEFAULT_USER_PASSWORD_UNICODE   L"userpass"
 
-#define	TRIGGER_PIPE_NAME               TEXT("\\\\.\\pipe\\qrexec_trigger")
+#define	TRIGGER_PIPE_NAME               L"\\\\.\\pipe\\qrexec_trigger"
 
 #define READ_BUFFER_SIZE 65536
 

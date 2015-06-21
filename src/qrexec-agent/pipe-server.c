@@ -1,6 +1,5 @@
 #include "pipe-server.h"
 
-extern HANDLE g_StopServiceEvent;
 extern libvchan_t *g_DaemonVchan;
 
 CRITICAL_SECTION g_PipesCriticalSection;
@@ -409,6 +408,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
     SECURITY_DESCRIPTOR *pipeSecurityDescriptor;
     ACL *acl;
     PIPE_INSTANCE *client;
+    HANDLE stopEvent = param;
 
     LogDebug("start");
     ZeroMemory(&g_Pipes, sizeof(g_Pipes));
@@ -487,7 +487,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
     LocalFree(acl);
 
     // Last one will signal the service shutdown.
-    g_Events[TRIGGER_PIPE_INSTANCES] = g_StopServiceEvent;
+    g_Events[TRIGGER_PIPE_INSTANCES] = stopEvent;
 
     LogVerbose("event loop");
 

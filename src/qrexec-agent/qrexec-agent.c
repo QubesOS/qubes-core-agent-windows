@@ -1,6 +1,8 @@
 #include "qrexec-agent.h"
 #include <Shlwapi.h>
+
 #include <utf8-conv.h>
+#include <service.h>
 
 libvchan_t *g_DaemonVchan;
 HANDLE g_AddExistingClientEvent;
@@ -13,11 +15,6 @@ ULONG64	g_PipeId = 0;
 
 CRITICAL_SECTION g_ClientsCriticalSection;
 CRITICAL_SECTION g_DaemonCriticalSection;
-
-extern HANDLE g_StopServiceEvent;
-#ifndef BUILD_AS_SERVICE
-HANDLE g_CleanupFinishedEvent;
-#endif
 
 // from advertise_tools.c
 ULONG AdvertiseTools(void);
@@ -1796,7 +1793,7 @@ ULONG FillAsyncIoData(IN ULONG eventIndex, IN ULONG clientIndex, IN HANDLE_TYPE 
 
 // main event loop for children, daemon and clients
 // FIXME: this function is way too long
-ULONG WatchForEvents(void)
+ULONG WatchForEvents(HANDLE stopEvent)
 {
     ULONG eventIndex, clientIndex;
     DWORD signaledEvent;
@@ -1824,8 +1821,7 @@ ULONG WatchForEvents(void)
     {
         LogVerbose("loop start");
 
-        // Order matters.
-        g_WatchedEvents[0] = g_StopServiceEvent;
+        g_WatchedEvents[0] = stopEvent;
         g_WatchedEvents[1] = g_AddExistingClientEvent;
 
         g_HandlesInfo[0].Type = g_HandlesInfo[1].Type = HTYPE_INVALID;
@@ -1945,7 +1941,7 @@ ULONG WatchForEvents(void)
 
         LogVerbose("event %d", signaledEvent);
 
-        if (0 == signaledEvent) // stop service event
+        if (0 == signaledEvent) // stop event
         {
             LogDebug("stopping");
             break;
@@ -2236,8 +2232,9 @@ ULONG WINAPI ServiceExecutionThread(void *param)
 {
     ULONG status;
     HANDLE triggerEventsThread;
+    PSERVICE_WORKER_CONTEXT ctx = param;
 
-    LogInfo("Service started\n");
+    LogInfo("Service started");
 
     // Auto reset, initial state is not signaled
     g_AddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -2246,7 +2243,7 @@ ULONG WINAPI ServiceExecutionThread(void *param)
         return perror("CreateEvent");
     }
 
-    triggerEventsThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) WatchForTriggerEvents, NULL, 0, NULL);
+    triggerEventsThread = CreateThread(NULL, 0, WatchForTriggerEvents, ctx->StopEvent, 0, NULL);
     if (!triggerEventsThread)
     {
         status = GetLastError();
@@ -2256,17 +2253,9 @@ ULONG WINAPI ServiceExecutionThread(void *param)
 
     LogVerbose("entering loop");
 
-    while (TRUE)
-    {
-        status = WatchForEvents();
-        if (ERROR_SUCCESS != status)
-            perror2(status, "WatchForEvents");
-
-        if (!WaitForSingleObject(g_StopServiceEvent, 0))
-            break;
-
-        Sleep(100);
-    }
+    status = WatchForEvents(ctx->StopEvent);
+    if (ERROR_SUCCESS != status)
+        perror2(status, "WatchForEvents");
 
     LogDebug("Waiting for the trigger thread to exit");
     WaitForSingleObject(triggerEventsThread, INFINITE);
@@ -2283,32 +2272,6 @@ ULONG WINAPI ServiceExecutionThread(void *param)
 
 #ifdef BUILD_AS_SERVICE
 
-ULONG Init(OUT HANDLE *serviceThread)
-{
-    ULONG clientIndex;
-
-    LogVerbose("start");
-
-    *serviceThread = INVALID_HANDLE_VALUE;
-
-    InitializeCriticalSection(&g_ClientsCriticalSection);
-    InitializeCriticalSection(&g_DaemonCriticalSection);
-    InitializeCriticalSection(&g_PipesCriticalSection);
-
-    for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
-        g_Clients[clientIndex].Vchan = NULL;
-
-    *serviceThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) ServiceExecutionThread, NULL, 0, NULL);
-    if (*serviceThread == NULL)
-    {
-        return perror("CreateThread");
-    }
-
-    LogVerbose("success");
-
-    return ERROR_SUCCESS;
-}
-
 // This is the entry point for a service module (BUILD_AS_SERVICE defined).
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
@@ -2320,19 +2283,20 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     BOOL stopParsing;
     WCHAR command;
     WCHAR *accountName = NULL;
-
-    SERVICE_TABLE_ENTRY	serviceTable[] = {
-        { SERVICE_NAME, (LPSERVICE_MAIN_FUNCTION) ServiceMain },
-        { NULL, NULL }
-    };
+    DWORD clientIndex;
 
     LogVerbose("start");
 
+    InitializeCriticalSection(&g_ClientsCriticalSection);
+    InitializeCriticalSection(&g_DaemonCriticalSection);
+    InitializeCriticalSection(&g_PipesCriticalSection);
+
+    for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
+        g_Clients[clientIndex].Vchan = NULL;
+
     cchUserName = RTL_NUMBER_OF(userName);
     if (!GetUserName(userName, &cchUserName))
-    {
         return perror("GetUserName");
-    }
 
     if ((1 == argc) && wcscmp(userName, L"SYSTEM"))
     {
@@ -2342,20 +2306,23 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (1 == argc)
     {
-        LogInfo("Running as SYSTEM\n");
+        LogInfo("Running as SYSTEM");
 
-        status = ERROR_SUCCESS;
-        if (!StartServiceCtrlDispatcher(serviceTable))
-        {
-            return perror("StartServiceCtrlDispatcher");
-        }
+        status = SvcMainLoop(
+            SERVICE_NAME,
+            0,
+            ServiceExecutionThread,
+            NULL,
+            NULL,
+            NULL);
+
+        return status;
     }
 
+    // handle (un)install command line
     ZeroMemory(fullPath, sizeof(fullPath));
     if (!GetModuleFileName(NULL, fullPath, RTL_NUMBER_OF(fullPath) - 1))
-    {
         return perror("GetModuleFileName");
-    }
 
     status = ERROR_SUCCESS;
     stopParsing = FALSE;
@@ -2406,11 +2373,11 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     switch (command)
     {
     case L'i':
-        status = InstallService(fullPath, SERVICE_NAME);
+        status = SvcCreate(SERVICE_NAME, NULL, fullPath);
         break;
 
     case L'u':
-        status = UninstallService(SERVICE_NAME);
+        status = SvcDelete(SERVICE_NAME);
         break;
     default:
         Usage();
@@ -2429,50 +2396,27 @@ ULONG Init(HANDLE *serviceThread)
     return ERROR_SUCCESS;
 }
 
-BOOL WINAPI CtrlHandler(IN DWORD ctrlType)
-{
-    LogInfo("Got shutdown signal\n");
-
-    SetEvent(g_StopServiceEvent);
-
-    WaitForSingleObject(g_CleanupFinishedEvent, 2000);
-
-    CloseHandle(g_StopServiceEvent);
-    CloseHandle(g_CleanupFinishedEvent);
-
-    LogInfo("Shutdown complete\n");
-    ExitProcess(0);
-    return TRUE;
-}
-
 // This is the entry point for a console application (BUILD_AS_SERVICE not defined).
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
     ULONG clientIndex;
+    SERVICE_WORKER_CONTEXT ctx;
 
-    wprintf(L"\nqrexec agent console application\n\n");
-
-    // Manual reset, initial state is not signaled
-    g_StopServiceEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_StopServiceEvent)
-        return perror("CreateEvent");
+    wprintf(L"qrexec agent console application\n\n");
 
     // Manual reset, initial state is not signaled
-    g_CleanupFinishedEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!g_CleanupFinishedEvent)
-        return perror("CreateEvent");
+    ctx.StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!ctx.StopEvent)
+        return perror("Create stop event");
 
     InitializeCriticalSection(&g_ClientsCriticalSection);
     InitializeCriticalSection(&g_DaemonCriticalSection);
     InitializeCriticalSection(&g_PipesCriticalSection);
 
-    SetConsoleCtrlHandler((PHANDLER_ROUTINE) CtrlHandler, TRUE);
-
     for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
         g_Clients[clientIndex].Vchan = NULL;
 
-    ServiceExecutionThread(NULL);
-    SetEvent(g_CleanupFinishedEvent);
+    ServiceExecutionThread(&ctx);
 
     LogVerbose("exiting");
 

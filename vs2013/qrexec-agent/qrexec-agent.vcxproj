@@ -154,13 +154,11 @@
     <ClCompile Include="..\..\src\qrexec-agent\advertise-tools.c" />
     <ClCompile Include="..\..\src\qrexec-agent\pipe-server.c" />
     <ClCompile Include="..\..\src\qrexec-agent\qrexec-agent.c" />
-    <ClCompile Include="..\..\src\qrexec-agent\service.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\qrexec-agent\common.h" />
     <ClInclude Include="..\..\src\qrexec-agent\pipe-server.h" />
     <ClInclude Include="..\..\src\qrexec-agent\qrexec-agent.h" />
-    <ClInclude Include="..\..\src\qrexec-agent\service.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\qrexec-agent\version.rc" />

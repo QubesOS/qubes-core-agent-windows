@@ -24,9 +24,6 @@
     <ClCompile Include="..\..\src\qrexec-agent\qrexec-agent.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\qrexec-agent\service.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\qrexec-agent\common.h">
@@ -36,9 +33,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\qrexec-agent\qrexec-agent.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\src\qrexec-agent\service.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
