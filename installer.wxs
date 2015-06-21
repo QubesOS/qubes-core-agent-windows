@@ -36,10 +36,14 @@ Description='Installation directory'
 DisplayName='Installation directory'
 />
 
+<Substitution Table='Directory' Column='Directory_Parent' Row='BinDir' Value='[=ProductFolder]'/>
+<Substitution Table='Directory' Column='Directory_Parent' Row='QubesRPCDir' Value='[=ProductFolder]'/>
+<Substitution Table='Directory' Column='Directory_Parent' Row='QubesRPCServicesDir' Value='[=ProductFolder]'/>
+
 <Directory Id='TARGETDIR' Name='SourceDir'>
     <Directory Id='$(var.PFILESDIR)'>
         <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
-            <Directory Id='QubesProgramFilesDir' Name='Qubes'>
+            <Directory Id='QubesProgramFilesDir' Name='Qubes Tools'>
                 <Directory Id='BinDir' Name='bin'>
                     <Component Id='QrexecAgent' Guid='{0e26617f-e5d9-4943-a08e-cf29013e9d72}'>
                         <File Id='qrexec_agent.exe' Source='bin\$(env.DDK_ARCH)\qrexec-agent.exe' KeyPath='yes'/>
