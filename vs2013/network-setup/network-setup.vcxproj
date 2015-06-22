@@ -152,7 +152,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\src\network-setup\qubes-network-setup.c" />
-    <ClCompile Include="..\..\src\network-setup\service.c" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\network-setup\version.rc" />

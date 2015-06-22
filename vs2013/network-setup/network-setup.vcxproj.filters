@@ -18,9 +18,6 @@
     <ClCompile Include="..\..\src\network-setup\qubes-network-setup.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\network-setup\service.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\network-setup\version.rc">

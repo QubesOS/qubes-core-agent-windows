@@ -8,9 +8,9 @@
 
 #include <qubesdb-client.h>
 #include <log.h>
+#include <service.h>
 
-// from service.c
-DWORD ServiceStartup(void);
+#define SERVICE_NAME L"QubesNetworkSetup"
 
 // FIXME: new pvdrivers
 #define XEN_ADAPTER_DESCRIPTION "Xen Net Device Driver"
@@ -170,7 +170,7 @@ cleanup:
     return status;
 }
 
-DWORD SetupNetwork(void)
+DWORD WINAPI SetupNetwork(PVOID param)
 {
     qdb_handle_t qdb = NULL;
     int interfaceIndex;
@@ -231,7 +231,7 @@ DWORD SetupNetwork(void)
         goto cleanup;
     }
 
-    status = 0;
+    status = ERROR_SUCCESS;
 
 cleanup:
     if (qubesIp)
@@ -251,10 +251,10 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 {
     if (argc >= 2 && 0 == wcscmp(argv[1], L"-service"))
     {
-        return ServiceStartup();
+        return SvcMainLoop(SERVICE_NAME, 0, SetupNetwork, NULL, NULL, NULL);
     }
     else
     {
-        return SetupNetwork();
+        return SetupNetwork(NULL);
     }
 }
