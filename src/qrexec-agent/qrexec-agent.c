@@ -2042,19 +2042,25 @@ ULONG WatchForEvents(HANDLE stopEvent)
                 break;
             }
 
-            if (!libvchan_is_open(dataVchan) || clientInfo->StdinPipeClosed)
+            if (!libvchan_is_open(dataVchan))
             {
-                LogWarning("HTYPE_DATA_VCHAN: vchan %p is closed", dataVchan);
+                LogWarning("HTYPE_DATA_VCHAN: vchan %p is closed, removing client %p", dataVchan, clientInfo);
+                RemoveClientNoLocks(clientInfo);
                 LeaveCriticalSection(&g_ClientsCriticalSection);
                 break;
             }
 
-            // libvchan_wait can block if there is no data available
-            if (VchanGetReadBufferSize(dataVchan) > 0)
+            if (clientInfo->StdinPipeClosed)
+            {
+                LogWarning("HTYPE_DATA_VCHAN: stdin for vchan %p, client %p is closed", dataVchan, clientInfo);
+                LeaveCriticalSection(&g_ClientsCriticalSection);
+                break;
+            }
+
+            while (dataVchan && VchanGetReadBufferSize(dataVchan) > 0)
             {
                 // handle data from vchan peer
 
-                // don't handle more than one message at once because vchan may be invalidated in the meantime
                 status = HandleDataMessage(dataVchan);
                 if (ERROR_SUCCESS != status)
                 {
@@ -2063,10 +2069,8 @@ ULONG WatchForEvents(HANDLE stopEvent)
                     LeaveCriticalSection(&g_ClientsCriticalSection);
                     break;
                 }
-            }
-            else
-            {
-                LogDebug("HTYPE_DATA_VCHAN event: no data");
+                // recheck vchan in case the client was disconnected
+                dataVchan = clientInfo->Vchan;
             }
 
             // if there is pending output from children, pass it to data vchan
