@@ -141,7 +141,7 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex)
     ULONG status;
     PIPE_INSTANCE *client = &(g_Pipes[clientIndex]);
 
-    LogDebug("Disconnecting client %lu, state %d\n", clientIndex, client->ConnectionState);
+    LogDebug("Disconnecting pipe %lu (vchan %p), state %d\n", clientIndex, client->Vchan, client->ConnectionState);
 
     if (client->ClientProcess)
     {
@@ -168,6 +168,7 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex)
     ZeroMemory(&client->RemoteHandles, sizeof(client->RemoteHandles));
     ZeroMemory(&client->ConnectParams, sizeof(client->ConnectParams));
     libvchan_close(client->Vchan);
+    LogDebug("closing vchan %p", client->Vchan);
     client->Vchan = NULL;
 
     // Disconnect the pipe instance.
@@ -230,7 +231,7 @@ static ULONG ConnectExisting(
 {
     ULONG status;
 
-    LogVerbose("vchan %p, ident '%S', vm '%S'", vchan, connectParams->service_name, connectParams->target_domain);
+    LogVerbose("vchan %p, ident '%S', vm '%S', client %p", vchan, connectParams->service_name, connectParams->target_domain, clientInfo);
 
     if (!clientInfo || !connectParams || !cpr)
         return ERROR_INVALID_PARAMETER;
@@ -289,7 +290,7 @@ ULONG SendParametersToDaemon(IN ULONG clientIndex)
     struct trigger_service_params connectParams;
     PIPE_INSTANCE *client = &(g_Pipes[clientIndex]);
 
-    LogVerbose("client index %d", clientIndex);
+    LogVerbose("pipe index %d", clientIndex);
 
     if (clientIndex >= TRIGGER_PIPE_INSTANCES)
         return ERROR_INVALID_PARAMETER;
@@ -338,7 +339,7 @@ ULONG FindClientByIdent(IN const char *ident, OUT ULONG *clientIndex)
         if (!strncmp(g_Pipes[i].ConnectParams.request_id.ident, ident, sizeof(g_Pipes[i].ConnectParams.request_id.ident)))
         {
             *clientIndex = i;
-            LogVerbose("found index %d", i);
+            LogVerbose("found pipe index %d", i);
             return ERROR_SUCCESS;
         }
     }
@@ -384,6 +385,7 @@ ULONG ProceedWithExecution(
     }
 
     g_Pipes[clientIndex].Vchan = vchan;
+    LogVerbose("pipe %d: vchan %p", clientIndex, vchan);
 
     // Signal that we're allowed to send io handles to qrexec_client_vm.
     SetEvent(g_Events[clientIndex]);
@@ -514,7 +516,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
         if (TRIGGER_PIPE_INSTANCES == clientIndex)
         {
             // Service is shuttiung down, close the pipe handles.
-            LogInfo("Shutting down\n");
+            LogInfo("Shutting down");
             ClosePipeHandles();
 
             return ERROR_SUCCESS;
@@ -543,7 +545,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             {
                 // Pending connect operation
             case STATE_WAITING_FOR_CLIENT:
-                LogVerbose("STATE_WAITING_FOR_CLIENT");
+                LogVerbose("%d STATE_WAITING_FOR_CLIENT, vchan %p", clientIndex, client->Vchan);
 
                 if (!GetNamedPipeClientProcessId(client->Pipe, &clientProcessId))
                 {
@@ -552,7 +554,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     continue;
                 }
 
-                LogDebug("STATE_WAITING_FOR_CLIENT (pending): Accepted connection from the process %d\n", clientProcessId);
+                LogDebug("%d STATE_WAITING_FOR_CLIENT (pending): Accepted connection from process %d", clientIndex, clientProcessId);
 
                 client->ClientProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, clientProcessId);
                 if (!client->ClientProcess)
@@ -567,7 +569,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 // Make sure the incoming message has right size
             case STATE_RECEIVING_PARAMETERS:
-                LogVerbose("STATE_RECEIVING_PARAMETERS");
+                LogVerbose("%d STATE_RECEIVING_PARAMETERS, vchan %p", clientIndex, client->Vchan);
 
                 if (sizeof(client->ConnectParams) != cbRet)
                 {
@@ -576,7 +578,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     continue;
                 }
 
-                LogDebug("STATE_RECEIVING_PARAMETERS (pending): Received the parameters, sending them to the daemon\n");
+                LogDebug("%d STATE_RECEIVING_PARAMETERS (pending): Received parameters, sending them to the daemon", clientIndex);
                 status = SendParametersToDaemon(clientIndex);
                 if (ERROR_SUCCESS != status)
                 {
@@ -589,7 +591,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 // Pending write operation
             case STATE_SENDING_IO_HANDLES:
-                LogVerbose("STATE_SENDING_IO_HANDLES");
+                LogVerbose("%d STATE_SENDING_IO_HANDLES, vchan %p", clientIndex, client->Vchan);
 
                 if (IO_HANDLES_SIZE != cbRet)
                 {
@@ -598,13 +600,13 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     continue;
                 }
 
-                LogDebug("STATE_SENDING_IO_HANDLES (pending): IO handles have been sent, waiting for the process handle\n");
+                LogDebug("%d STATE_SENDING_IO_HANDLES (pending): IO handles have been sent, waiting for the process handle", clientIndex);
                 client->ConnectionState = STATE_RECEIVING_PROCESS_HANDLE;
                 continue;
 
                 // Pending read operation
             case STATE_RECEIVING_PROCESS_HANDLE:
-                LogVerbose("STATE_RECEIVING_PROCESS_HANDLE");
+                LogVerbose("%d STATE_RECEIVING_PROCESS_HANDLE, vchan %p", clientIndex, client->Vchan);
 
                 if (sizeof(CREATE_PROCESS_RESPONSE) != cbRet)
                 {
@@ -613,7 +615,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     continue;
                 }
 
-                LogDebug("STATE_RECEIVING_PROCESS_HANDLE (pending): Received the create process response\n");
+                LogDebug("%d STATE_RECEIVING_PROCESS_HANDLE (pending): Received the create process response", clientIndex);
 
                 status = ConnectExisting(
                     client->Vchan,
@@ -638,7 +640,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
         switch (client->ConnectionState)
         {
         case STATE_RECEIVING_PARAMETERS:
-            LogVerbose("STATE_RECEIVING_PARAMETERS (immediate)");
+            LogVerbose("%d STATE_RECEIVING_PARAMETERS (immediate), vchan %p", clientIndex, client->Vchan);
 
             success = ReadFile(
                 client->Pipe,
@@ -662,7 +664,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 client->PendingIo = FALSE;
                 client->ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
 
-                LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %S, %S\n",
+                LogDebug("STATE_RECEIVING_PARAMETERS: Immediately got the params %S, %S",
                          client->ConnectParams.service_name, client->ConnectParams.target_domain);
 
                 status = SendParametersToDaemon(clientIndex);
@@ -681,7 +683,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             status = GetLastError();
             if (!success && (ERROR_IO_PENDING == status))
             {
-                LogDebug("STATE_RECEIVING_PARAMETERS: Read is pending\n");
+                LogDebug("STATE_RECEIVING_PARAMETERS: Read is pending");
                 client->PendingIo = TRUE;
                 continue;
             }
@@ -692,9 +694,10 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             break;
 
         case STATE_WAITING_FOR_DAEMON_DECISION:
+            LogVerbose("%d STATE_WAITING_FOR_DAEMON_DECISION (immediate), vchan %p", clientIndex, client->Vchan);
             if (!client->Vchan)
             {
-                LogInfo("Service request '%S' (request_id '%S') denied by daemon, disconnecting client-vm\n",
+                LogInfo("Service request '%S' (request_id '%S') denied by daemon, disconnecting client-vm",
                         client->ConnectParams.service_name, client->ConnectParams.request_id.ident);
                 DisconnectAndReconnect(clientIndex);
                 continue;
@@ -709,7 +712,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             }
 
         case STATE_SENDING_IO_HANDLES:
-            LogVerbose("STATE_SENDING_IO_HANDLES (immediate)");
+            LogVerbose("%d STATE_SENDING_IO_HANDLES (immediate), vchan %p", clientIndex, client->Vchan);
 
             cbToWrite = IO_HANDLES_SIZE;
 
@@ -804,7 +807,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             // passthrough
 
         case STATE_RECEIVING_PROCESS_HANDLE:
-            LogVerbose("STATE_RECEIVING_PROCESS_HANDLE (immediate)");
+            LogVerbose("%d STATE_RECEIVING_PROCESS_HANDLE (immediate), vchan %p", clientIndex, client->Vchan);
 
             success = ReadFile(
                 client->Pipe,
@@ -838,7 +841,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             status = GetLastError();
             if (!success && (ERROR_IO_PENDING == status))
             {
-                LogDebug("STATE_RECEIVING_PROCESS_HANDLE: Read is pending\n");
+                LogDebug("STATE_RECEIVING_PROCESS_HANDLE: Read is pending");
                 client->PendingIo = TRUE;
                 continue;
             }

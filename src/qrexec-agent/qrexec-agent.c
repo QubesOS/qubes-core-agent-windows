@@ -125,7 +125,7 @@ ULONG SendMessageToVchan(
     int vchanFreeSpace;
     ULONG status = ERROR_SUCCESS;
 
-    LogDebug("vchan %p, msg type %d, data %p, size %d", vchan, messageType, data, cbData);
+    LogDebug("vchan %p, msg type 0x%x, data %p, size %d (%s)", vchan, messageType, data, cbData, what);
 
     // FIXME: this function is not only called for daemon communication
     EnterCriticalSection(&g_DaemonCriticalSection);
@@ -207,6 +207,7 @@ ULONG SendExitCode(IN const CLIENT_INFO *clientInfo, IN int exitCode)
 // (process creation failed etc).
 ULONG SendExitCodeVchan(IN libvchan_t *vchan, IN int exitCode)
 {
+    LogVerbose("vchan %p, code %d", vchan, exitCode);
     ULONG status = SendMessageToVchan(vchan, MSG_DATA_EXIT_CODE, &exitCode, sizeof(exitCode), NULL, L"exit code");
     if (ERROR_SUCCESS != status)
     {
@@ -242,7 +243,7 @@ static ULONG SendDataToPeer(IN CLIENT_INFO *clientInfo, IN OUT PIPE_DATA *data)
     libvchan_t *vchan = clientInfo->Vchan;
     ULONG status = ERROR_SUCCESS;
 
-    LogVerbose("client %p", clientInfo);
+    LogVerbose("client %p, vchan %p", clientInfo, clientInfo->Vchan);
 
     if (!data)
         return ERROR_INVALID_PARAMETER;
@@ -572,7 +573,7 @@ static ULONG ReserveClientIndex(IN libvchan_t *vchan, OUT ULONG *clientIndex)
 
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
-    LogVerbose("success, index = %u", *clientIndex);
+    LogDebug("success, index = %u for vchan %p", *clientIndex, vchan);
     return ERROR_SUCCESS;
 }
 
@@ -597,7 +598,7 @@ static ULONG ReleaseClientIndex(IN ULONG clientIndex)
 
 static ULONG AddFilledClientInfo(IN ULONG clientIndex, IN const CLIENT_INFO *clientInfo)
 {
-    LogVerbose("client index %d", clientIndex);
+    LogVerbose("client index %d, client %p, vchan %p", clientIndex, clientInfo, clientInfo->Vchan);
 
     if (!clientInfo || clientIndex >= MAX_CLIENTS)
         return ERROR_INVALID_PARAMETER;
@@ -744,7 +745,7 @@ ULONG AddExistingClient(IN CLIENT_INFO *clientInfo)
     ULONG clientIndex;
     ULONG status;
 
-    LogVerbose("client %p", clientInfo);
+    LogVerbose("client %p, vchan %p", clientInfo, clientInfo->Vchan);
 
     if (!clientInfo)
         return ERROR_INVALID_PARAMETER;
@@ -853,12 +854,12 @@ static ULONG HandleTerminatedClientNoLocks(IN OUT CLIENT_INFO *clientInfo)
 {
     ULONG status;
 
-    LogVerbose("client vchan %p", clientInfo->Vchan);
+    LogVerbose("client %p, vchan %p", clientInfo, clientInfo->Vchan);
 
     if (clientInfo->ChildExited && clientInfo->StdoutData.PipeClosed && clientInfo->StderrData.PipeClosed)
     {
         status = SendExitCode(clientInfo, clientInfo->ExitCode);
-        // guaranted that all data was already sent (above PipeClosed==TRUE)
+        // guaranteed that all data was already sent (above PipeClosed==TRUE)
         // so no worry about returning some data after exit code
         RemoveClientNoLocks(clientInfo);
         return status;
@@ -1115,7 +1116,9 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
         return ERROR_INVALID_FUNCTION;
     }
 
+    LogDebug("domain %u, port %u, cmdline '%S'", params->connect_domain, params->connect_port, params->cmdline);
     // this is a service connection
+
     if (params->connect_domain == 0) // target is dom0
     {
         // in this case dom0 side (qrexec-client) is the vchan server as usual
@@ -1147,14 +1150,14 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
             return ERROR_INVALID_FUNCTION;
         }
 
-        LogDebug("server vchan: %p, waiting for target agent (data client)", peerVchan);
+        LogDebug("server vchan: %p, waiting for remote peer (data client)", peerVchan);
         if (libvchan_wait(peerVchan) < 0)
         {
             LogError("libvchan_wait failed");
             libvchan_close(peerVchan);
             return ERROR_INVALID_FUNCTION;
         }
-        LogDebug("target agent (data client) connected");
+        LogDebug("remote peer (data client) connected");
         if (!SendHelloToVchan(peerVchan))
         {
             libvchan_close(peerVchan);
@@ -1610,10 +1613,16 @@ ULONG HandleStdin(IN const struct msg_header *header, IN CLIENT_INFO *clientInfo
     }
 
     // send to peer
-    if (clientInfo && !clientInfo->StdinPipeClosed)
+    LogDebug("writing stdin data to client %p (vchan %p)", clientInfo, clientInfo->Vchan);
+    if (clientInfo)
+    {
+        if (!clientInfo->StdinPipeClosed)
     {
         if (!WriteFile(clientInfo->WriteStdinPipe, buffer, header->len, &cbWritten, NULL))
-            perror("WriteFile");
+                perror("WriteFile(stdin data)");
+        }
+        else
+            LogDebug("stdin closed for client %p (vchan %p)", clientInfo, clientInfo->Vchan);
     }
 
     free(buffer);
@@ -1780,6 +1789,7 @@ ULONG FillAsyncIoData(IN ULONG eventIndex, IN ULONG clientIndex, IN HANDLE_TYPE 
     // when vchanWritePending==TRUE, SendDataToPeer already reset ReadInProgress and DataIsReady
     if (pipeData->ReadInProgress || pipeData->DataIsReady)
     {
+        LogVerbose("adding event %d: IO for client %p", eventIndex, &g_Clients[clientIndex]);
         g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
         g_HandlesInfo[eventIndex].Type = handleType;
         g_WatchedEvents[eventIndex] = pipeData->ReadState.hEvent;
@@ -1846,11 +1856,12 @@ ULONG WatchForEvents(HANDLE stopEvent)
         for (clientIndex = 0; clientIndex < MAX_CLIENTS; clientIndex++)
         {
             clientInfo = &g_Clients[clientIndex];
-            if (g_Clients[clientIndex].ClientIsReady)
+            if (clientInfo->ClientIsReady)
             {
                 // process exit event
                 if (!clientInfo->ChildExited)
                 {
+                    LogVerbose("adding event %d: process exit for client %p", eventIndex, clientInfo);
                     g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
                     g_HandlesInfo[eventIndex].Type = HTYPE_PROCESS;
                     g_WatchedEvents[eventIndex++] = clientInfo->ChildProcess;
@@ -1859,6 +1870,7 @@ ULONG WatchForEvents(HANDLE stopEvent)
                 // event for associated data vchan peer
                 if (clientInfo->Vchan && !clientInfo->StdinPipeClosed)
                 {
+                    LogVerbose("adding event %d: vchan %p for client %p", eventIndex, clientInfo->Vchan, clientInfo);
                     g_HandlesInfo[eventIndex].Type = HTYPE_DATA_VCHAN;
                     g_HandlesInfo[eventIndex].ClientIndex = clientIndex;
                     g_WatchedEvents[eventIndex++] = libvchan_fd_for_select(clientInfo->Vchan);
@@ -1878,6 +1890,22 @@ ULONG WatchForEvents(HANDLE stopEvent)
         LogVerbose("waiting for event (%d events registered)", eventIndex);
 
         signaledEvent = WaitForMultipleObjects(eventIndex, g_WatchedEvents, FALSE, INFINITE);
+
+
+#ifdef _DEBUG
+            for (clientIndex = 0; clientIndex < RTL_NUMBER_OF(g_HandlesInfo); clientIndex++)
+            {
+            if (g_WatchedEvents[clientIndex])
+                LogVerbose("Event %02d: 0x%x, type %d, child idx %d", clientIndex,
+                    g_WatchedEvents[clientIndex], g_HandlesInfo[clientIndex].Type, g_HandlesInfo[clientIndex].ClientIndex);
+            }
+            for (clientIndex = 0; clientIndex < RTL_NUMBER_OF(g_Clients); clientIndex++)
+            {
+            LogVerbose("Client %d (%p): vchan %p, stdin closed=%d", clientIndex, &g_Clients[clientIndex],
+                    g_Clients[clientIndex].Vchan, g_Clients[clientIndex].StdinPipeClosed);
+            }
+#endif
+
         if (signaledEvent >= MAXIMUM_WAIT_OBJECTS)
         {
             status = GetLastError();
@@ -1886,19 +1914,6 @@ ULONG WatchForEvents(HANDLE stopEvent)
                 perror2(status, "WaitForMultipleObjects");
                 break;
             }
-
-#ifdef DEBUG
-            for (clientIndex = 0; clientIndex < RTL_NUMBER_OF(g_HandlesInfo); clientIndex++)
-            {
-                LogVerbose("Event %02d: 0x%x, type %d, child idx %d", clientIndex,
-                    g_WatchedEvents[clientIndex], g_HandlesInfo[clientIndex].Type, g_HandlesInfo[clientIndex].ClientIndex);
-            }
-            for (clientIndex = 0; clientIndex < RTL_NUMBER_OF(g_Clients); clientIndex++)
-            {
-                LogVerbose("Child %d: vchan %p, stdin closed=%d", clientIndex,
-                    g_Clients[clientIndex].Vchan, g_Clients[clientIndex].StdinPipeClosed);
-            }
-#endif
 
             // WaitForMultipleObjects() may fail with ERROR_INVALID_HANDLE if the process which just has been added
             // to the client list terminated before WaitForMultipleObjects(). In this case IO pipe handles are closed
@@ -2039,6 +2054,7 @@ ULONG WatchForEvents(HANDLE stopEvent)
             clientInfo = &g_Clients[g_HandlesInfo[signaledEvent].ClientIndex];
             dataVchan = clientInfo->Vchan;
 
+            LogVerbose("HTYPE_DATA_VCHAN client %p, vchan %p", clientInfo, dataVchan);
             if (dataVchan == NULL)
             {
                 LogWarning("HTYPE_DATA_VCHAN: vchan for client %d (%p) is NULL", g_HandlesInfo[signaledEvent].ClientIndex, clientInfo);
