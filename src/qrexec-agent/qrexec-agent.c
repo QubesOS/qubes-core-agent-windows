@@ -2273,6 +2273,9 @@ ULONG WINAPI ServiceExecutionThread(void *param)
     if (ERROR_SUCCESS != status)
         perror2(status, "WatchForEvents");
 
+    // this will stop the trigger thread in case WatchForEvents terminates with error
+    SetEvent(ctx->StopEvent);
+
     LogDebug("Waiting for the trigger thread to exit");
     WaitForSingleObject(triggerEventsThread, INFINITE);
     CloseHandle(triggerEventsThread);
