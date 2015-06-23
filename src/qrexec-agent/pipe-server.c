@@ -242,7 +242,7 @@ static ULONG ConnectExisting(
     {
         LogWarning("vchan %p: Process creation failed, got the error code %u", vchan, cpr->ResponseData.ErrorCode);
 
-        status = SendExitCode(clientInfo, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, cpr->ResponseData.ErrorCode));
+        status = SendExitCodeVchan(vchan, MAKE_ERROR_RESPONSE(ERROR_SET_WINDOWS, cpr->ResponseData.ErrorCode));
         if (ERROR_SUCCESS != status)
             return perror2(status, "SendExitCode");
 
