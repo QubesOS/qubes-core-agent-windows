@@ -1118,51 +1118,33 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
 
     LogDebug("domain %u, port %u, cmdline '%S'", params->connect_domain, params->connect_port, params->cmdline);
     // this is a service connection
+    isVchanServer = TRUE;
+    // service connection, we act as a qrexec-client (data server)
+    LogDebug("service, starting vchan server (%d, %d)",
+             params->connect_domain, params->connect_port);
 
-    if (params->connect_domain == 0) // target is dom0
+    peerVchan = libvchan_server_init(params->connect_domain, params->connect_port, VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
+    if (!peerVchan)
     {
-        // in this case dom0 side (qrexec-client) is the vchan server as usual
-        LogDebug("vm->dom0 service, connecting to vchan (%d, %d)",
+        LogError("libvchan_server_init(%d, %d) failed",
             params->connect_domain, params->connect_port);
-
-        peerVchan = libvchan_client_init(params->connect_domain, params->connect_port);
-        if (!peerVchan)
-        {
-            LogError("libvchan_client_init(%d, %d) failed",
-                params->connect_domain, params->connect_port);
-            free(params);
-            return ERROR_INVALID_FUNCTION;
-        }
-        LogDebug("connected to vchan server");
+        free(params);
+        return ERROR_INVALID_FUNCTION;
     }
-    else
-    {
-        isVchanServer = TRUE;
-        // vm-vm connection, we act as a qrexec-client (data server)
-        LogDebug("vm-vm service, starting vchan server (%d, %d)",
-            params->connect_domain, params->connect_port);
-        peerVchan = libvchan_server_init(params->connect_domain, params->connect_port, VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
-        if (!peerVchan)
-        {
-            LogError("libvchan_server_init(%d, %d) failed",
-                params->connect_domain, params->connect_port);
-            free(params);
-            return ERROR_INVALID_FUNCTION;
-        }
 
-        LogDebug("server vchan: %p, waiting for remote peer (data client)", peerVchan);
-        if (libvchan_wait(peerVchan) < 0)
-        {
-            LogError("libvchan_wait failed");
-            libvchan_close(peerVchan);
-            return ERROR_INVALID_FUNCTION;
-        }
-        LogDebug("remote peer (data client) connected");
-        if (!SendHelloToVchan(peerVchan))
-        {
-            libvchan_close(peerVchan);
-            return ERROR_INVALID_FUNCTION;
-        }
+    LogDebug("server vchan: %p, waiting for remote peer (data client)", peerVchan);
+    if (libvchan_wait(peerVchan) < 0)
+    {
+        LogError("libvchan_wait failed");
+        libvchan_close(peerVchan);
+        return ERROR_INVALID_FUNCTION;
+    }
+
+    LogDebug("remote peer (data client) connected");
+    if (!SendHelloToVchan(peerVchan))
+    {
+        libvchan_close(peerVchan);
+        return ERROR_INVALID_FUNCTION;
     }
 
     LogDebug("vchan %p, request id '%S'", peerVchan, params->cmdline);
@@ -1518,7 +1500,6 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
         {
             if (!SendHelloToVchan(vchan))
                 return ERROR_INVALID_FUNCTION;
-
         }
         break;
 
@@ -1890,7 +1871,6 @@ ULONG WatchForEvents(HANDLE stopEvent)
         LogVerbose("waiting for event (%d events registered)", eventIndex);
 
         signaledEvent = WaitForMultipleObjects(eventIndex, g_WatchedEvents, FALSE, INFINITE);
-
 
 #ifdef _DEBUG
             for (clientIndex = 0; clientIndex < RTL_NUMBER_OF(g_HandlesInfo); clientIndex++)
