@@ -1596,12 +1596,6 @@ ULONG HandleStdout(IN const struct msg_header *header, IN CLIENT_INFO *clientInf
     if (!header->len)
     {
         LogDebug("EOF from vchan %p", clientInfo->Vchan);
-        if (clientInfo)
-        {
-            CloseHandle(clientInfo->WriteStdinPipe);
-            clientInfo->StdinPipeClosed = TRUE;
-            RemoveClient(clientInfo);
-        }
         return ERROR_SUCCESS;
     }
 
@@ -1638,12 +1632,6 @@ ULONG HandleStderr(IN const struct msg_header *header, IN CLIENT_INFO *clientInf
     if (!header->len)
     {
         LogDebug("EOF from vchan %p", clientInfo->Vchan);
-        if (clientInfo)
-        {
-            CloseHandle(clientInfo->WriteStdinPipe);
-            clientInfo->StdinPipeClosed = TRUE;
-            RemoveClient(clientInfo);
-        }
         return ERROR_SUCCESS;
     }
 
