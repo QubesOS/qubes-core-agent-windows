@@ -294,6 +294,7 @@ static ULONG SendDataToPeer(IN CLIENT_INFO *clientInfo, IN OUT PIPE_DATA *data)
         messageType = MSG_DATA_STDIN;
     }
 
+    LogVerbose("read %d bytes from client pipe", cbRead);
     status = SendMessageToVchan(vchan, messageType, data->ReadBuffer + data->cbSentBytes, cbRead - data->cbSentBytes, &cbSent, L"output data");
     if (ERROR_INSUFFICIENT_BUFFER == status)
     {
@@ -1105,7 +1106,6 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
     ULONG status;
     struct exec_params *params = NULL;
     libvchan_t *peerVchan = NULL;
-    BOOL isVchanServer = FALSE;
 
     LogDebug("msg 0x%x, len %d", header->type, header->len);
 
@@ -1117,9 +1117,7 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
     }
 
     LogDebug("domain %u, port %u, cmdline '%S'", params->connect_domain, params->connect_port, params->cmdline);
-    // this is a service connection
-    isVchanServer = TRUE;
-    // service connection, we act as a qrexec-client (data server)
+    // this is a service connection, we act as a qrexec-client (data server)
     LogDebug("service, starting vchan server (%d, %d)",
              params->connect_domain, params->connect_port);
 
@@ -1150,7 +1148,7 @@ ULONG HandleServiceConnect(IN const struct msg_header *header)
     LogDebug("vchan %p, request id '%S'", peerVchan, params->cmdline);
 
     // peerVchan will be closed by DisconnectAndReconnect in pipe-server.c
-    status = ProceedWithExecution(peerVchan, params->cmdline, isVchanServer);
+    status = ProceedWithExecution(peerVchan, params->cmdline);
     free(params);
 
     if (ERROR_SUCCESS != status)
@@ -1174,7 +1172,7 @@ ULONG HandleServiceRefused(IN const struct msg_header *header)
 
     LogDebug("ident '%S'", serviceParams.ident);
 
-    status = ProceedWithExecution(NULL, serviceParams.ident, FALSE);
+    status = ProceedWithExecution(NULL, serviceParams.ident);
 
     if (ERROR_SUCCESS != status)
         perror("ProceedWithExecution");
@@ -1871,6 +1869,7 @@ ULONG WatchForEvents(HANDLE stopEvent)
         LogVerbose("waiting for event (%d events registered)", eventIndex);
 
         signaledEvent = WaitForMultipleObjects(eventIndex, g_WatchedEvents, FALSE, INFINITE);
+
 
 #ifdef _DEBUG
             for (clientIndex = 0; clientIndex < RTL_NUMBER_OF(g_HandlesInfo); clientIndex++)

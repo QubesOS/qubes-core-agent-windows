@@ -261,6 +261,8 @@ static ULONG ConnectExisting(
         return perror("DuplicateHandle");
     }
 
+    clientInfo->Vchan = vchan;
+    clientInfo->IsVchanServer = TRUE;
     status = AddExistingClient(clientInfo);
     if (ERROR_SUCCESS != status)
     {
@@ -350,8 +352,7 @@ ULONG FindClientByIdent(IN const char *ident, OUT ULONG *clientIndex)
 
 ULONG ProceedWithExecution(
     IN libvchan_t *vchan,
-    IN const char *ident,
-    BOOL isVchanServer
+    IN const char *ident
     )
 {
     ULONG clientIndex;
