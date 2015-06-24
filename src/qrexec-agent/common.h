@@ -2,6 +2,7 @@
 #include <windows.h>
 
 #include <libvchan.h>
+#include <qrexec.h>
 
 #define BUILD_AS_SERVICE
 
@@ -9,8 +10,6 @@
 #define DEFAULT_USER_PASSWORD_UNICODE   L"userpass"
 
 #define	TRIGGER_PIPE_NAME               L"\\\\.\\pipe\\qrexec_trigger"
-
-#define READ_BUFFER_SIZE 65536
 
 #define VCHAN_BUFFER_SIZE 65536
 #define PIPE_BUFFER_SIZE 65536
@@ -34,7 +33,7 @@ typedef struct _PIPE_DATA
     BOOL        VchanWritePending;
     DWORD       cbSentBytes;
     OVERLAPPED  ReadState;
-    BYTE        ReadBuffer[READ_BUFFER_SIZE + 1];
+    BYTE        ReadBuffer[MAX_DATA_CHUNK];
 } PIPE_DATA;
 
 // state of a child process

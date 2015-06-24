@@ -1728,13 +1728,13 @@ ULONG FillAsyncIoData(IN ULONG eventIndex, IN ULONG clientIndex, IN HANDLE_TYPE 
 
     if (!pipeData->ReadInProgress && !pipeData->DataIsReady && !pipeData->PipeClosed && !pipeData->VchanWritePending)
     {
-        ZeroMemory(&pipeData->ReadBuffer, READ_BUFFER_SIZE);
+        ZeroMemory(&pipeData->ReadBuffer, MAX_DATA_CHUNK);
         pipeData->cbSentBytes = 0;
 
         if (!ReadFile(
             pipeData->ReadPipe,
             &pipeData->ReadBuffer,
-            READ_BUFFER_SIZE,
+            MAX_DATA_CHUNK,
             NULL,
             &pipeData->ReadState))
         {
