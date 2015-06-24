@@ -1472,16 +1472,6 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
 
     switch (header.type)
     {
-        /*
-        case MSG_XON:
-        debugf("MSG_XON\n");
-        set_blocked_outerr(s_hdr.client_id, FALSE);
-        break;
-        case MSG_XOFF:
-        debugf("MSG_XOFF\n");
-        set_blocked_outerr(s_hdr.client_id, TRUE);
-        break;
-        */
     case MSG_HELLO:
         LogVerbose("MSG_HELLO");
         if (!VchanReceiveBuffer(vchan, &peerInfo, sizeof(peerInfo), L"peer info"))
@@ -1498,16 +1488,12 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
         {
             if (!SendHelloToVchan(vchan))
                 return ERROR_INVALID_FUNCTION;
+
         }
         break;
 
     case MSG_DATA_STDIN:
         LogVerbose("MSG_DATA_STDIN");
-        if (clientInfo->IsVchanServer)
-        {
-            LogWarning("got MSG_DATA_STDIN while being a vchan server");
-            return ERROR_INVALID_FUNCTION;
-        }
         // This will return error only if vchan fails.
         status = HandleStdin(&header, clientInfo);
         if (ERROR_SUCCESS != status)
@@ -1516,11 +1502,6 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
 
     case MSG_DATA_STDOUT:
         LogVerbose("MSG_DATA_STDOUT");
-        if (!clientInfo->IsVchanServer)
-        {
-            LogWarning("got MSG_DATA_STDOUT while being a vchan client");
-            return ERROR_INVALID_FUNCTION;
-        }
         // This will return error only if vchan fails.
         status = HandleStdout(&header, clientInfo);
         if (ERROR_SUCCESS != status)
@@ -1529,11 +1510,6 @@ ULONG HandleDataMessage(IN libvchan_t *vchan)
 
     case MSG_DATA_STDERR:
         LogVerbose("MSG_DATA_STDERR");
-        if (!clientInfo->IsVchanServer)
-        {
-            LogWarning("got MSG_DATA_STDERR while being a vchan client");
-            return ERROR_INVALID_FUNCTION;
-        }
         // This will return error only if vchan fails.
         status = HandleStderr(&header, clientInfo);
         if (ERROR_SUCCESS != status)
