@@ -136,12 +136,12 @@ static ULONG ConnectToNewClient(IN HANDLE clientPipe, OUT OVERLAPPED *asyncState
 // - when the client closes its handle to the pipe;
 // - when the server disconnects from the client.
 // Disconnect from this client, then call ConnectNamedPipe to wait for another client to connect.
-ULONG DisconnectAndReconnect(IN ULONG clientIndex)
+ULONG DisconnectAndReconnect(IN ULONG clientIndex, IN BOOL disconnectVchan)
 {
     ULONG status;
     PIPE_INSTANCE *client = &(g_Pipes[clientIndex]);
 
-    LogDebug("Disconnecting pipe %lu (vchan %p), state %d\n", clientIndex, client->Vchan, client->ConnectionState);
+    LogDebug("Disconnecting pipe %lu (vchan %p), state %d, close vchan? %d\n", clientIndex, client->Vchan, client->ConnectionState, disconnectVchan);
 
     if (client->ClientProcess)
     {
@@ -167,9 +167,14 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex)
     ZeroMemory(&client->ClientInfo, sizeof(client->ClientInfo));
     ZeroMemory(&client->RemoteHandles, sizeof(client->RemoteHandles));
     ZeroMemory(&client->ConnectParams, sizeof(client->ConnectParams));
-    libvchan_close(client->Vchan);
-    LogDebug("closing vchan %p", client->Vchan);
-    client->Vchan = NULL;
+
+    if (disconnectVchan)
+    {
+        LogVerbose("closing vchan %p", client->Vchan);
+        libvchan_close(client->Vchan);
+        LogDebug("closing vchan %p", client->Vchan);
+        client->Vchan = NULL;
+    }
 
     // Disconnect the pipe instance.
     if (!DisconnectNamedPipe(client->Pipe))
@@ -535,7 +540,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (!GetOverlappedResult(client->Pipe, &client->AsyncState, &cbRet, FALSE))
             {
                 perror("GetOverlappedResult");
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 continue;
             }
 
@@ -551,7 +556,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 if (!GetNamedPipeClientProcessId(client->Pipe, &clientProcessId))
                 {
                     perror("GetNamedPipeClientProcessId");
-                    DisconnectAndReconnect(clientIndex);
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
 
@@ -561,7 +566,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 if (!client->ClientProcess)
                 {
                     perror("OpenProcess");
-                    DisconnectAndReconnect(clientIndex);
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
 
@@ -574,8 +579,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 if (sizeof(client->ConnectParams) != cbRet)
                 {
-                    LogWarning("Wrong incoming parameter size: %d instead of %d\n", cbRet, sizeof(client->ConnectParams));
-                    DisconnectAndReconnect(clientIndex);
+                    LogWarning("Wrong incoming parameter size: %d instead of %d", cbRet, sizeof(client->ConnectParams));
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
 
@@ -584,7 +589,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 if (ERROR_SUCCESS != status)
                 {
                     perror2(status, "SendParametersToDaemon");
-                    DisconnectAndReconnect(clientIndex);
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
                 client->ConnectionState = STATE_WAITING_FOR_DAEMON_DECISION;
@@ -596,8 +601,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 if (IO_HANDLES_SIZE != cbRet)
                 {
-                    LogWarning("Could not send the handles array: sent %d bytes instead of %d\n", cbRet, IO_HANDLES_SIZE);
-                    DisconnectAndReconnect(clientIndex);
+                    LogWarning("Could not send the handles array: sent %d bytes instead of %d", cbRet, IO_HANDLES_SIZE);
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
 
@@ -611,8 +616,8 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 if (sizeof(CREATE_PROCESS_RESPONSE) != cbRet)
                 {
-                    LogWarning("Wrong incoming create process response size: %d\n", cbRet);
-                    DisconnectAndReconnect(clientIndex);
+                    LogWarning("Wrong incoming create process response size: %d", cbRet);
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
 
@@ -626,9 +631,12 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     &client->CreateProcessResponse);
 
                 if (ERROR_SUCCESS != status)
+                {
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     perror2(status, "ConnectExisting");
+                }
 
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, FALSE);
                 continue;
 
             default:
@@ -672,7 +680,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 if (ERROR_SUCCESS != status)
                 {
                     perror2(status, "SendParametersToDaemon");
-                    DisconnectAndReconnect(clientIndex);
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     continue;
                 }
 
@@ -691,7 +699,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
             // An error occurred; disconnect from the client.
             perror2(status, "STATE_RECEIVING_PARAMETERS: ReadFile");
-            DisconnectAndReconnect(clientIndex);
+            DisconnectAndReconnect(clientIndex, TRUE);
             break;
 
         case STATE_WAITING_FOR_DAEMON_DECISION:
@@ -700,7 +708,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             {
                 LogInfo("Service request '%S' (request_id '%S') denied by daemon, disconnecting client-vm",
                         client->ConnectParams.service_name, client->ConnectParams.request_id.ident);
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 continue;
             }
             else
@@ -726,7 +734,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             if (ERROR_SUCCESS != status)
             {
                 perror2(status, "CreateClientPipes");
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 continue;
             }
 
@@ -742,7 +750,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 perror("DuplicateHandle(stdin)");
                 CloseHandle(localHandles.StdoutPipe);
                 CloseHandle(localHandles.StderrPipe);
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 continue;
             }
 
@@ -757,7 +765,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
             {
                 perror("DuplicateHandle(stdout)");
                 CloseHandle(localHandles.StderrPipe);
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 continue;
             }
 
@@ -771,7 +779,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                 DUPLICATE_SAME_ACCESS | DUPLICATE_CLOSE_SOURCE))
             {
                 perror("DuplicateHandle(stderr)");
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 continue;
             }
 
@@ -796,7 +804,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
                 // An error occurred; disconnect from the client.
                 perror("STATE_SENDING_IO_HANDLES: WriteFile");
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, TRUE);
                 break;
             }
 
@@ -831,9 +839,12 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
                     &client->CreateProcessResponse);
 
                 if (ERROR_SUCCESS != status)
+                {
+                    DisconnectAndReconnect(clientIndex, TRUE);
                     perror2(status, "ConnectExisting");
+                }
 
-                DisconnectAndReconnect(clientIndex);
+                DisconnectAndReconnect(clientIndex, FALSE);
                 continue;
             }
 
@@ -849,7 +860,7 @@ ULONG WINAPI WatchForTriggerEvents(IN void *param)
 
             // An error occurred; disconnect from the client.
             perror("STATE_RECEIVING_PROCESS_HANDLE: ReadFile");
-            DisconnectAndReconnect(clientIndex);
+            DisconnectAndReconnect(clientIndex, TRUE);
             break;
 
         default:
