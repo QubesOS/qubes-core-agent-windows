@@ -27,6 +27,7 @@ UINT32 g_crc32 = 0;
 
 static BOOL WriteWithCrc(IN HANDLE output, IN const void *buffer, IN DWORD size)
 {
+    LogVerbose("size %lu", size);
     g_crc32 = Crc32_ComputeBuf(g_crc32, buffer, size);
     return QioWriteBuffer(output, buffer, size);
 }
@@ -51,9 +52,10 @@ static void WaitForResult(void)
     char lastFilename[MAX_PATH + 1];
     char lastFilenamePrefix[] = "; Last file: ";
 
+    LogVerbose("start");
     if (!QioReadBuffer(g_stdin, &hdr, sizeof(hdr)))
     {
-        LogError("FcReadBuffer failed");
+        LogError("QioReadBuffer failed");
         exit(1);	// hopefully remote has produced error message
     }
 
@@ -121,6 +123,7 @@ static void WriteHeaders(IN struct file_header *hdr, IN const WCHAR *fileName)
     char *fileNameUtf8 = NULL;
     size_t cbFileNameUtf8;
 
+    LogVerbose("start");
     if (ERROR_SUCCESS != ConvertUTF16ToUTF8(fileName, &fileNameUtf8, &cbFileNameUtf8))
         FcReportError(GetLastError(), TRUE, L"Cannot convert path '%s' to UTF-8", fileName);
 
@@ -140,6 +143,7 @@ static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
     HANDLE input;
     FILETIME accessTime, modificationTime;
 
+    LogDebug("%s", fileName);
     if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         hdr.mode = 0755 | 0040000;
     else
@@ -229,6 +233,7 @@ static INT64 GetFileSizeByPath(IN const WCHAR *filePath)
     }
 
     CloseHandle(file);
+    LogDebug("%s: %I64d", filePath, fileSize.QuadPart);
     return fileSize.QuadPart;
 }
 
@@ -242,6 +247,7 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
     HANDLE searchHandle;
     INT64 size = 0;
 
+    LogDebug("%s", directoryPath);
     if ((attributes = GetFileAttributes(directoryPath)) == INVALID_FILE_ATTRIBUTES)
         FcReportError(GetLastError(), TRUE, L"Cannot get attributes of '%s'", directoryPath);
 
@@ -307,10 +313,11 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
     return size;
 }
 
-static void NotifyEnAandWaitForResult(void)
+static void NotifyEndAndWaitForResult(void)
 {
     struct file_header endHeader;
 
+    LogVerbose("start");
     /* nofity end of transfer */
     ZeroMemory(&endHeader, sizeof(endHeader));
     endHeader.namelen = 0;
@@ -424,7 +431,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         free(baseName);
     }
 
-    NotifyEnAandWaitForResult();
+    NotifyEndAndWaitForResult();
     NotifyProgress(0, PROGRESS_TYPE_DONE);
     return 0;
 }

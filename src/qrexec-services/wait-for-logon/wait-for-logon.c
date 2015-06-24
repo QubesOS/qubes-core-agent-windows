@@ -105,6 +105,7 @@ HWND CreateMainWindow(HINSTANCE instance)
     windowClassAtom = RegisterClassEx(&wc);
     if (!windowClassAtom)
     {
+        perror("RegisterClassEx");
         return NULL;
     }
 
@@ -128,12 +129,14 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
     UCHAR pszExpectedUserUtf8[USERNAME_LENGTH + 1];
     HANDLE hStdIn;
 
+    LogVerbose("start");
     // first try command parameter
     g_expectedUser = PathGetArgs(pszCommandLine);
 
     // if none was given, read from stdin
     if (!g_expectedUser || g_expectedUser[0] == TEXT('\0'))
     {
+        LogDebug("reading user from stdin");
         hStdIn = GetStdHandle(STD_INPUT_HANDLE);
         if (hStdIn == INVALID_HANDLE_VALUE)
         {
@@ -164,6 +167,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
         }
     }
 
+    LogDebug("creating window");
     hMainWindow = CreateMainWindow(hInst);
 
     if (hMainWindow == INVALID_HANDLE_VALUE)

@@ -14,6 +14,7 @@ HANDLE g_progressWindowThread = NULL;
 
 static HRESULT CALLBACK TaskDialogCallbackProc(IN HWND window, IN UINT notification, IN WPARAM wParam, IN LPARAM lParam, IN LONG_PTR context)
 {
+    LogVerbose("hwnd 0x%x, code %lu", window, notification);
     switch (notification)
     {
     case TDN_CREATED:
@@ -39,7 +40,9 @@ static DWORD TaskDialogThread(IN void *param)
 {
     int buttonPressed = 0;
     TASKDIALOGCONFIG config = { 0 };
+    HRESULT status;
 
+    LogVerbose("start");
     config.cbSize = sizeof(config);
     config.hInstance = NULL;
     config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
@@ -51,7 +54,12 @@ static DWORD TaskDialogThread(IN void *param)
     config.cButtons = 0;
     config.pfCallback = TaskDialogCallbackProc;
 
-    TaskDialogIndirect(&config, &buttonPressed, NULL, NULL);
+    status = TaskDialogIndirect(&config, &buttonPressed, NULL, NULL);
+    if (status != S_OK)
+    {
+        LogError("TaskDialogIndirect failed: %d 0x%x", status, status);
+    }
+    LogDebug("button: %d 0x%x", buttonPressed, buttonPressed);
 
     return 0;
 }
@@ -66,6 +74,7 @@ static void SetProgressbarColor(IN BOOL errorOccured)
 
 static void CreateProgressWindow(void)
 {
+    LogVerbose("start");
     g_progressWindowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TaskDialogThread, NULL, 0, NULL);
     if (!g_progressWindowThread)
     {
@@ -78,6 +87,7 @@ static void CreateProgressWindow(void)
 
 void UpdateProgress(IN UINT64 written, IN FC_PROGRESS_TYPE progressType)
 {
+    LogVerbose("written %I64u, type %d", written, progressType);
     switch (progressType)
     {
     case PROGRESS_TYPE_INIT:

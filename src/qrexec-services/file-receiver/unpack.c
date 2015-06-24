@@ -7,6 +7,7 @@
 
 #include <utf8-conv.h>
 #include <qubes-io.h>
+#include <log.h>
 #include <crc32.h>
 
 #include "linux.h"
@@ -33,6 +34,7 @@ BOOL ReadWithCrc(IN HANDLE input, OUT void *buffer, IN DWORD bufferSize)
 {
     BOOL ret;
 
+    LogVerbose("%lu", bufferSize);
     ret = QioReadBuffer(input, buffer, bufferSize);
     if (ret)
         g_crc32 = Crc32_ComputeBuf(g_crc32, buffer, bufferSize);
@@ -45,6 +47,7 @@ void SendStatusAndCrc(IN UINT32 statusCode, IN const char *lastFileName OPTIONAL
     struct result_header header;
     struct result_header_ext headerExt;
 
+    LogVerbose("status %lu", statusCode);
     header.error_code = statusCode;
     header.crc32 = g_crc32;
     if (!QioWriteBuffer(g_stdout, &header, sizeof(header)))
@@ -65,6 +68,7 @@ void SendStatusAndExit(IN UINT32 statusCode, IN const char *lastFileName)
     if (statusCode == LEGAL_EOF)
         statusCode = 0;
 
+    LogDebug("status %lu, last file %S", statusCode, lastFileName);
     SendStatusAndCrc(statusCode, lastFileName);
     CloseHandle(g_stdout);
     exit(statusCode);
@@ -83,6 +87,7 @@ void ProcessRegularFile(IN const struct file_header *untrustedHeader, IN const c
     if (ERROR_SUCCESS != errorCode)
         SendStatusAndExit(EINVAL, NULL);
 
+    LogDebug("file '%s'", untrustedFileName);
     hresult = StringCchPrintf(
         trustedFilePath,
         RTL_NUMBER_OF(trustedFilePath),
@@ -133,6 +138,7 @@ void ProcessDirectory(IN const struct file_header *untrustedHeader, IN const cha
     if (ERROR_SUCCESS != errorCode)
         SendStatusAndExit(EINVAL, NULL);
 
+    LogDebug("dir '%s'", untrustedDirectoryName);
     hresult = StringCchPrintf(
         trustedDirectoryPath,
         RTL_NUMBER_OF(trustedDirectoryPath),
@@ -169,6 +175,7 @@ void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *un
     if (ERROR_SUCCESS != errorCode)
         SendStatusAndExit(EINVAL, NULL);
 
+    LogDebug("link '%s'", untrustedName);
     hresult = StringCchPrintf(
         trustedFilePath,
         RTL_NUMBER_OF(trustedFilePath),
@@ -194,6 +201,7 @@ void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *un
     if (ERROR_SUCCESS != errorCode)
         SendStatusAndExit(EINVAL, untrustedNameUtf8);
 
+    LogDebug("target '%s'", untrustedLinkTargetPath);
     /* TODO? sanitize link target path in any way? we don't allow to override
      * existing files, so this shouldn't be a problem to leave it alone */
 
