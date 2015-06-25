@@ -12,8 +12,7 @@
 
 #define SERVICE_NAME L"QubesNetworkSetup"
 
-// FIXME: new pvdrivers
-#define XEN_ADAPTER_DESCRIPTION "Xen Net Device Driver"
+#define XEN_ADAPTER_DESCRIPTION "Qubes PV Network Device #0"
 
 DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT DWORD *interfaceIndex)
 {
@@ -195,14 +194,14 @@ DWORD WINAPI SetupNetwork(PVOID param)
     }
 
     qubesNetmask = qdb_read(qdb, "/qubes-netmask", NULL);
-    if (status != ERROR_SUCCESS)
+    if (!qubesNetmask)
     {
-        LogError("Failed to get qubes-netmask\n");
+        LogError("Failed to get qubes-netmask");
         goto cleanup;
     }
 
     qubesGateway = qdb_read(qdb, "/qubes-gateway", NULL);
-    if (status != ERROR_SUCCESS)
+    if (!qubesGateway)
     {
         LogError("Failed to get qubes-gateway\n");
         goto cleanup;
