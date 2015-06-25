@@ -170,9 +170,8 @@ ULONG DisconnectAndReconnect(IN ULONG clientIndex, IN BOOL disconnectVchan)
 
     if (disconnectVchan)
     {
-        LogVerbose("closing vchan %p", client->Vchan);
+        LogDebug("%d: closing vchan %p", clientIndex, client->Vchan);
         libvchan_close(client->Vchan);
-        LogDebug("closing vchan %p", client->Vchan);
         client->Vchan = NULL;
     }
 

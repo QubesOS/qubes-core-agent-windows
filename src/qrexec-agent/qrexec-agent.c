@@ -311,18 +311,18 @@ static ULONG SendDataToPeer(IN CLIENT_INFO *clientInfo, IN OUT PIPE_DATA *data)
     return status;
 }
 
-ULONG CloseReadPipeHandles(IN CLIENT_INFO *clientInfo, IN OUT PIPE_DATA *data)
+ULONG CloseReadPipeHandles(IN CLIENT_INFO *clientInfo OPTIONAL, IN OUT PIPE_DATA *data)
 {
     ULONG status;
 
-    LogVerbose("client %p, vchan %p, pipe data %p", clientInfo, clientInfo->Vchan, data);
+    LogVerbose("client %p, vchan %p, pipe data %p", clientInfo, clientInfo ? clientInfo->Vchan : 0, data);
 
     if (!data)
         return ERROR_INVALID_PARAMETER;
 
     status = ERROR_SUCCESS;
 
-    if (data->ReadState.hEvent)
+    if (clientInfo && data->ReadState.hEvent)
     {
         if (data->DataIsReady)
             SendDataToPeer(clientInfo, data);

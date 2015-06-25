@@ -71,7 +71,7 @@ ULONG CreateClientPipes(
     );
 
 ULONG CloseReadPipeHandles(
-    CLIENT_INFO *clientInfo,
+    IN CLIENT_INFO *clientInfo OPTIONAL,
     IN OUT PIPE_DATA *data
     );
 
