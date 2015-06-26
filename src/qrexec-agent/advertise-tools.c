@@ -5,6 +5,8 @@
 #include <qubesdb-client.h>
 #include <log.h>
 
+#define QDB_PATH_PREFIX "/qubes-tools/"
+
 // userName needs to be freed with WtsFreeMemory
 BOOL GetCurrentUser(OUT char **userName)
 {
@@ -157,19 +159,19 @@ ULONG AdvertiseTools(void)
     }
 
     /* for now mostly hardcoded values, but this can change in the future */
-    if (!QdbWrite(qdb, "/version", "1"))
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "version", "1"))
     {
         perror("write 'version' entry");
         goto cleanup;
     }
     
-    if (!QdbWrite(qdb, "/os", "Windows"))
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "os", "Windows"))
     {
         perror("write 'os' entry");
         goto cleanup;
     }
 
-    if (!QdbWrite(qdb, "/qrexec", "1"))
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "qrexec", "1"))
     {
         perror("write 'qrexec' entry");
         goto cleanup;
@@ -177,7 +179,7 @@ ULONG AdvertiseTools(void)
 
     guiAgentPresent = CheckGuiAgentPresence();
 
-    if (!QdbWrite(qdb, "/gui", guiAgentPresent ? "1" : "0"))
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "gui", guiAgentPresent ? "1" : "0"))
     {
         perror("write 'gui' entry");
         goto cleanup;
@@ -185,7 +187,7 @@ ULONG AdvertiseTools(void)
 
     if (GetCurrentUser(&userName))
     {
-        if (!QdbWrite(qdb, "default-user", userName))
+        if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
         {
             perror("write 'default-user' entry");
             goto cleanup;
