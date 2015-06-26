@@ -59,7 +59,9 @@ DisplayName='Installation directory'
                         Account='LocalSystem'
                         ErrorControl='ignore'
                         Interactive='no'
-                        />
+                        >
+                            <ServiceDependency Id='QdbDaemon' />
+                        <ServiceInstall/>
 
                         <ServiceControl
                         Id='QrexecServiceControl'
@@ -113,7 +115,8 @@ DisplayName='Installation directory'
                         Interactive='no'
                         Arguments='-service'
                         >
-                            <ServiceDependency Id='iphlpsvc'/>
+                            <ServiceDependency Id='iphlpsvc' />
+                            <ServiceDependency Id='QdbDaemon' />
                         </ServiceInstall>
 
                         <ServiceControl
