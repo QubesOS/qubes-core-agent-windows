@@ -89,7 +89,7 @@ BOOL CheckGuiAgentPresence(void)
 
     LogVerbose("start");
 
-    if (!PrepareExePath(serviceFilePath, L"wga.exe"))
+    if (!PrepareExePath(serviceFilePath, L"qga.exe"))
         return FALSE;
 
     return PathFileExists(serviceFilePath);
