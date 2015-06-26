@@ -61,7 +61,7 @@ DisplayName='Installation directory'
                         Interactive='no'
                         >
                             <ServiceDependency Id='QdbDaemon' />
-                        <ServiceInstall/>
+                        </ServiceInstall>
 
                         <ServiceControl
                         Id='QrexecServiceControl'
