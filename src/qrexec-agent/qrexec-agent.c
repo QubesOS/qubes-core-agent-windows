@@ -1181,8 +1181,8 @@ ULONG HandleServiceRefused(IN const struct msg_header *header)
 }
 
 // Returns vchan for qrexec-client/peer that initiated the request.
-// Fails only if vchan fails.
-// Returns TRUE and sets vchan to NULL if cmdline parsing failed (caller should return with success status).
+// Fails only if daemon vchan fails.
+// Returns TRUE and sets vchan to NULL if cmdline parsing failed or data vchan fails (caller should return with success status).
 BOOL HandleExecCommon(IN int len, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively, OUT libvchan_t **peerVchan)
 {
     struct exec_params *exec = NULL;
@@ -1217,7 +1217,7 @@ BOOL HandleExecCommon(IN int len, OUT WCHAR **userName, OUT WCHAR **commandLine,
         LogError("connection to vchan server (%d, %d) failed",
             exec->connect_domain, exec->connect_port);
         free(exec);
-        return FALSE;
+        return TRUE; // this is not fatal
     }
 
     // command is allocated in the call, userName and commandLine are pointers to inside command
