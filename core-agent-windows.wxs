@@ -65,6 +65,7 @@ DisplayName='Installation directory'
 
                         <ServiceControl
                         Id='QrexecServiceControl'
+                        Start='install'
                         Stop='both'
                         Remove='uninstall'
                         Name='QrexecAgent'
