@@ -12,7 +12,7 @@
 
 #define SERVICE_NAME L"QubesNetworkSetup"
 
-#define XEN_ADAPTER_DESCRIPTION "Qubes PV Network Device #0"
+#define XEN_ADAPTER_DESCRIPTION "Xen PV Network Device #0"
 
 DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT DWORD *interfaceIndex)
 {
