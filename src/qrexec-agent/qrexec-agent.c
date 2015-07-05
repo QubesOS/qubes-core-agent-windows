@@ -2191,6 +2191,15 @@ void Usage(void)
     LogError("qrexec agent service\n\nUsage: qrexec_agent <-i|-u>\n");
 }
 
+static void XifLogger(int level, const char *function, const WCHAR *format, va_list args)
+{
+    WCHAR buf[1024];
+
+    StringCbVPrintfW(buf, sizeof(buf), format, args);
+    // our log levels start at 0, xif's at 1
+    _LogFormat(level - 1, FALSE, function, buf);
+}
+
 ULONG WINAPI ServiceExecutionThread(void *param)
 {
     ULONG status;
@@ -2198,6 +2207,8 @@ ULONG WINAPI ServiceExecutionThread(void *param)
     PSERVICE_WORKER_CONTEXT ctx = param;
 
     LogInfo("Service started");
+
+    libvchan_register_logger(XifLogger);
 
     // Auto reset, initial state is not signaled
     g_AddExistingClientEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
