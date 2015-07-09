@@ -276,8 +276,12 @@ static ULONG SendDataToPeer(IN CLIENT_INFO *clientInfo, IN OUT PIPE_DATA *data)
     cbRead = 0;
     if (!GetOverlappedResult(data->ReadPipe, &data->ReadState, &cbRead, FALSE))
     {
+        // pipe closed
         perror("GetOverlappedResult");
         LogError("client %p, msg 0x%x, cbRead %d", clientInfo, messageType, cbRead);
+
+        // send EOF
+        SendMessageToVchan(vchan, messageType, NULL, 0, NULL, L"EOF");
 
         data->PipeClosed = TRUE;
         return ERROR_HANDLE_EOF;
@@ -2028,7 +2032,7 @@ ULONG WatchForEvents(HANDLE stopEvent)
                 if (ERROR_SUCCESS != status)
                 {
                     vchanReturnedError = TRUE;
-                    perror2(status, "handle_data_message");
+                    perror2(status, "HandleDataMessage");
                     LeaveCriticalSection(&g_ClientsCriticalSection);
                     break;
                 }
