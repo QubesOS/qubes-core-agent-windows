@@ -1,0 +1,63 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+<?if $(env.DDK_ARCH) = x64 ?>
+    <?define PFILESDIR = ProgramFiles64Folder ?>
+    <?define SYSDIR = System64Folder ?>
+<?else?>
+    <?define PFILESDIR = ProgramFilesFolder ?>
+    <?define SYSDIR = SystemFolder ?>
+<?endif ?>
+
+<Module
+Id='MoveProfiles'
+Language='1033'
+Codepage='1252'
+Version='$(env.VERSION)'
+>
+
+<Package
+Id='{8BA696C6-3769-441A-A54D-B40CF7CC271F}'
+Description='Qubes Agent for Windows'
+Manufacturer='Invisible Things Lab'
+InstallScope='perMachine'
+InstallerVersion='200'
+Languages='1033'
+SummaryCodepage='1252'
+InstallPrivileges='elevated'
+/>
+
+<Configuration
+Name='ProductFolder'
+Format='Key'
+Type='Identifier'
+DefaultValue='QubesProgramFilesDir'
+Description='Installation directory'
+DisplayName='Installation directory'
+/>
+
+<Substitution Table='Directory' Column='Directory_Parent' Row='BinDir' Value='[=ProductFolder]'/>
+
+<Directory Id='TARGETDIR' Name='SourceDir'>
+    <Directory Id='$(var.PFILESDIR)'>
+        <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
+            <Directory Id='QubesProgramFilesDir' Name='Qubes Tools'>
+                <Directory Id='BinDir' Name='bin'>
+                    <Component Id='PrepareVolume' Guid='{220A22F3-0B73-4A4C-B825-53132A88D1DF}'>
+                        <File Id='prepare_volume.exe' Source='bin\$(env.DDK_ARCH)\prepare-volume.exe' KeyPath='yes' />
+                        <!-- This needs to run *after* Xen disk drivers are loaded, so can't run directly during install as drivers will load after reboot. -->
+                        <RegistryValue Root='HKLM' Key='SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' Name='Prepare Qubes private volume' Type='string' Value='[BinDir]prepare-volume.exe 51728'/>
+                    </Component>
+                </Directory>
+            </Directory>
+        </Directory>
+    </Directory>
+    <Directory Id='$(var.SYSDIR)'>
+        <Component Id='MoveProfiles' Guid='{C4325378-B946-4C6C-A685-F3E39A10AF20}'>
+            <File Id='move_profiles.exe' Source='bin\$(env.DDK_ARCH)\move-profiles.exe' KeyPath='yes' />
+        </Component>
+    </Directory>
+</Directory>
+
+</Module>
+</Wix>

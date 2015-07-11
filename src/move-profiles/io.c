@@ -1,6 +1,14 @@
 #include "io.h"
 
-NTSTATUS FileOpen(OUT HANDLE *file, const IN WCHAR *fileName, IN BOOLEAN write, IN BOOLEAN overwrite, IN BOOLEAN isReparse)
+__declspec(dllimport)
+int swprintf_s(
+    wchar_t *buffer,
+    size_t sizeOfBuffer,
+    const wchar_t *format,
+    ...
+    );
+
+NTSTATUS FileOpen(OUT HANDLE *file, IN const PWCHAR fileName, IN BOOLEAN write, IN BOOLEAN overwrite, IN BOOLEAN isReparse)
 {
     UNICODE_STRING fileNameU = { 0 };
     IO_STATUS_BLOCK iosb;
@@ -65,7 +73,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileGetAttributes(const IN WCHAR *fileName, OUT ULONG *attrs)
+NTSTATUS FileGetAttributes(IN const PWCHAR fileName, OUT ULONG *attrs)
 {
     NTSTATUS status;
     OBJECT_ATTRIBUTES oa;
@@ -92,7 +100,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileSetAttributes(const IN WCHAR *fileName, IN ULONG attrs)
+NTSTATUS FileSetAttributes(IN const PWCHAR fileName, IN ULONG attrs)
 {
     NTSTATUS status;
     OBJECT_ATTRIBUTES oa;
@@ -199,7 +207,7 @@ NTSTATUS FileRead(IN HANDLE file, OUT void *buffer, IN ULONG bufferSize, OUT ULO
     return status;
 }
 
-NTSTATUS FileWrite(IN HANDLE file, IN const void *buffer, IN ULONG bufferSize, OUT ULONG *writtenSize)
+NTSTATUS FileWrite(IN HANDLE file, IN void *buffer, IN ULONG bufferSize, OUT ULONG *writtenSize)
 {
     IO_STATUS_BLOCK iosb;
     NTSTATUS status;
@@ -216,7 +224,7 @@ NTSTATUS FileWrite(IN HANDLE file, IN const void *buffer, IN ULONG bufferSize, O
 }
 
 // Only works within file's volume.
-NTSTATUS FileRename(IN const WCHAR *existingFileName, IN const WCHAR *newFileName, IN BOOLEAN replaceIfExists)
+NTSTATUS FileRename(IN const PWCHAR existingFileName, IN const PWCHAR newFileName, IN BOOLEAN replaceIfExists)
 {
     FILE_RENAME_INFORMATION *fri;
     OBJECT_ATTRIBUTES oa;
@@ -304,7 +312,7 @@ cleanup:
 
 NTSTATUS FileCopySecurity(IN HANDLE source, IN HANDLE target)
 {
-    SECURITY_DESCRIPTOR *sd = NULL;
+    PSECURITY_DESCRIPTOR sd = NULL;
     ULONG requiredSize = 0;
     NTSTATUS status;
 
@@ -364,7 +372,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopy(IN const WCHAR *sourceName, IN const WCHAR *targetName)
+NTSTATUS FileCopy(IN const PWCHAR sourceName, IN const PWCHAR targetName)
 {
     HANDLE fileSource = NULL;
     HANDLE fileTarget = NULL;
@@ -514,7 +522,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCreateDirectory(IN const WCHAR *path)
+NTSTATUS FileCreateDirectory(const IN PWCHAR path)
 {
     UNICODE_STRING pathU = { 0 };
     NTSTATUS status;
@@ -553,11 +561,11 @@ cleanup:
 }
 
 // sourcePath must be an existing and empty directory.
-NTSTATUS FileSetSymlink(IN const WCHAR *sourcePath, IN const WCHAR *targetPath)
+NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
 {
     BYTE buffer[MAX_PATH_LONG]; // MSDN doesn't specify maximum structure's length, but it should be close to MAX_PATH_LONG
     REPARSE_DATA_BUFFER *rdb = (REPARSE_DATA_BUFFER *) buffer;
-    DWORD targetSize;
+    ULONG targetSize;
     NTSTATUS status;
     HANDLE file = NULL;
     IO_STATUS_BLOCK iosb;
@@ -609,7 +617,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopyReparsePoint(IN const WCHAR *sourcePath, IN const WCHAR *targetPath)
+NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
 {
     REPARSE_DATA_BUFFER *rdb = NULL;
     WCHAR dest[MAX_PATH_LONG];
@@ -728,7 +736,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileCopyDirectory(IN const WCHAR *sourcePath, IN const WCHAR *targetPath, IN BOOLEAN ignoreErrors)
+NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath, IN BOOLEAN ignoreErrors)
 {
     UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
@@ -797,7 +805,7 @@ NTSTATUS FileCopyDirectory(IN const WCHAR *sourcePath, IN const WCHAR *targetPat
     }
 
     InitializeObjectAttributes(&oa, NULL, 0, NULL, NULL);
-    status = NtCreateEvent(
+    status = ZwCreateEvent(
         &event,
         EVENT_ALL_ACCESS,
         &oa,
@@ -827,7 +835,7 @@ NTSTATUS FileCopyDirectory(IN const WCHAR *sourcePath, IN const WCHAR *targetPat
 
         if (status == STATUS_PENDING)
         {
-            NtWaitForSingleObject(event, FALSE, NULL);
+            ZwWaitForSingleObject(event, FALSE, NULL);
             status = iosb.Status;
         }
 
@@ -907,7 +915,7 @@ cleanup:
     return status;
 }
 
-NTSTATUS FileDeleteDirectory(IN const WCHAR *path, IN BOOLEAN deleteSelf)
+NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
 {
     UNICODE_STRING dirNameU = { 0 };
     OBJECT_ATTRIBUTES oa;
@@ -945,7 +953,7 @@ NTSTATUS FileDeleteDirectory(IN const WCHAR *path, IN BOOLEAN deleteSelf)
     }
 
     InitializeObjectAttributes(&oa, NULL, 0, NULL, NULL);
-    status = NtCreateEvent(
+    status = ZwCreateEvent(
         &event,
         EVENT_ALL_ACCESS,
         &oa,
@@ -975,7 +983,7 @@ NTSTATUS FileDeleteDirectory(IN const WCHAR *path, IN BOOLEAN deleteSelf)
 
         if (status == STATUS_PENDING)
         {
-            NtWaitForSingleObject(event, FALSE, NULL);
+            ZwWaitForSingleObject(event, FALSE, NULL);
             status = iosb.Status;
         }
 

@@ -1,11 +1,17 @@
 #include "io.h"
 
+// TODO: read from registry
 #define LOG_FILE_NAME L"c:\\move-profiles.log"
 
 HANDLE g_Heap;
 
-// needed to not link with CRT
-#pragma check_stack(off)
+__declspec(dllimport)
+int _vsnwprintf(
+    wchar_t *buffer,
+    size_t count,
+    const wchar_t *format,
+    va_list argptr
+    );
 
 void Sleep(ULONG milliseconds)
 {
@@ -15,7 +21,7 @@ void Sleep(ULONG milliseconds)
     NtDelayExecution(FALSE, &sleepInterval);
 }
 
-void DisplayString(IN const WCHAR *msg)
+void DisplayString(IN const PWCHAR msg)
 {
     UNICODE_STRING us;
 
@@ -30,7 +36,7 @@ void DisplayString(IN const WCHAR *msg)
     NtDisplayString(&us);
 }
 
-void NtPrintf(IN const WCHAR *format, ...)
+void NtPrintf(IN const PWCHAR format, ...)
 {
     va_list args;
     WCHAR buffer[1024];
@@ -42,7 +48,7 @@ void NtPrintf(IN const WCHAR *format, ...)
     DisplayString(buffer);
 }
 
-void NtLog(IN BOOLEAN print, IN const WCHAR *format, ...)
+void NtLog(IN BOOLEAN print, IN const PWCHAR format, ...)
 {
     va_list args;
     WCHAR buffer[1024];
@@ -169,7 +175,7 @@ NTSTATUS wmain(INT argc, WCHAR *argv[], WCHAR *envp[], ULONG DebugFlag OPTIONAL)
     TIME_FIELDS tf;
     LARGE_INTEGER systemTime, localTime;
 
-    NtLog(FALSE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
+    NtLog(TRUE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
 
     status = EnablePrivileges();
     if (!NT_SUCCESS(status))
@@ -182,7 +188,7 @@ NTSTATUS wmain(INT argc, WCHAR *argv[], WCHAR *envp[], ULONG DebugFlag OPTIONAL)
     RtlSystemTimeToLocalTime(&systemTime, &localTime);
     RtlTimeToTimeFields(&localTime, &tf);
 
-    NtLog(FALSE, L"[*] Start time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
+    NtLog(TRUE, L"[*] Start time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
         tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
 
     if (argc < 3)
@@ -216,7 +222,7 @@ NTSTATUS wmain(INT argc, WCHAR *argv[], WCHAR *envp[], ULONG DebugFlag OPTIONAL)
 
     // TODO: parsing quotes so directories can have embedded spaces
     // Might happen in some non-english languages?
-    NtLog(TRUE, L"[*] Copying: '%s' -> '%s'\n", argv[1], argv[2]);
+    NtLog(TRUE, L"[*] Copying: '%s' -> '%s', stand by...\n", argv[1], argv[2]);
     status = FileCopyDirectory(argv[1], argv[2], FALSE);
     if (!NT_SUCCESS(status))
     {
@@ -250,7 +256,7 @@ cleanup:
     RtlSystemTimeToLocalTime(&systemTime, &localTime);
     RtlTimeToTimeFields(&localTime, &tf);
 
-    NtLog(FALSE, L"[*] End time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
+    NtLog(TRUE, L"[*] End time: %04d-%02d-%02d %02d:%02d:%02d.%03d\n",
         tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second, tf.Milliseconds);
 
     // Remove itself from BootExecute.
@@ -259,22 +265,21 @@ cleanup:
     return status;
 }
 
-static
-VOID FASTCALL EnvironmentStringToUnicodeString(IN WCHAR *wsIn, OUT UNICODE_STRING *usOut)
+void EnvironmentStringToUnicodeString(IN WCHAR *wsIn, OUT UNICODE_STRING *usOut)
 {
     if (wsIn)
     {
-        WCHAR *CurrentChar = wsIn;
+        WCHAR *currentChar = wsIn;
 
-        while (*CurrentChar)
+        while (*currentChar)
         {
-            while (*CurrentChar++);
+            while (*currentChar++);
         }
 
-        CurrentChar++;
+        currentChar++;
 
         usOut->Buffer = wsIn;
-        usOut->MaximumLength = usOut->Length = (CurrentChar - wsIn) * sizeof(WCHAR);
+        usOut->MaximumLength = usOut->Length = (currentChar - wsIn) * sizeof(WCHAR);
     }
     else
     {
@@ -283,7 +288,8 @@ VOID FASTCALL EnvironmentStringToUnicodeString(IN WCHAR *wsIn, OUT UNICODE_STRIN
     }
 }
 
-void NtProcessStartup(PPEB Peb)
+// from ReactOS lib/nt/entry_point.c
+void NtProcessStartup(PPEB2 Peb)
 {
     NTSTATUS Status;
     PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
