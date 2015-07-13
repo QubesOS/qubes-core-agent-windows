@@ -46,10 +46,10 @@ DWORD EnablePrivilege(HANDLE token, const WCHAR *privilegeName)
     return ERROR_SUCCESS;
 }
 
-// Argument: xen/vbd device id that represents private.img
+// Argument: backend device id that represents private.img
 int wmain(int argc, WCHAR *argv[])
 {
-    ULONG xenVbdId;
+    ULONG backendId;
     ULONG driveNumber;
     DWORD status;
     WCHAR *usersPath;
@@ -64,18 +64,18 @@ int wmain(int argc, WCHAR *argv[])
 
     if (argc < 2)
     {
-        LogError("Usage: %s <xen/vbd device ID that represents private.img>", argv[0]);
+        LogError("Usage: %s <backend device ID that represents private.img>", argv[0]);
         return 1;
     }
 
-    xenVbdId = wcstoul(argv[1], NULL, 10);
-    if (xenVbdId == 0 || xenVbdId == ULONG_MAX)
+    backendId = wcstoul(argv[1], NULL, 10);
+    if (backendId == 0 || backendId == ULONG_MAX)
     {
-        LogError("Invalid xen/vbd device ID: %s", argv[1]);
+        LogError("Invalid backend device ID: %s", argv[1]);
         return 2;
     }
 
-    LogInfo("xen/vbd device ID: %lu", xenVbdId);
+    LogInfo("backend device ID: %lu", backendId);
 
     // Enable privileges needed for bypassing file security & for ACL manipulation.
     OpenProcessToken(GetCurrentProcess(), TOKEN_ALL_ACCESS, &token);
@@ -84,7 +84,7 @@ int wmain(int argc, WCHAR *argv[])
     EnablePrivilege(token, SE_TAKE_OWNERSHIP_NAME);
     CloseHandle(token);
 
-    if (!GetPrivateImgDriveNumber(xenVbdId, &driveNumber))
+    if (!GetPrivateImgDriveNumber(backendId, &driveNumber))
     {
         LogError("Failed to get drive number for private.img");
         return 3;

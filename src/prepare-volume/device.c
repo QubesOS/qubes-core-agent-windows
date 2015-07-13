@@ -6,27 +6,63 @@
 #include <rpc.h>
 #include <devpkey.h>
 
-static BOOL IsPrivateDisk(IN WCHAR *parentString, IN ULONG privateId)
+// Convert backend device ID to Windows' disk target id.
+// See __ParseVbd() in xenvbd/fdo.c in the new pvdrivers.
+static ULONG BackendIdToTargetId(ULONG backendId)
 {
-    WCHAR *vbdPrefix = L"xen\\vbd\\";
+    if ((backendId & ~((1 << 29) - 1)) != 0)
+    {
+        LogWarning("Invalid backend ID 0x%x", backendId);
+        return 0xffffffff;
+    }
+
+    if (backendId & (1 << 28))
+        return (backendId & ((1 << 20) - 1)) >> 8;           /* xvd    */
+
+    switch (backendId >> 8)
+    {
+        case 202:   return (backendId & 0xF0) >> 4;          /* xvd    */
+        case 8:     return (backendId & 0xF0) >> 4;          /* sd     */
+        case 3:     return (backendId & 0xC0) >> 6;          /* hda..b */
+        case 22:    return ((backendId & 0xC0) >> 6) + 2;    /* hdc..d */
+        case 33:    return ((backendId & 0xC0) >> 6) + 4;    /* hde..f */
+        case 34:    return ((backendId & 0xC0) >> 6) + 6;    /* hdg..h */
+        case 56:    return ((backendId & 0xC0) >> 6) + 8;    /* hdi..j */
+        case 57:    return ((backendId & 0xC0) >> 6) + 10;   /* hdk..l */
+        case 88:    return ((backendId & 0xC0) >> 6) + 12;   /* hdm..n */
+        case 89:    return ((backendId & 0xC0) >> 6) + 14;   /* hdo..p */
+    }
+
+    LogError("Invalid backend ID 0x%x", backendId);
+    return 0xFFFFFFFF; // OBVIOUS ERROR VALUE
+}
+
+static BOOL IsPrivateDisk(IN WCHAR *locationString, IN ULONG privateId)
+{
+    const WCHAR *targetStr = L"Target Id ";
     WCHAR *idStr = NULL;
     WCHAR *stopStr = NULL;
-    ULONG id;
-    // Value for xen-provided PV disks is in this format:
-    // xen\vbd\4&32fe5319&0&51728
-    // Last part is the ID.
-    if (0 == wcsncmp(parentString, vbdPrefix, wcslen(vbdPrefix)))
-    {
-        idStr = wcsrchr(parentString, L'&');
-        if (idStr && *idStr && *(idStr + 1))
-        {
-            idStr++;
-            id = wcstoul(idStr, &stopStr, 10);
-            if (id == privateId)
-                return TRUE;
-        }
-    }
-    return FALSE;
+    ULONG targetId, id;
+
+    targetId = BackendIdToTargetId(privateId);
+    if (targetId == 0xffffffff)
+        return FALSE;
+
+    // Location string is in this format: "Bus Number 0, Target Id 1, LUN 0"
+    // FIXME: avoid string parsing. Although it's not localized it would be better to use something else.
+    idStr = wcsstr(locationString, targetStr);
+    if (!idStr)
+        return FALSE;
+
+    // skip to the Target ID itself
+    idStr += wcslen(targetStr);
+
+    id = wcstoul(idStr, &stopStr, 10);
+    if (id != targetId)
+        return FALSE;
+
+    LogDebug("Target ID %lu in '%s' matches backend ID %lu", id, locationString, privateId);
+    return TRUE;
 }
 
 // Returns physical drive number that represents private.img.
@@ -39,7 +75,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT ULONG *driveNumber)
     DWORD returnedSize;
     WCHAR deviceId[MAX_DEVICE_ID_LEN];
     WCHAR deviceName[1024];
-    WCHAR parentString[1024];
+    WCHAR locationString[1024];
     WCHAR *s;
     DWORD index;
 
@@ -66,20 +102,20 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT ULONG *driveNumber)
 
         LogDebug("DEVID: %s", deviceId);
 
-        // Get device's parent.
-        ZeroMemory(parentString, sizeof(parentString));
-        if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_Parent, &devPropType,
-            (BYTE *) parentString, sizeof(parentString), &returnedSize, 0))
+        // Get device's location info.
+        ZeroMemory(locationString, sizeof(locationString));
+        if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_LocationInfo, &devPropType,
+            (BYTE *)locationString, sizeof(locationString), &returnedSize, 0))
         {
-            perror("SetupDiGetDeviceProperty(parent)");
+            perror("SetupDiGetDeviceProperty(location)");
             continue;
         }
 
         // Check if it's the disk we want.
-        if (!IsPrivateDisk(parentString, xenVbdId))
+        if (!IsPrivateDisk(locationString, xenVbdId))
             continue;
 
-        LogDebug("Xen VBD match");
+        LogDebug("backend ID match");
 
         // Get the user mode device name.
         StringCchPrintf(deviceName, RTL_NUMBER_OF(deviceName), L"\\\\?\\%s\\" DISK_INTERFACE_GUID, deviceId);
