@@ -19,12 +19,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\move-profiles\io.c" />
-    <ClCompile Include="..\..\src\move-profiles\move-profiles.c" />
+    <ClCompile Include="..\..\src\relocate-dir\io.c" />
+    <ClCompile Include="..\..\src\relocate-dir\main.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\move-profiles\io.h" />
-    <ClInclude Include="..\..\src\move-profiles\nt.h" />
+    <ClInclude Include="..\..\src\relocate-dir\io.h" />
+    <ClInclude Include="..\..\src\relocate-dir\nt.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6F974555-15E7-476D-A161-707D7B5D8D74}</ProjectGuid>
@@ -33,7 +33,7 @@
     <MinimumVisualStudioVersion>11.0</MinimumVisualStudioVersion>
     <Configuration>Win8.1 Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">Win32</Platform>
-    <RootNamespace>move_profiles</RootNamespace>
+    <RootNamespace>relocate_dir</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

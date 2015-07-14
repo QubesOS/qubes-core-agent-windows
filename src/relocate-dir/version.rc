@@ -25,7 +25,7 @@ BEGIN
     BEGIN
       VALUE "FileVersion", QTW_FILEVERSION_STR
       VALUE "ProductVersion", QTW_PRODUCTVERSION_STR
-      VALUE "FileDescription", "User profile mover"
+      VALUE "FileDescription", "Directory relocator"
       VALUE "ProductName", "Qubes Tools for Windows"
       VALUE "CompanyName", "Invisible Things Lab"
       VALUE "LegalCopyright", "(C) Invisible Things Lab"

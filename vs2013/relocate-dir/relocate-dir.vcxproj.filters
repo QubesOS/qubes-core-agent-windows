@@ -15,18 +15,18 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\move-profiles\io.c">
+    <ClCompile Include="..\..\src\relocate-dir\io.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\src\move-profiles\move-profiles.c">
+    <ClCompile Include="..\..\src\relocate-dir\main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\move-profiles\io.h">
+    <ClInclude Include="..\..\src\relocate-dir\io.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\src\move-profiles\nt.h">
+    <ClInclude Include="..\..\src\relocate-dir\nt.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

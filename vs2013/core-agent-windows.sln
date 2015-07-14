@@ -33,7 +33,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "file-sender", "qrexec-servi
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "open-in-vm", "qrexec-services\open-in-vm\open-in-vm.vcxproj", "{0D3808B3-DD2B-4A89-A30F-02579B946315}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "move-profiles", "move-profiles\move-profiles.vcxproj", "{6F974555-15E7-476D-A161-707D7B5D8D74}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "relocate-dir", "relocate-dir\relocate-dir.vcxproj", "{6F974555-15E7-476D-A161-707D7B5D8D74}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

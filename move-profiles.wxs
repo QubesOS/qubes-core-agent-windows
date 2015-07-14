@@ -53,8 +53,8 @@ DisplayName='Installation directory'
         </Directory>
     </Directory>
     <Directory Id='$(var.SYSDIR)'>
-        <Component Id='MoveProfiles' Guid='{C4325378-B946-4C6C-A685-F3E39A10AF20}'>
-            <File Id='move_profiles.exe' Source='bin\$(env.DDK_ARCH)\move-profiles.exe' KeyPath='yes' />
+        <Component Id='RelocateDir' Guid='{C4325378-B946-4C6C-A685-F3E39A10AF20}'>
+            <File Id='relocate_dir.exe' Source='bin\$(env.DDK_ARCH)\relocate-dir.exe' KeyPath='yes' />
         </Component>
     </Directory>
 </Directory>
