@@ -1,4 +1,4 @@
-// Prepares private.img and registers move-profiles as a BootExceute executable.
+// Initializes/formats private.img and queues moving user profiles there on the next boot.
 
 #include "prepare-volume.h"
 #include <shellapi.h>
@@ -10,7 +10,9 @@
 #include "device.h"
 #include "disk.h"
 
-#include "log.h"
+#include <log.h>
+#include <config.h>
+#include <qubes-string.h>
 
 #define MAX_PATH_LONG 32768
 
@@ -53,13 +55,15 @@ int wmain(int argc, WCHAR *argv[])
     ULONG driveNumber;
     DWORD status;
     WCHAR *usersPath;
-    WCHAR toPath[] = L"d:\\Users"; // template
+    WCHAR targetUsersPath[] = L"d:\\Users"; // template
+    WCHAR targetLogPath[] = L"d:\\QubesLogs";
     HANDLE token;
     HKEY key;
     DWORD valueType;
     DWORD size;
     WCHAR *valueData;
     WCHAR *command;
+    WCHAR *logPath, *logShortPath;
     WCHAR msg[1024];
 
     if (argc < 2)
@@ -72,7 +76,7 @@ int wmain(int argc, WCHAR *argv[])
     if (backendId == 0 || backendId == ULONG_MAX)
     {
         LogError("Invalid backend device ID: %s", argv[1]);
-        return 2;
+        return 1;
     }
 
     LogInfo("backend device ID: %lu", backendId);
@@ -87,14 +91,14 @@ int wmain(int argc, WCHAR *argv[])
     if (!GetPrivateImgDriveNumber(backendId, &driveNumber))
     {
         LogError("Failed to get drive number for private.img");
-        return 3;
+        return 1;
     }
 
-    // This will replace drive letter in toPath.
-    if (!PreparePrivateVolume(driveNumber, toPath))
+    // This will replace drive letter in targetUsersPath.
+    if (!PreparePrivateVolume(driveNumber, targetUsersPath))
     {
         LogError("Failed to initialize private.img");
-        return 4;
+        return 1;
     }
 
     // We should have a properly formatted volume by now.
@@ -103,7 +107,7 @@ int wmain(int argc, WCHAR *argv[])
     if (S_OK != SHGetKnownFolderPath(&FOLDERID_UserProfiles, 0, NULL, &usersPath))
     {
         perror("SHGetKnownFolderPath(FOLDERID_UserProfiles)");
-        return 5;
+        return 1;
     }
 
     if (GetFileAttributes(usersPath) & FILE_ATTRIBUTE_REPARSE_POINT)
@@ -113,50 +117,82 @@ int wmain(int argc, WCHAR *argv[])
         return 0;
     }
 
-    // Register the native move-profiles executable as BootExecute in the registry.
-    // It's a multi-string value (null-separated strings terminated with a double null).
-    status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager", 0, KEY_READ | KEY_WRITE, &key);
-    if (ERROR_SUCCESS != status)
-    {
-        perror2(status, "RegOpenKeyEx");
-        return 6;
-    }
-
     size = MAX_PATH_LONG*sizeof(WCHAR);
     valueData = malloc(size);
     command = malloc(size);
+    logPath = malloc(size);
+    targetLogPath[0] = targetUsersPath[0]; // copy the private.img drive letter
 
-    // Get current value (usually filesystem autocheck).
+    // Read log directory from the registry. We'll relocate it to the private disk.
+    status = CfgReadString(NULL, LOG_CONFIG_PATH_VALUE, logPath, MAX_PATH_LONG, NULL);
+    if (ERROR_SUCCESS != status)
+    {
+        perror2(status, "Reading log path from registry");
+        return 1;
+    }
+
+    LogDebug("Log directory: '%s'", logPath);
+
+    // Register the native relocate-dir executable as BootExecute in the registry.
+    // It's a multi-string value (normal strings terminated with an empty string).
+    status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager", 0, KEY_READ | KEY_WRITE, &key);
+    if (ERROR_SUCCESS != status)
+    {
+        perror2(status, "Opening Session Manager registry key");
+        return 1;
+    }
+
+    // Get the current value (usually filesystem autocheck).
     status = RegQueryValueEx(key, L"BootExecute", NULL, &valueType, (PBYTE)valueData, &size);
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "RegQueryValueEx");
-        return 7;
+        perror2(status, "Reading BootExecute entry");
+        return 1;
     }
 
-    // Format the command.
-    if (FAILED(StringCchPrintf(command, MAX_PATH_LONG, L"move-profiles %s %s\0", usersPath, toPath)))
+    // Format the move profiles command.
+    if (FAILED(StringCchPrintfW(command, MAX_PATH_LONG, L"relocate-dir %s %s", usersPath, targetUsersPath)))
     {
-        LogError("StringCchPrintf(command) failed");
-        return 8;
+        LogError("Formatting move profiles command failed");
+        return 1;
     }
+    LogDebug("profiles command: '%s'", command);
 
     CoTaskMemFree(usersPath);
 
-    // Append the command to the current value.
-    if ((wcslen(command) + 1) * sizeof(WCHAR) + size > MAX_PATH_LONG*sizeof(WCHAR))
+    // Append the command to the BootExecute value.
+    if (!MultiWStrAdd(valueData, MAX_PATH_LONG*sizeof(WCHAR), command))
     {
         LogError("Buffer too small for BootExecute entry");
-        return 9;
+        return 1;
     }
 
-    memcpy(valueData + size / sizeof(WCHAR) - 1, command, (wcslen(command) + 2) * sizeof(WCHAR));
+    // relocate-dir can't handle arguments with spaces
+    size = GetShortPathName(logPath, NULL, 0);
+    logShortPath = malloc(size * sizeof(WCHAR));
+    GetShortPathName(logPath, logShortPath, size);
+    LogDebug("log short path: '%s'", logShortPath);
 
-    status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE) valueData, (DWORD) (wcslen(command) + 1) * sizeof(WCHAR) + size);
+    // Format the move logs command.
+    if (FAILED(StringCchPrintfW(command, MAX_PATH_LONG, L"relocate-dir %s %s", logShortPath, targetLogPath)))
+    {
+        LogError("Formatting move logs command failed");
+        return 1;
+    }
+    LogDebug("log command: '%s'", command);
+
+    // Append the command to the BootExecute value.
+    if (!MultiWStrAdd(valueData, MAX_PATH_LONG*sizeof(WCHAR), command))
+    {
+        LogError("Buffer too small for BootExecute entry");
+        return 1;
+    }
+
+    status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE)valueData, MultiWStrSize(valueData, NULL));
     if (ERROR_SUCCESS != status)
     {
         perror2(status, "RegSetValueEx");
-        return 10;
+        return 1;
     }
 
     RegCloseKey(key);
@@ -164,7 +200,7 @@ int wmain(int argc, WCHAR *argv[])
     StringCchPrintf(msg, RTL_NUMBER_OF(msg),
         L"Qubes private disk image initialized as disk %c:.\r\n"
         L"User profiles directory will be moved there during the next system boot.",
-        toPath[0]);
+        targetUsersPath[0]);
     MessageBox(0, msg, L"Qubes Tools for Windows", MB_OK | MB_ICONINFORMATION);
 
     return 0;
