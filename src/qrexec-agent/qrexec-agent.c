@@ -252,7 +252,7 @@ static ULONG SendDataToPeer(IN CLIENT_INFO *clientInfo, IN OUT PIPE_DATA *data)
         // The client does not want to receive any data from this console.
         return ERROR_INVALID_FUNCTION;
 
-    if (clientInfo->StdinPipeClosed)
+    if (data->PipeClosed)
     {
         LogDebug("trying to send after peer sent EOF, probably broken vchan connection");
         return ERROR_SUCCESS;
@@ -342,7 +342,8 @@ ULONG CloseReadPipeHandles(IN CLIENT_INFO *clientInfo OPTIONAL, IN OUT PIPE_DATA
             {
                 // Must wait for the canceled IO to complete, otherwise a race condition may occur on the
                 // OVERLAPPED structure.
-                WaitForSingleObject(data->ReadState.hEvent, INFINITE);
+                if (WaitForSingleObject(data->ReadState.hEvent, 1000) != WAIT_OBJECT_0)
+                    perror("wait for canceled IO");
 
                 // See if there is something to return.
                 SendDataToPeer(clientInfo, data);
@@ -359,6 +360,8 @@ ULONG CloseReadPipeHandles(IN CLIENT_INFO *clientInfo OPTIONAL, IN OUT PIPE_DATA
     if (data->ReadPipe)
         // Can close the pipe only when there is no pending IO in progress.
         CloseHandle(data->ReadPipe);
+
+    data->PipeClosed = TRUE;
 
     LogVerbose("status 0x%x", status);
     return status;
@@ -802,16 +805,14 @@ static void RemoveClientNoLocks(IN OUT CLIENT_INFO *clientInfo OPTIONAL)
 
     LogDebug("Client with vchan %p removed", clientInfo->Vchan);
 
-    // if we're data server, send EOF if we can
-    if (clientInfo->IsVchanServer && clientInfo->Vchan)
+    // send EOF if we can
+    if (clientInfo->Vchan)
     {
         header.type = MSG_DATA_STDIN;
         header.len = 0;
         VchanSendBuffer(clientInfo->Vchan, &header, sizeof(header), L"EOF");
-    }
 
-    if (clientInfo->Vchan)
-    {
+        LogDebug("closing vchan %p", clientInfo->Vchan);
         libvchan_close(clientInfo->Vchan);
         clientInfo->Vchan = NULL;
     }
@@ -1668,9 +1669,6 @@ BOOL HandleClientExitCode(IN CLIENT_INFO *clientInfo)
     EnterCriticalSection(&g_ClientsCriticalSection);
     LogDebug("vchan %p: code 0x%x, client %p", clientInfo->Vchan, code, clientInfo);
     // peer is closing vchan on their side so we shouldn't attempt to use it
-    LogVerbose("closing vchan %p", clientInfo->Vchan);
-    libvchan_close(clientInfo->Vchan);
-    clientInfo->Vchan = NULL;
     RemoveClientNoLocks(clientInfo);
     LeaveCriticalSection(&g_ClientsCriticalSection);
 
