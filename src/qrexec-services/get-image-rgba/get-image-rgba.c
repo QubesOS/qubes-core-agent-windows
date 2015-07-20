@@ -109,6 +109,7 @@ int wmain(int argc, WCHAR *argv[])
     FILE *f1;
 #endif
 
+    status = ERROR_NOT_ENOUGH_MEMORY;
     linkPath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
     if (!linkPath)
         goto cleanup;
@@ -119,7 +120,7 @@ int wmain(int argc, WCHAR *argv[])
     // Read input and convert it to the shortcut path.
     if (ERROR_SUCCESS != GetShortcutPath(linkPath, MAX_PATH_LONG))
     {
-        perror("GetShortcutPath");
+        status = perror("GetShortcutPath");
         goto cleanup;
     }
 
@@ -218,9 +219,12 @@ int wmain(int argc, WCHAR *argv[])
     fclose(f1);
 #endif
 
+    status = ERROR_SUCCESS;
+
 cleanup:
     if (status != ERROR_SUCCESS && linkPath)
         LogError("LinkPath: %s", linkPath);
     // Everything will be cleaned up upon process exit.
+    LogDebug("returning %lu", status);
     return status;
 }
