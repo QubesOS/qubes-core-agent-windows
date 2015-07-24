@@ -683,6 +683,17 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
             pipeStdout,
             pipeStderr,
             &clientInfo->ChildProcess);
+
+        if (ERROR_SUCCESS != status)
+        {
+            perror2(status, "CreatePipedProcessAsUser");
+            status = CreatePipedProcessAsCurrentUser(
+                commandLine,
+                pipeStdin,
+                pipeStdout,
+                pipeStderr,
+                &clientInfo->ChildProcess);
+        }
     }
     else
     {
@@ -715,14 +726,8 @@ static ULONG StartClient(IN libvchan_t *vchan, IN const WCHAR *userName, IN WCHA
         CloseHandle(clientInfo->StderrData.ReadPipe);
 
         free(clientInfo);
-#ifdef BUILD_AS_SERVICE
-        if (userName)
-            return perror2(status, "CreatePipedProcessAsUser");
-        else
-            return perror2(status, "CreatePipedProcessAsCurrentUser");
-#else
+
         return perror2(status, "CreatePipedProcessAsCurrentUser");
-#endif
     }
 
     // we're the data client
@@ -1342,6 +1347,14 @@ static ULONG HandleJustExec(IN const struct msg_header *header)
         commandLine,
         runInteractively,
         &process);
+
+    if (status != ERROR_SUCCESS)
+    {
+        perror2(status, "CreateNormalProcessAsUser");
+        status = CreateNormalProcessAsCurrentUser(
+            commandLine,
+            &process);
+    }
 #else
     status = CreateNormalProcessAsCurrentUser(
         commandLine,
@@ -1355,11 +1368,7 @@ static ULONG HandleJustExec(IN const struct msg_header *header)
     }
     else
     {
-#ifdef BUILD_AS_SERVICE
-        perror2(status, "CreateNormalProcessAsUser");
-#else
         perror2(status, "CreateNormalProcessAsCurrentUser");
-#endif
     }
 
     // send status to qrexec-client (not real *exit* code, but we can at least return that process creation failed)
