@@ -139,7 +139,7 @@ DisplayName='Installation directory'
                         <File Id='qubes.WaitForSession' Source='src\qrexec-services\qubes.WaitForSession'/>
                         <File Id='qubes.SetGuiMode' Source='src\qrexec-services\qubes.SetGuiMode'/>
                         <File Id='qubes.GetAppMenus' Source='src\qrexec-services\qubes.GetAppMenus'/>
-                        <File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/>
+                        <!--File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/-->
                     </Component>
                 </Directory>
                 <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
@@ -153,7 +153,7 @@ DisplayName='Installation directory'
                         <File Id='wait_for_logon.exe' Source='bin\$(env.DDK_ARCH)\wait-for-logon.exe'/>
                         <File Id='set_gui_mode.exe' Source='bin\$(env.DDK_ARCH)\set-gui-mode.exe'/>
                         <File Id='get_appmenus.ps1' Source='src\qrexec-services\get-appmenus.ps1'/>
-                        <File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/>
+                        <!--File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/-->
                     </Component>
                 </Directory>
             </Directory>
