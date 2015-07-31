@@ -1,3 +1,8 @@
+// This program is used to trigger qrexec services in remote domains.
+// It connects to local qrexec agent and sends it:
+// trigger_service_params (service params), size_t (local handler path size), local handler path (WCHARs).
+// Local handler will be launched as the local endpoint for the triggered service.
+
 #include <windows.h>
 #include <strsafe.h>
 
@@ -5,16 +10,18 @@
 #include <log.h>
 #include <qubes-io.h>
 #include <utf8-conv.h>
+#include <pipe-server.h>
 
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    HANDLE agentPipe;
+    HANDLE readPipe, writePipe;
     BOOL success = FALSE;
     LPTSTR pipeName = L"\\\\.\\pipe\\qrexec_trigger";
     struct trigger_service_params triggerParams = { 0 };
     ULONG status;
     UCHAR *argumentUtf8;
     HRESULT hresult;
+    size_t size;
 
     if (argc < 4)
     {
@@ -22,9 +29,11 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         return ERROR_INVALID_PARAMETER;
     }
 
+    LogDebug("domain '%s', service '%s', local command '%s'", argv[1], argv[2], argv[3]);
+
     // Prepare the parameter structure containing the first two arguments.
     argumentUtf8 = NULL;
-    status = ConvertUTF16ToUTF8(argv[2], &argumentUtf8, NULL); // local program
+    status = ConvertUTF16ToUTF8(argv[2], &argumentUtf8, NULL); // service name
     if (ERROR_SUCCESS != status)
         return perror2(status, "ConvertUTF16ToUTF8");
 
@@ -48,38 +57,23 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     LogDebug("Connecting to qrexec-agent");
 
-    // Try to open a named pipe; wait for it, if necessary.
+    if (ERROR_SUCCESS != QpsConnect(pipeName, &readPipe, &writePipe))
+        return perror("open agent pipe");
 
-    while (TRUE)
-    {
-        agentPipe = CreateFile(
-            pipeName,
-            GENERIC_READ | GENERIC_WRITE,
-            0,
-            NULL,
-            OPEN_EXISTING,
-            0,
-            NULL);
-
-        if (agentPipe != INVALID_HANDLE_VALUE)
-            break;
-
-        // Exit if an error other than ERROR_PIPE_BUSY occurs.
-        status = GetLastError();
-        if (ERROR_PIPE_BUSY != status)
-            return perror2(status, "CreateFile(agent pipe)");
-
-        // All pipe instances are busy, so wait for 10 seconds.
-        if (!WaitNamedPipe(pipeName, 10000))
-            return perror("WaitNamedPipe");
-    }
-
+    CloseHandle(readPipe);
     LogDebug("Sending the parameters to qrexec-agent");
 
-    if (!QioWriteBuffer(agentPipe, &triggerParams, sizeof(triggerParams)))
-        return perror("write to agent");
+    if (!QioWriteBuffer(writePipe, &triggerParams, sizeof(triggerParams)))
+        return perror("write trigger params to agent");
 
-    CloseHandle(agentPipe);
+    size = (wcslen(argv[3]) + 1) * sizeof(WCHAR);
+    if (!QioWriteBuffer(writePipe, &size, sizeof(size)))
+        return perror("write command size to agent");
+
+    if (!QioWriteBuffer(writePipe, argv[3], (DWORD)size))
+        return perror("write command to agent");
+
+    CloseHandle(writePipe);
 
     LogVerbose("exiting");
 
