@@ -32,7 +32,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     if (FAILED(hresult))
         return perror2(hresult, "StringCchCopyA");
 
-    free(argumentUtf8);
+    ConvertFree(argumentUtf8);
     argumentUtf8 = NULL;
 
     status = ConvertUTF16ToUTF8(argv[1], &argumentUtf8, NULL); // vm name
@@ -43,7 +43,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     if (FAILED(hresult))
         return perror2(hresult, "StringCchCopyA");
 
-    free(argumentUtf8);
+    ConvertFree(argumentUtf8);
     argumentUtf8 = NULL;
 
     LogDebug("Connecting to qrexec-agent");
