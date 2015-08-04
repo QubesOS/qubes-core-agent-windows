@@ -791,7 +791,7 @@ void Usage(
     _In_ const PWSTR name
     )
 {
-    wprintf(L"Usage: %s <domain> <port> <user_name> <flags> <command_line>\n", name);
+    wprintf(L"Usage: %s domain|port|user_name|flags|command_line\n", name);
     wprintf(L"domain:       remote domain for data vchan\n");
     wprintf(L"port:         remote port for data vchan\n");
     wprintf(L"user_name:    user name to use for the child process or (null) for current user\n");
@@ -799,7 +799,7 @@ void Usage(
     wprintf(L"         0x01 act as vchan server (default is client)\n");
     wprintf(L"         0x02 pipe child process' io to vchan (default is not)\n");
     wprintf(L"         0x04 run the child process in the interactive session (requires that a user is logged on)\n");
-    wprintf(L"command_line: local program to execute\n");
+    wprintf(L"command_line: local program to execute and connect to data vchan\n");
 }
 
 /**
@@ -813,7 +813,7 @@ void Usage(
  *                      0x01 act as vchan server (default is client)
  *                      0x02 pipe child process' io to vchan (default is not)
  *                      0x04 run the child process in the interactive session (requires that a user is logged on)
- *             command_line: local program to execute
+ *             command_line: local program to execute and connect to data vchan
  * @return Error code.
  */
 int __cdecl wmain(int argc, WCHAR *argv[])
@@ -821,12 +821,18 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     PCHILD_STATE child = NULL;
     int domain, port, flags;
     BOOL piped, interactive;
-    PWSTR userName, commandLine;
+    PWSTR domainName, portStr, flagsStr, userName, commandLine;
     DWORD status = ERROR_NOT_ENOUGH_MEMORY;
 
     LogVerbose("start");
 
-    if (argc < 6)
+    domainName = GetArgument();
+    portStr = GetArgument();
+    userName = GetArgument();
+    flagsStr = GetArgument();
+    commandLine = GetArgument();
+
+    if (!domainName || !portStr || !userName || !flagsStr || !commandLine)
     {
         Usage(argv[0]);
         return ERROR_INVALID_PARAMETER;
@@ -841,15 +847,13 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     InitializeCriticalSection(&g_VchanCs);
     libvchan_register_logger(XifLogger);
 
-    domain = _wtoi(argv[1]);
-    port = _wtoi(argv[2]);
-    userName = argv[3];
-    flags = _wtoi(argv[4]);
-    commandLine = argv[5];
+    domain = _wtoi(domainName);
+    port = _wtoi(portStr);
+    flags = _wtoi(flagsStr);
 
-    child->IsVchanServer = flags & 0x01;
-    piped = flags & 0x02;
-    interactive = flags & 0x04;
+    child->IsVchanServer = !!(flags & 0x01);
+    piped = !!(flags & 0x02);
+    interactive = !!(flags & 0x04);
 
     LogDebug("domain %d, port %d, user %s, flags 0x%x, cmd '%s'", domain, port, userName, flags, commandLine);
 
@@ -857,6 +861,9 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     child->Vchan = InitVchan(domain, port, child->IsVchanServer);
     if (!child->Vchan)
         goto cleanup;
+
+    if (wcscmp(userName, L"(null)") == 0)
+        userName = NULL;
 
     status = CreatePublicPipeSecurityDescriptor(&child->PipeSd, &child->PipeAcl);
     if (ERROR_SUCCESS != status)
