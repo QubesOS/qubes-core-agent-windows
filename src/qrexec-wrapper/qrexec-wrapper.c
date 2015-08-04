@@ -519,7 +519,7 @@ DWORD HandleDataMessage(
         LogVerbose("MSG_HELLO");
         if (!VchanReceiveBuffer(child->Vchan, &peerInfo, sizeof(peerInfo), L"peer info"))
             return ERROR_INVALID_FUNCTION;
-        
+
         LogDebug("protocol version %d", peerInfo.version);
 
         if (peerInfo.version != QREXEC_PROTOCOL_VERSION)
@@ -740,9 +740,13 @@ DWORD EventLoop(
                 run = FALSE;
                 break;
             }
-            status = HandleDataMessage(child);
-            if (status != ERROR_SUCCESS)
-                run = FALSE;
+
+            while (VchanGetReadBufferSize(child->Vchan) > 0)
+            {
+                status = HandleDataMessage(child);
+                if (status != ERROR_SUCCESS)
+                    run = FALSE;
+            }
             break;
         }
 
@@ -755,19 +759,19 @@ DWORD EventLoop(
                 perror("GetExitCodeProcess");
                 exitCode = 0;
             }
-            
+
             LogDebug("child process exited with code %d", exitCode);
             if (!VchanSendExitCode(child, exitCode))
                 LogError("sending exit code failed");
-            
+
             status = ERROR_SUCCESS;
             CloseHandle(child->Process);
             child->Process = NULL;
             run = FALSE;
             break;
         }
-            }
         }
+    }
 
     // wait for the threads to finish
     waitObjects[0] = child->StdoutThread;
@@ -777,8 +781,8 @@ DWORD EventLoop(
 
     CloseHandle(child->StdoutThread);
     child->StdoutThread = NULL;
-                CloseHandle(child->StderrThread);
-                child->StderrThread = NULL;
+    CloseHandle(child->StderrThread);
+    child->StderrThread = NULL;
 
     return status;
 }
