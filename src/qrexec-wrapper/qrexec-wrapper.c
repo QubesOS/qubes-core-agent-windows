@@ -291,6 +291,7 @@ BOOL VchanSendMessage(
         LogError("VchanSendBuffer(%s) failed", what);
         goto cleanup;
     }
+    status = TRUE;
 
 cleanup:
     LeaveCriticalSection(&g_VchanCs);
@@ -354,13 +355,10 @@ BOOL VchanSendData(
         break;
     default:
         LogError("invalid pipe type %d", pipeType);
-        return ERROR_INVALID_PARAMETER;
+        return FALSE;
     }
 
-    if (!VchanSendMessage(child->Vchan, messageType, data, cbData, L"output data"))
-        return FALSE;
-
-    return TRUE;
+    return VchanSendMessage(child->Vchan, messageType, data, cbData, L"output data");
 }
 
 /**
@@ -378,10 +376,7 @@ BOOL VchanSendHello(
 
     info.version = QREXEC_PROTOCOL_VERSION;
 
-    if (ERROR_SUCCESS != VchanSendMessage(vchan, MSG_HELLO, &info, sizeof(info), L"hello"))
-        return FALSE;
-
-    return TRUE;
+    return VchanSendMessage(vchan, MSG_HELLO, &info, sizeof(info), L"hello");
 }
 
 /**
@@ -578,7 +573,7 @@ DWORD WINAPI StdoutThread(
     while (TRUE)
     {
         LogVerbose("reading...");
-        if (!ReadFile(child->Stdout.ReadEndpoint, buffer, sizeof(buffer), &transferred, NULL)) // this can block
+        if (!ReadFile(child->Stdout.ReadEndpoint, buffer, MAX_DATA_CHUNK, &transferred, NULL)) // this can block
         {
             perror("ReadFile(stdout)");
             break;
@@ -621,7 +616,7 @@ DWORD WINAPI StderrThread(
     while (TRUE)
     {
         LogVerbose("reading...");
-        if (!ReadFile(child->Stderr.ReadEndpoint, buffer, sizeof(buffer), &transferred, NULL)) // this can block
+        if (!ReadFile(child->Stderr.ReadEndpoint, buffer, MAX_DATA_CHUNK, &transferred, NULL)) // this can block
         {
             perror("ReadFile(stderr)");
             break;
@@ -749,7 +744,7 @@ DWORD EventLoop(
 
         case 1: // child process terminated
         {
-            DWORD exitCode;
+            int exitCode;
 
             if (!GetExitCodeProcess(child->Process, &exitCode))
             {
