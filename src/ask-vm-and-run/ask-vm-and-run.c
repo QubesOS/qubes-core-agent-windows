@@ -4,7 +4,8 @@
 #include <stdlib.h>
 #include "resource.h"
 
-#include "log.h"
+#include <log.h>
+#include <exec.h>
 
 #define QREXEC_CLIENT_VM L"qrexec-client-vm.exe"
 
@@ -62,7 +63,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, LPTSTR com
         return 1;
     }
 
-    // build RPC service config file path
+    // build qrexec-client-vm path, first get our own
     if (!GetModuleFileName(NULL, qrexecClientPath, RTL_NUMBER_OF(qrexecClientPath)))
     {
         status = perror("GetModuleFileName");
@@ -82,6 +83,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, LPTSTR com
     // Leave trailing backslash
     pathSeparator++;
     *pathSeparator = L'\0';
+    // append target executable
     PathAppend(qrexecClientPath, QREXEC_CLIENT_VM);
 
     cchQrexecClientCmdLine = wcslen(QREXEC_CLIENT_VM) + wcslen((WCHAR *) result) + wcslen(commandLine) + 3;
@@ -94,13 +96,15 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, LPTSTR com
         return ERROR_NOT_ENOUGH_MEMORY;
     }
 
-    if (FAILED(StringCchPrintf(qrexecClientCmdLine, cchQrexecClientCmdLine, QREXEC_CLIENT_VM L" %s %s", (WCHAR *) result, commandLine)))
+    if (FAILED(StringCchPrintf(qrexecClientCmdLine, cchQrexecClientCmdLine, QREXEC_CLIENT_VM L" %s%c%s",
+        (WCHAR *) result, QUBES_ARGUMENT_SEPARATOR, commandLine)))
     {
         LogError("Failed to construct command line");
         ReportError(L"Failed to construct command line");
         return ERROR_BAD_PATHNAME;
     }
 
+    LogDebug("executing command: '%s'", qrexecClientCmdLine);
     si.cb = sizeof(si);
 
     if (!CreateProcess(qrexecClientPath, qrexecClientCmdLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
