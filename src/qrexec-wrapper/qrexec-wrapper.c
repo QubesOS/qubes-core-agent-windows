@@ -715,20 +715,18 @@ DWORD EventLoop(
     )
 {
     DWORD status = ERROR_NOT_ENOUGH_MEMORY;
-    HANDLE waitObjects[4];
+    HANDLE waitObjects[2];
     DWORD signaled;
     BOOL run = TRUE;
 
     waitObjects[0] = libvchan_fd_for_select(child->Vchan);
     waitObjects[1] = child->Process;
-    waitObjects[2] = child->StdoutThread;
-    waitObjects[3] = child->StderrThread;
 
     // event loop
     while (run)
     {
         LogVerbose("waiting");
-        signaled = WaitForMultipleObjects(4, waitObjects, FALSE, INFINITE) - WAIT_OBJECT_0;
+        signaled = WaitForMultipleObjects(2, waitObjects, FALSE, INFINITE) - WAIT_OBJECT_0;
 
         status = ERROR_INVALID_FUNCTION;
 
@@ -768,30 +766,19 @@ DWORD EventLoop(
             run = FALSE;
             break;
         }
-
-        case 2: // stdout thread terminated
-        {
-            if (child->StdoutThread)
-            {
-                LogDebug("stdout thread terminated");
-                CloseHandle(child->StdoutThread);
-                child->StdoutThread = NULL;
-                // ignore
             }
         }
 
-        case 3: // stderr thread terminated
-        {
-            if (child->StderrThread)
-            {
-                LogDebug("stderr thread terminated");
+    // wait for the threads to finish
+    waitObjects[0] = child->StdoutThread;
+    waitObjects[1] = child->StderrThread;
+
+    WaitForMultipleObjects(2, waitObjects, TRUE, 100);
+
+    CloseHandle(child->StdoutThread);
+    child->StdoutThread = NULL;
                 CloseHandle(child->StderrThread);
                 child->StderrThread = NULL;
-                // ignore
-            }
-        }
-        }
-    }
 
     return status;
 }
