@@ -89,24 +89,31 @@ DWORD CreateChildPipes(
 
     LogVerbose("start");
 
-    status = InitPipe(&child->Stdout, PTYPE_STDOUT);
+    // create pipes and make sure endpoints we use are not inherited
+    status = InitPipe(&child->Stdout, PTYPE_STDOUT, child->PipeSd);
     if (ERROR_SUCCESS != status)
         return perror2(status, "InitPipe(STDOUT)");
 
-    status = InitPipe(&child->Stderr, PTYPE_STDERR);
+    SetHandleInformation(child->Stdout.ReadEndpoint, HANDLE_FLAG_INHERIT, 0);
+
+    status = InitPipe(&child->Stderr, PTYPE_STDERR, child->PipeSd);
     if (ERROR_SUCCESS != status)
     {
         ClosePipe(&child->Stdout);
         return perror2(status, "InitPipe(STDERR)");
     }
 
-    status = InitPipe(&child->Stdin, PTYPE_STDIN);
+    SetHandleInformation(child->Stderr.ReadEndpoint, HANDLE_FLAG_INHERIT, 0);
+
+    status = InitPipe(&child->Stdin, PTYPE_STDIN, child->PipeSd);
     if (ERROR_SUCCESS != status)
     {
         ClosePipe(&child->Stdout);
         ClosePipe(&child->Stderr);
         return perror2(status, "InitPipe(STDIN)");
     }
+
+    SetHandleInformation(child->Stdin.WriteEndpoint, HANDLE_FLAG_INHERIT, 0);
 
     return ERROR_SUCCESS;
 }
@@ -214,8 +221,11 @@ DWORD StartChild(
     {
         // we won't be using these pipe endpoints, only the child will
         CloseHandle(child->Stdin.ReadEndpoint);
+        child->Stdin.ReadEndpoint = NULL;
         CloseHandle(child->Stdout.WriteEndpoint);
+        child->Stdout.WriteEndpoint = NULL;
         CloseHandle(child->Stderr.WriteEndpoint);
+        child->Stderr.WriteEndpoint = NULL;
     }
 
     if (ERROR_SUCCESS != status)
