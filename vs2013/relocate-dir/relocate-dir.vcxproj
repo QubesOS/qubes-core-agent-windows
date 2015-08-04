@@ -26,6 +26,9 @@
     <ClInclude Include="..\..\src\relocate-dir\io.h" />
     <ClInclude Include="..\..\src\relocate-dir\nt.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\..\src\relocate-dir\version.rc" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{6F974555-15E7-476D-A161-707D7B5D8D74}</ProjectGuid>
     <TemplateGuid>{504102d4-2172-473c-8adf-cd96e308f257}</TemplateGuid>

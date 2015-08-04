@@ -19,9 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{9A0CF2E9-26F7-444F-AE5E-537D36A0553A}</ProjectGuid>
+    <ProjectGuid>{60E9A909-5772-4E46-B579-1F530AEED0FE}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>qrexecagent</RootNamespace>
+    <RootNamespace>qrexecwrapper</RootNamespace>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -40,15 +40,15 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v120</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v120</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -151,14 +151,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\src\qrexec-agent\advertise-tools.c" />
-    <ClCompile Include="..\..\src\qrexec-agent\qrexec-agent.c" />
+    <ClCompile Include="..\..\src\qrexec-wrapper\qrexec-wrapper.c" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="..\..\src\qrexec-agent\version.rc" />
+    <ClInclude Include="..\..\src\qrexec-wrapper\qrexec-wrapper.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\src\qrexec-agent\qrexec-agent.h" />
+    <ResourceCompile Include="..\..\src\qrexec-wrapper\version.rc" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
