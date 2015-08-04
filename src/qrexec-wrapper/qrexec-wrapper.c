@@ -469,6 +469,12 @@ DWORD HandleDataMessage(
 
     assert(child && child->Vchan);
 
+    if (VchanGetReadBufferSize(child->Vchan) == 0)
+    {
+        LogVerbose("no data");
+        return ERROR_SUCCESS;
+    }
+
     LogDebug("is server %d", child->IsVchanServer);
     if (!VchanReceiveBuffer(child->Vchan, &header, sizeof(header), L"data header"))
     {
