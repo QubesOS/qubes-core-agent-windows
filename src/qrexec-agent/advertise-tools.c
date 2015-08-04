@@ -114,7 +114,7 @@ BOOL NotifyDom0(void)
 
     if (!CreateProcess(
         qrexecClientVmPath,
-        L"qrexec-client-vm.exe dom0 qubes.NotifyTools dummy",
+        L"qrexec-client-vm.exe dom0|qubes.NotifyTools|dummy",
         NULL,
         NULL,
         FALSE,
