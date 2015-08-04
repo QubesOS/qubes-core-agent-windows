@@ -174,6 +174,7 @@ DWORD StartChild(
                 perror2(status, "CreatePipedProcessAsUser");
                 status = CreatePipedProcessAsCurrentUser(
                     commandLine,
+                    interactive,
                     child->Stdin.ReadEndpoint,
                     child->Stdout.WriteEndpoint,
                     child->Stderr.WriteEndpoint,
@@ -204,6 +205,7 @@ DWORD StartChild(
         {
             status = CreatePipedProcessAsCurrentUser(
                 commandLine,
+                interactive,
                 child->Stdin.ReadEndpoint,
                 child->Stdout.WriteEndpoint,
                 child->Stderr.WriteEndpoint,
