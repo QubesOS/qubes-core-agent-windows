@@ -35,6 +35,9 @@ typedef struct _CHILD_STATE
     PIPE_DATA    Stderr;
     PIPE_DATA    Stdin;
 
+    PSECURITY_DESCRIPTOR PipeSd;
+    PACL         PipeAcl;
+
     libvchan_t   *Vchan;
 
     BOOL         IsVchanServer;

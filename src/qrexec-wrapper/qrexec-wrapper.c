@@ -23,11 +23,13 @@ CRITICAL_SECTION g_VchanCs;
  * @brief Create an anonymous pipe that will be used as one of the std handles for a child process.
  * @param pipeData Pipe data to initialize.
  * @param pipeType Pipe type.
+ * @param securityDescriptor Security descriptor for the pipe.
  * @return Error code.
  */
 DWORD InitPipe(
     _Out_ PPIPE_DATA pipeData,
-    _In_ PIPE_TYPE pipeType
+    _In_ PIPE_TYPE pipeType,
+    _In_ PSECURITY_DESCRIPTOR securityDescriptor
     )
 {
     SECURITY_ATTRIBUTES sa = { 0 };
@@ -39,7 +41,7 @@ DWORD InitPipe(
     ZeroMemory(pipeData, sizeof(*pipeData));
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = NULL;
+    sa.lpSecurityDescriptor = securityDescriptor;
 
     if (!CreatePipe(&pipeData->ReadEndpoint, &pipeData->WriteEndpoint, &sa, PIPE_BUFFER_SIZE))
         return perror("CreatePipe");
@@ -849,12 +851,19 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     piped = flags & 0x02;
     interactive = flags & 0x04;
 
-    LogDebug("domain %d, port %d, user %s, flags 0x%x, cmd %s", domain, port, userName, flags, commandLine);
+    LogDebug("domain %d, port %d, user %s, flags 0x%x, cmd '%s'", domain, port, userName, flags, commandLine);
 
     status = ERROR_INVALID_FUNCTION;
     child->Vchan = InitVchan(domain, port, child->IsVchanServer);
     if (!child->Vchan)
         goto cleanup;
+
+    status = CreatePublicPipeSecurityDescriptor(&child->PipeSd, &child->PipeAcl);
+    if (ERROR_SUCCESS != status)
+    {
+        perror2(status, "create pipe security descriptor");
+        goto cleanup;
+    }
 
     status = StartChild(child, userName, commandLine, interactive, piped);
     if (ERROR_SUCCESS != status)
