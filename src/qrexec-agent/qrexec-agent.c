@@ -1122,11 +1122,11 @@ DWORD WINAPI ServiceExecutionThread(void *param)
     if (ERROR_SUCCESS != status)
         perror2(status, "WatchForEvents");
 
-    // this will stop the trigger thread in case WatchForEvents terminates with error
-    SetEvent(ctx->StopEvent);
+// FIXME: pipe server doesn't have the ability for graceful stop
 
-    LogDebug("Waiting for the trigger thread to exit");
-    WaitForSingleObject(pipeServerThread, INFINITE);
+    LogDebug("Waiting for the pipe server thread to exit");
+    if (WaitForSingleObject(pipeServerThread, 1000) != WAIT_OBJECT_0)
+        TerminateThread(pipeServerThread, 0);
     CloseHandle(pipeServerThread);
 
     LocalFree(acl);
