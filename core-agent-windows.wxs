@@ -78,10 +78,13 @@ DisplayName='Installation directory'
                             Id='qopen_dvm_sendto_shortcut'
                             Name='Edit in DispVM'
                             Directory='SendToFolder'
-                            Arguments='$dispvm qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"'
+                            Arguments='$dispvm|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
                             Show='minimized'
                             />
                         </File>
+                    </Component>
+                    <Component Id='QrexecWrapper' Guid='{EC103A81-6828-4ABA-9706-644DBBD4D615}'>
+                        <File Id='qrexec_wrapper.exe' Source='bin\$(env.DDK_ARCH)\qrexec-wrapper.exe' KeyPath='yes'/>
                     </Component>
                     <Component Id='AskVmAndRun' Guid='{b5700d68-2ceb-4764-9e4b-11ae33b2d05b}'>
                         <File Id='ask_vm_and_run.exe' Source='bin\$(env.DDK_ARCH)\ask-vm-and-run.exe' KeyPath='yes'>
@@ -89,7 +92,7 @@ DisplayName='Installation directory'
                             Id='CopyToVm'
                             Name='Copy to other VM'
                             Directory='SendToFolder'
-                            Arguments='qubes.Filecopy "[QubesRPCServicesDir]\file-sender.exe"'
+                            Arguments='qubes.Filecopy|[QubesRPCServicesDir]\file-sender.exe'
                             />
 
                             <Shortcut
@@ -139,7 +142,7 @@ DisplayName='Installation directory'
                         <File Id='qubes.WaitForSession' Source='src\qrexec-services\qubes.WaitForSession'/>
                         <File Id='qubes.SetGuiMode' Source='src\qrexec-services\qubes.SetGuiMode'/>
                         <File Id='qubes.GetAppMenus' Source='src\qrexec-services\qubes.GetAppMenus'/>
-                        <!--File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/-->
+                        <File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/>
                     </Component>
                 </Directory>
                 <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
@@ -153,7 +156,7 @@ DisplayName='Installation directory'
                         <File Id='wait_for_logon.exe' Source='bin\$(env.DDK_ARCH)\wait-for-logon.exe'/>
                         <File Id='set_gui_mode.exe' Source='bin\$(env.DDK_ARCH)\set-gui-mode.exe'/>
                         <File Id='get_appmenus.ps1' Source='src\qrexec-services\get-appmenus.ps1'/>
-                        <!--File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/-->
+                        <File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/>
                     </Component>
                 </Directory>
             </Directory>
