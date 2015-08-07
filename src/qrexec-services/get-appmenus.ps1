@@ -37,7 +37,7 @@ Function ProcessLink($pathObj, $basepath)
     Write-Host "$($linkBaseName):Name=$appmenuLocation$($pathObj.BaseName)"
     Write-Host "$($linkBaseName):Exec=$($targetPath.Replace('\','\\'))"
     Write-Host "$($linkBaseName):Comment=$($linkObj.Description)"
-#    Write-Host "$($linkBaseName):Icon=$targetHash"
+    Write-Host "$($linkBaseName):Icon=$targetHash"
 }
 
 # todo: check if there are duplicated entries
