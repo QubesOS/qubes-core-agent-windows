@@ -39,10 +39,12 @@ static ULONG BackendIdToTargetId(ULONG backendId)
 
 static BOOL IsPrivateDisk(IN WCHAR *locationString, IN ULONG privateId)
 {
-    const WCHAR *targetStr = L"Target Id ";
+    const WCHAR *targetStr1 = L"Target Id "; // for PV disks
+    const WCHAR *targetStr2 = L"Target "; // for emulated disks
     WCHAR *idStr = NULL;
     WCHAR *stopStr = NULL;
     ULONG targetId, id;
+    size_t len;
 
     targetId = BackendIdToTargetId(privateId);
     if (targetId == 0xffffffff)
@@ -50,12 +52,19 @@ static BOOL IsPrivateDisk(IN WCHAR *locationString, IN ULONG privateId)
 
     // Location string is in this format: "Bus Number 0, Target Id 1, LUN 0"
     // FIXME: avoid string parsing. Although it's not localized it would be better to use something else.
-    idStr = wcsstr(locationString, targetStr);
+    len = wcslen(targetStr1);
+    idStr = wcsstr(locationString, targetStr1);
+    if (!idStr)
+    {
+        len = wcslen(targetStr2);
+        idStr = wcsstr(locationString, targetStr2);
+    }
+
     if (!idStr)
         return FALSE;
 
     // skip to the Target ID itself
-    idStr += wcslen(targetStr);
+    idStr += len;
 
     id = wcstoul(idStr, &stopStr, 10);
     if (id != targetId)
