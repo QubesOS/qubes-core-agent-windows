@@ -299,32 +299,6 @@ cleanup:
 }
 
 /**
- * @brief Send MSG_DATA_EXIT_CODE to the vchan peer if we're not the vchan server.
- * @param child Child state.
- * @param exitCode Exit code.
- * @return TRUE on success.
- */
-BOOL VchanSendExitCode(
-    _In_ const PCHILD_STATE child,
-    _In_ int exitCode
-    )
-{
-    assert(child && child->Vchan);
-
-    LogVerbose("code %d", exitCode);
-
-    // don't send anything if we're the vchan server.
-    if (child->IsVchanServer)
-        return TRUE;
-
-    if (!VchanSendMessage(child->Vchan, MSG_DATA_EXIT_CODE, &exitCode, sizeof(exitCode), L"exit code"))
-        return FALSE;
-
-    LogDebug("Sent exit code %d", exitCode);
-    return TRUE;
-}
-
-/**
  * @brief Send child output to the vchan data peer.
  * @param child Child state.
  * @param data Stdout data to send.
@@ -359,6 +333,38 @@ BOOL VchanSendData(
     }
 
     return VchanSendMessage(child->Vchan, messageType, data, cbData, L"output data");
+}
+
+/**
+ * @brief Send MSG_DATA_EXIT_CODE to the vchan peer if we're not the vchan server.
+ * @param child Child state.
+ * @param exitCode Exit code.
+ * @return TRUE on success.
+ */
+BOOL VchanSendExitCode(
+    _In_ const PCHILD_STATE child,
+    _In_ int exitCode
+    )
+{
+    assert(child && child->Vchan);
+
+    LogVerbose("code %d", exitCode);
+
+    // don't send anything if we're the vchan server.
+    if (child->IsVchanServer)
+        return TRUE;
+
+    // EOF should be sent before exit code because peer closes vchan after receiving exit code
+    LogDebug("sending stderr EOF");
+    VchanSendData(child, NULL, 0, PTYPE_STDERR);
+    LogDebug("sending stdout EOF");
+    VchanSendData(child, NULL, 0, PTYPE_STDOUT);
+
+    if (!VchanSendMessage(child->Vchan, MSG_DATA_EXIT_CODE, &exitCode, sizeof(exitCode), L"exit code"))
+        return FALSE;
+
+    LogDebug("Sent exit code %d", exitCode);
+    return TRUE;
 }
 
 /**
@@ -594,8 +600,6 @@ DWORD WINAPI StdoutThread(
     }
 
 cleanup:
-    LogDebug("sending stdout EOF");
-    VchanSendData(child, NULL, 0, PTYPE_STDOUT);
     ClosePipe(&child->Stdout);
     LogVerbose("exiting");
     free(buffer);
@@ -637,8 +641,6 @@ DWORD WINAPI StderrThread(
     }
 
 cleanup:
-    LogDebug("sending stderr EOF");
-    VchanSendData(child, NULL, 0, PTYPE_STDERR);
     ClosePipe(&child->Stderr);
     LogVerbose("exiting");
     free(buffer);
