@@ -2,6 +2,8 @@
 #include "format.h"
 #include "wait-for-volume.h"
 
+#include <stdlib.h>
+
 // without braces
 PWCHAR DISK_CLASS_GUID = L"4d36e967-e325-11ce-bfc1-08002be10318";
 
@@ -145,6 +147,18 @@ BOOL DriveNumberToVolumeName(IN DWORD driveNumber, OUT WCHAR *volumeName, IN DWO
     return retval;
 }
 
+static ULONG Rand32(void)
+{
+    ULONG x;
+
+    x =   rand() & 0xff;
+    x |= (rand() & 0xff) << 0x08;
+    x |= (rand() & 0xff) << 0x10;
+    x |= (rand() & 0xff) << 0x18;
+
+    return x;
+}
+
 // Make sure the disk is initialized and partitioned.
 static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHAR *diskLetter)
 {
@@ -153,6 +167,7 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
     DRIVE_LAYOUT_INFORMATION_EX *driveLayout = (DRIVE_LAYOUT_INFORMATION_EX *) partitionBuffer;
     SET_DISK_ATTRIBUTES diskAttrs = { 0 };
     CREATE_DISK createDisk;
+    ULONG signature = Rand32();
 
     // Set disk attributes.
     diskAttrs.Version = sizeof(diskAttrs);
@@ -175,7 +190,11 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
 
     // Initialize the disk.
     createDisk.PartitionStyle = PARTITION_STYLE_MBR;
-    createDisk.Mbr.Signature = PRIVATE_IMG_SIGNATURE;
+    // We assign a random MBR signature because they need to be unique for a given Windows installation.
+    // Although private disk's signature collision is not a problem on a single system,
+    // it prevents offline mounting of a HVM private image in another HVM with Windows Tools.
+    // More info: http://blogs.technet.com/b/markrussinovich/archive/2011/11/08/3463572.aspx
+    createDisk.Mbr.Signature = signature;
 
     if (!DeviceIoControl(device, IOCTL_DISK_CREATE_DISK, &createDisk, sizeof(createDisk), NULL, 0, &requiredSize, NULL))
     {
@@ -183,7 +202,7 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
         return FALSE;
     }
 
-    LogInfo("Disk initialized OK, signature: 0x%08x", PRIVATE_IMG_SIGNATURE);
+    LogInfo("Disk initialized OK, signature: 0x%08x", signature);
 
     if (!DeviceIoControl(device, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &requiredSize, NULL))
     {
@@ -194,7 +213,7 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
     // Create partition table.
     driveLayout->PartitionStyle = PARTITION_STYLE_MBR;
     driveLayout->PartitionCount = 4;
-    driveLayout->Mbr.Signature = PRIVATE_IMG_SIGNATURE;
+    driveLayout->Mbr.Signature = signature;
 
     driveLayout->PartitionEntry[0].PartitionStyle = PARTITION_STYLE_MBR;
     driveLayout->PartitionEntry[0].StartingOffset.QuadPart = 63 * 512; // FIXME: use disk geometry numbers

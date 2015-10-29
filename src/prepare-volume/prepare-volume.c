@@ -6,6 +6,7 @@
 #include <ShlObj.h>
 #include <Knownfolders.h>
 #include <aclapi.h>
+#include <stdlib.h>
 
 #include "device.h"
 #include "disk.h"
@@ -87,6 +88,9 @@ int wmain(int argc, WCHAR *argv[])
     EnablePrivilege(token, SE_RESTORE_NAME);
     EnablePrivilege(token, SE_TAKE_OWNERSHIP_NAME);
     CloseHandle(token);
+
+    // MBR signatures assigned are random to prevent collisions
+    srand(GetTickCount());
 
     if (!GetPrivateImgDriveNumber(backendId, &driveNumber))
     {

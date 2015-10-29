@@ -1,11 +1,6 @@
 #pragma once
 #include "prepare-volume.h"
 
-// MBR signature for private disk, basically unique disk ID for Windows
-// http://technet.microsoft.com/en-us/library/cc976786.aspx
-// DWORD, short for 'Qubes private disk image'
-#define PRIVATE_IMG_SIGNATURE 'idpQ'
-
 // string form needed for creating device names
 #define DISK_INTERFACE_GUID	L"{53f56307-b6bf-11d0-94f2-00a0c91efb8b}"
 
