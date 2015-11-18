@@ -985,8 +985,7 @@ static void XifLogger(int level, const char *function, const WCHAR *format, va_l
     WCHAR buf[1024];
 
     StringCbVPrintfW(buf, sizeof(buf), format, args);
-    // our log levels start at 0, xif's at 1
-    _LogFormat(level - 1, FALSE, function, buf);
+    _LogFormat(level, FALSE, function, buf);
 }
 
 /**
