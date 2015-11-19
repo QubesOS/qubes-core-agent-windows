@@ -31,6 +31,7 @@
 
 #include <qrexec.h>
 #include <libvchan.h>
+#include <qubesdb-client.h>
 
 #include <log.h>
 #include <service.h>
@@ -73,30 +74,44 @@ void DumpRequestList(void)
 #endif
 
 /**
- * @brief Create vchan for qrexec daemon.
- * @param port Vchan port.
- * @return Vchan pointer.
+ * @brief Wait for qubesdb service to start.
+ * @return TRUE if a connection could be opened, FALSE if timed out (60 seconds).
  */
-libvchan_t *VchanServerInit(IN int port)
+BOOL WaitForQdb(void)
 {
-    libvchan_t *vchan;
-    // FIXME: "0" here is remote domain id
-    vchan = libvchan_server_init(0, port, VCHAN_BUFFER_SIZE, VCHAN_BUFFER_SIZE);
+    qdb_handle_t qdb = NULL;
+    ULONGLONG start = GetTickCount64();
+    ULONGLONG tick = start;
 
-    LogDebug("port %d: daemon vchan = %p", port, vchan);
+    LogDebug("start");
+    while (qdb == NULL && (tick - start) < 60 * 1000) // try for 60 seconds
+    {
+        qdb = qdb_open(NULL);
+        if (qdb == NULL)
+            Sleep(1000);
+        tick = GetTickCount64();
+    }
 
-    return vchan;
+    if (qdb == NULL)
+    {
+        LogError("timed out");
+        return FALSE;
+    }
+
+    qdb_close(qdb);
+    LogDebug("qdb is running");
+    return TRUE;
 }
 
 /**
-* @brief Send message to the vchan peer.
-* @param vchan Control vchan.
-* @param messageType Control message
-* @param data Buffer to send.
-* @param cbData Size of the @a data buffer, in bytes.
-* @param what Description of the buffer (for logging).
-* @return TRUE on success.
-*/
+ * @brief Send message to the vchan peer.
+ * @param vchan Control vchan.
+ * @param messageType Control message
+ * @param data Buffer to send.
+ * @param cbData Size of the @a data buffer, in bytes.
+ * @param what Description of the buffer (for logging).
+ * @return TRUE on success.
+ */
 BOOL VchanSendMessage(
     _Inout_ libvchan_t *vchan,
     _In_ ULONG messageType,
@@ -878,11 +893,18 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
     LogVerbose("start");
 
-    g_DaemonVchan = VchanServerInit(VCHAN_BASE_PORT);
+    // Don't do anything before qdb is available, otherwise advertise-tools may fail.
+    if (!WaitForQdb())
+        return perror2(ERROR_INVALID_FUNCTION, "WaitForQdb");
+
+    // We give a 5 minute timeout here because xeniface can take some time
+    // to load the first time after reboot after pvdrivers installation.
+    g_DaemonVchan = VchanInitServer(0, VCHAN_BASE_PORT, VCHAN_BUFFER_SIZE, 5 * 60 * 1000);
 
     if (!g_DaemonVchan)
         return perror2(ERROR_INVALID_FUNCTION, "VchanInitServer");
 
+    LogDebug("port %d: daemon vchan = %p", VCHAN_BASE_PORT, g_DaemonVchan);
     LogInfo("Waiting for qrexec daemon connection, write buffer size: %d", VchanGetWriteBufferSize(g_DaemonVchan));
 
     waitObjects[0] = stopEvent;
