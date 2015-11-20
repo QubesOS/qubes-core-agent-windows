@@ -1016,7 +1016,7 @@ static void XifLogger(int level, const char *function, const WCHAR *format, va_l
  */
 DWORD WINAPI PipeClientThread(PVOID param)
 {
-    DWORD clientId = (DWORD)param;
+    LONGLONG clientId = (LONGLONG)param;
     DWORD status = ERROR_NOT_ENOUGH_MEMORY;
     PSERVICE_REQUEST context;
     size_t commandSize;
@@ -1092,7 +1092,7 @@ cleanup:
  * @param id Client id.
  * @param context User context (unused).
  */
-void ClientConnectedCallback(PIPE_SERVER server, DWORD id, PVOID context)
+void ClientConnectedCallback(PIPE_SERVER server, LONGLONG id, PVOID context)
 {
     HANDLE clientThread;
 
