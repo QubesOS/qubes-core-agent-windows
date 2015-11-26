@@ -130,6 +130,10 @@ DisplayName='Installation directory'
                         Wait='yes'
                         />
                     </Component>
+                    <Component Id='ServicePolicy' Guid='{F9818E4E-76C4-40DE-A8F3-945336C954B1}'>
+                        <File Id='service_policy.exe' Source='bin\AnyCPU\service-policy.exe' KeyPath='yes' />
+                        <File Id='service_policy.cfg' Source='src\service-policy\service-policy.cfg' />
+                    </Component>
                 </Directory>
                 <Directory Id='QubesRPCDir' Name='qubes-rpc'>
                     <Component Id='QrexecServicesConfig' Guid='{9efff253-25a8-40ed-861a-0d576f0ca439}'>
