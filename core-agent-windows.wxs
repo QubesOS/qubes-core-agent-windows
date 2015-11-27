@@ -161,6 +161,7 @@ DisplayName='Installation directory'
                         <File Id='set_gui_mode.exe' Source='bin\$(env.DDK_ARCH)\set-gui-mode.exe'/>
                         <File Id='get_appmenus.ps1' Source='src\qrexec-services\get-appmenus.ps1'/>
                         <File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/>
+                        <File Id='window_icon_updater.exe' Source='bin\$(env.DDK_ARCH)\window-icon-updater.exe'/>
                         <File Id='set_time.ps1' Source='src\qrexec-services\set-time.ps1'/>
                     </Component>
                 </Directory>
