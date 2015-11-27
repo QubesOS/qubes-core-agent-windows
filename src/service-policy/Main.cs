@@ -64,7 +64,12 @@ namespace Qubes.CoreAgent
 
         static int Main(string[] args)
         {
-            using (var cfg = new StreamReader("service-policy.cfg"))
+            string cfgPath = "service-policy.cfg";
+
+            if (args.Length > 0)
+                cfgPath = args[0];
+
+            using (var cfg = new StreamReader(cfgPath))
             {
                 while (!cfg.EndOfStream)
                 {
