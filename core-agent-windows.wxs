@@ -169,5 +169,19 @@ DisplayName='Installation directory'
     </Directory>
     <Directory Id='SendToFolder'/>
 </Directory>
-</Module>
+
+<CustomAction
+Id="RunServicePolicy"
+Return="ignore"
+Impersonate="no"
+Execute="deferred"
+FileKey="service_policy.exe"
+ExeCommand='"[BinDir]\service-policy.cfg"'
+/>
+
+ <InstallExecuteSequence>
+     <Custom Action='RunServicePolicy' After='InstallFiles'/>
+ </InstallExecuteSequence>
+
+ </Module>
 </Wix>
