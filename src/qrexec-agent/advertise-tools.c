@@ -163,14 +163,20 @@ BOOL QdbWrite(qdb_handle_t qdb, char *path, char *value)
     return qdb_write(qdb, path, value, (int)strlen(value));
 }
 
-ULONG AdvertiseTools(void)
+// this runs in a thread, waits for user logon and notifies dom0 of tools configuration
+DWORD WINAPI AdvertiseTools(PVOID param)
 {
     qdb_handle_t qdb = NULL;
     ULONG status = ERROR_UNIDENTIFIED_ERROR;
     BOOL guiAgentPresent;
     CHAR *userName = NULL;
 
-    LogVerbose("start");
+    LogDebug("waiting for user logon");
+
+    while (!GetCurrentUser(&userName))
+        Sleep(100);
+
+    LogInfo("logged on user: %S", userName);
 
     qdb = qdb_open(NULL);
     if (!qdb)
@@ -206,13 +212,10 @@ ULONG AdvertiseTools(void)
         goto cleanup;
     }
 
-    if (GetCurrentUser(&userName))
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
     {
-        if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
-        {
-            perror("write 'default-user' entry");
-            goto cleanup;
-        }
+        perror("write 'default-user' entry");
+        goto cleanup;
     }
 
     if (!NotifyDom0())

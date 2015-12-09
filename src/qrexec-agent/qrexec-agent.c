@@ -48,7 +48,7 @@ CRITICAL_SECTION g_DaemonCriticalSection;
 CRITICAL_SECTION g_RequestCriticalSection;
 
 // from advertise_tools.c
-ULONG AdvertiseTools(void);
+DWORD WINAPI AdvertiseTools(PVOID param);
 
 PIPE_SERVER g_PipeServer = NULL; // for handling qrexec-client-vm requests
 LIST_ENTRY g_RequestList; // pending service requests (local)
@@ -950,9 +950,8 @@ static DWORD WatchForEvents(HANDLE stopEvent)
             daemonConnected = TRUE;
             LeaveCriticalSection(&g_DaemonCriticalSection);
 
-            // ignore errors - perhaps core-admin too old and didn't
-            // create appropriate qubesdb directory?
-            AdvertiseTools();
+            // run AdvertiseTools in a separate thread (it waits for user logon)
+            CloseHandle(CreateThread(NULL, 0, AdvertiseTools, NULL, 0, NULL));
             continue;
         }
 
