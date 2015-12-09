@@ -190,6 +190,32 @@ cleanup:
     return status;
 }
 
+BOOL WaitForQdb(void)
+{
+    qdb_handle_t qdb = NULL;
+    ULONGLONG start = GetTickCount64();
+    ULONGLONG tick = start;
+
+    LogDebug("start");
+    while (qdb == NULL && (tick - start) < 60 * 1000) // try for 60 seconds
+    {
+        qdb = qdb_open(NULL);
+        if (qdb == NULL)
+            Sleep(1000);
+        tick = GetTickCount64();
+    }
+
+    if (qdb == NULL)
+    {
+        LogError("timed out");
+        return FALSE;
+    }
+
+    qdb_close(qdb);
+    LogDebug("qdb is running");
+    return TRUE;
+}
+
 DWORD WINAPI SetupNetwork(PVOID param)
 {
     qdb_handle_t qdb = NULL;
@@ -199,6 +225,10 @@ DWORD WINAPI SetupNetwork(PVOID param)
     char *qubesGateway = NULL;
     DWORD status = ERROR_UNIDENTIFIED_ERROR;
     char cmdline[255];
+
+    // wait until QubesDB is initialized
+    if (!WaitForQdb())
+        return ERROR_NOT_READY;
 
     qdb = qdb_open(NULL);
     if (!qdb)
