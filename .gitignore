@@ -1,3 +1,7 @@
 qubescore-win7.iso
 wincoresources.img
 *.msm
+*.VC.db
+*.VC.opendb
+*.csproj.user
+bin
