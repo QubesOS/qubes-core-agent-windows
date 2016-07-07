@@ -123,6 +123,7 @@ int wmain(int argc, WCHAR *argv[])
     if (!PreparePrivateVolume(driveNumber, targetUsersPath))
     {
         LogError("Failed to initialize private.img");
+        MessageBox(0, L"Failed to initialize the private disk, check logs for details", L"Qubes Windows Tools", MB_ICONSTOP);
         return 1;
     }
 
