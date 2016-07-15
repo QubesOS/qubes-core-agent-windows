@@ -33,7 +33,19 @@
 
 #define SERVICE_NAME L"QubesNetworkSetup"
 
-#define XEN_ADAPTER_DESCRIPTION "Xen PV Network Device #0"
+// TODO: make this configurable
+const PSTR g_VmAdapterDescriptions[] = { "Xen PV Network Device #0", "Realtek RTL8139C+ Fast Ethernet NIC" };
+
+BOOL AdapterNameMatch(IN PSTR adapterName)
+{
+    for (int i = 0; i < ARRAYSIZE(g_VmAdapterDescriptions); i++)
+    {
+        if (0 == strcmp(adapterName, g_VmAdapterDescriptions[i]))
+            return TRUE;
+    }
+
+    return FALSE;
+}
 
 DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT DWORD *interfaceIndex)
 {
@@ -78,7 +90,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
         {
             LogInfo("Adapter %d: %S %S", adapterInfoCurrent->Index, adapterInfoCurrent->AdapterName, adapterInfoCurrent->Description);
             
-            if (0 == strcmp(adapterInfoCurrent->Description, XEN_ADAPTER_DESCRIPTION))
+            if (AdapterNameMatch(adapterInfoCurrent->Description))
             {
                 LogDebug("setting interface info");
                 addrCurrent = &adapterInfoCurrent->IpAddressList;
