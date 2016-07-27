@@ -134,6 +134,9 @@ DisplayName='Installation directory'
                         <File Id='service_policy.exe' Source='bin\AnyCPU\service-policy.exe' KeyPath='yes' />
                         <File Id='service_policy.cfg' Source='src\service-policy\service-policy.cfg' />
                     </Component>
+                    <Component Id='AdvertiseTools' Guid='{DEDA44D9-6A58-4DE7-902A-643FB594B93C}'>
+                        <File Id='advertise_tools.exe' Source='bin\$(env.DDK_ARCH)\advertise-tools.exe' KeyPath='yes'/>
+                    </Component>
                 </Directory>
                 <Directory Id='QubesRPCDir' Name='qubes-rpc'>
                     <Component Id='QrexecServicesConfig' Guid='{9efff253-25a8-40ed-861a-0d576f0ca439}'>

@@ -47,9 +47,6 @@ libvchan_t *g_DaemonVchan;
 CRITICAL_SECTION g_DaemonCriticalSection;
 CRITICAL_SECTION g_RequestCriticalSection;
 
-// from advertise_tools.c
-DWORD WINAPI AdvertiseTools(PVOID param);
-
 PIPE_SERVER g_PipeServer = NULL; // for handling qrexec-client-vm requests
 LIST_ENTRY g_RequestList; // pending service requests (local)
 ULONG g_RequestId = 0;
@@ -890,6 +887,8 @@ static DWORD WatchForEvents(HANDLE stopEvent)
     BOOL run = TRUE;
     BOOL daemonConnected = FALSE;
     HANDLE waitObjects[2];
+    HANDLE advertiseToolsProcess;
+    WCHAR advertiseCommand[] = L"advertise-tools.exe 1"; // must be non-const
 
     LogVerbose("start");
 
@@ -950,8 +949,18 @@ static DWORD WatchForEvents(HANDLE stopEvent)
             daemonConnected = TRUE;
             LeaveCriticalSection(&g_DaemonCriticalSection);
 
-            // run AdvertiseTools in a separate thread (it waits for user logon)
-            CloseHandle(CreateThread(NULL, 0, AdvertiseTools, NULL, 0, NULL));
+            // advertise tools presence to dom0 by writing appropriate entries to qubesdb
+            // it waits for user logon
+            status = CreateNormalProcessAsCurrentUser(advertiseCommand, &advertiseToolsProcess);
+            if (status == ERROR_SUCCESS)
+            {
+                CloseHandle(advertiseToolsProcess);
+            }
+            else
+            {
+                perror("Failed to create advertise-tools process");
+                // this is non-fatal?
+            }
             continue;
         }
 

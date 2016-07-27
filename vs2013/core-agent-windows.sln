@@ -41,6 +41,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "service-policy", "service-p
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "window-icon-updater", "qrexec-services\window-icon-updater\window-icon-updater.vcxproj", "{62AB0630-BBA8-4B3C-AFB3-602DAF0B787D}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "advertise-tools", "advertise-tools\advertise-tools.vcxproj", "{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -197,6 +199,14 @@ Global
 		{62AB0630-BBA8-4B3C-AFB3-602DAF0B787D}.Release|Win32.Build.0 = Release|Win32
 		{62AB0630-BBA8-4B3C-AFB3-602DAF0B787D}.Release|x64.ActiveCfg = Release|x64
 		{62AB0630-BBA8-4B3C-AFB3-602DAF0B787D}.Release|x64.Build.0 = Release|x64
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Debug|Win32.Build.0 = Debug|Win32
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Debug|x64.ActiveCfg = Debug|x64
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Debug|x64.Build.0 = Debug|x64
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Release|Win32.ActiveCfg = Release|Win32
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Release|Win32.Build.0 = Release|Win32
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Release|x64.ActiveCfg = Release|x64
+		{59B7A2AB-44B3-4A9C-AC94-265567FE54C2}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
