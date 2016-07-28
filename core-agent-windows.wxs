@@ -183,9 +183,21 @@ FileKey="service_policy.exe"
 ExeCommand='"[BinDir]\service-policy.cfg"'
 />
 
- <InstallExecuteSequence>
-     <Custom Action='RunServicePolicy' After='InstallFiles'>NOT Installed AND NOT REMOVE</Custom>
- </InstallExecuteSequence>
+<!-- 0 is the argument for removing qdb info -->
+<CustomAction
+Id="UnadvertiseTools"
+Return="ignore"
+Impersonate="no"
+Execute="deferred"
+FileKey="advertise_tools.exe"
+ExeCommand="0"
+/>
 
- </Module>
+<InstallExecuteSequence>
+    <Custom Action='RunServicePolicy' After='InstallFiles'>NOT Installed AND NOT REMOVE</Custom>
+    <!-- Remove tools entries in qdb on uninstall. Run before StopServices so qdb still works. -->
+    <Custom Action='UnadvertiseTools' Before='StopServices'>REMOVE="ALL"</Custom>
+</InstallExecuteSequence>
+
+</Module>
 </Wix>
