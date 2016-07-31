@@ -3,5 +3,5 @@ wincoresources.img
 *.msm
 *.VC.db
 *.VC.opendb
-*.csproj.user
+*.user
 bin
