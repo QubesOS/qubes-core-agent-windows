@@ -168,6 +168,7 @@ int wmain(int argc, WCHAR *argv[])
     qdb_handle_t qdb = NULL;
     ULONG status = ERROR_UNIDENTIFIED_ERROR;
     BOOL guiAgentPresent;
+    BOOL qrexecAgentPresent = TRUE;
     CHAR *userName = NULL;
 
     if (argc < 2)
@@ -187,56 +188,52 @@ int wmain(int argc, WCHAR *argv[])
 
     if (argv[1][0] == '0')
     {
-        // remove tools entries from qubesdb
-        if (!qdb_rm(qdb, QDB_PATH_PREFIX))
-        {
-            perror("remove tools entries");
-            goto cleanup;
-        }
-        LogDebug("Removed tools entries from qubesdb");
+        LogDebug("setting tools presence to not installed");
+        qrexecAgentPresent = FALSE;
+        guiAgentPresent = FALSE;
     }
     else
     {
-        // advertise tools presence
-        LogDebug("waiting for user logon");
-
-        while (!GetCurrentUser(&userName))
-            Sleep(100);
-
-        LogInfo("logged on user: %S", userName);
-
-        /* for now mostly hardcoded values, but this can change in the future */
-        if (!QdbWrite(qdb, QDB_PATH_PREFIX "version", "1"))
-        {
-            perror("write 'version' entry");
-            goto cleanup;
-        }
-
-        if (!QdbWrite(qdb, QDB_PATH_PREFIX "os", "Windows"))
-        {
-            perror("write 'os' entry");
-            goto cleanup;
-        }
-
-        if (!QdbWrite(qdb, QDB_PATH_PREFIX "qrexec", "1"))
-        {
-            perror("write 'qrexec' entry");
-            goto cleanup;
-        }
-
         guiAgentPresent = CheckGuiAgentPresence();
+    }
 
-        if (!QdbWrite(qdb, QDB_PATH_PREFIX "gui", guiAgentPresent ? "1" : "0"))
-        {
-            perror("write 'gui' entry");
-            goto cleanup;
-        }
+    // advertise tools presence
+    LogDebug("waiting for user logon");
 
-        if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
-        {
-            perror("write 'default-user' entry");
-            goto cleanup;
-        }
+    while (!GetCurrentUser(&userName))
+        Sleep(100);
+
+    LogDebug("logged on user: %S", userName);
+
+    /* for now mostly hardcoded values, but this can change in the future */
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "version", "1"))
+    {
+        perror("write 'version' entry");
+        goto cleanup;
+    }
+
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "os", "Windows"))
+    {
+        perror("write 'os' entry");
+        goto cleanup;
+    }
+
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "qrexec", qrexecAgentPresent ? "1" : "0"))
+    {
+        perror("write 'qrexec' entry");
+        goto cleanup;
+    }
+
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "gui", guiAgentPresent ? "1" : "0"))
+    {
+        perror("write 'gui' entry");
+        goto cleanup;
+    }
+
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
+    {
+        perror("write 'default-user' entry");
+        goto cleanup;
     }
 
     if (!NotifyDom0())
