@@ -25,6 +25,7 @@
 
 #include <qubesdb-client.h>
 #include <log.h>
+#include <config.h>
 
 #define QDB_PATH_PREFIX "/qubes-tools/"
 
@@ -73,32 +74,27 @@ cleanup:
     return found;
 }
 
-/* just a helper function, the buffer needs to be at least MAX_PATH+1 length */
+// append a binary exe name to the tools installation directory, buffer size must be >= MAX_PATH
 BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 {
-    WCHAR *lastBackslash = NULL;
-
-    LogVerbose("exe: '%s'", exeName);
-
-    if (!GetModuleFileName(NULL, fullPath, MAX_PATH))
+    if (ERROR_SUCCESS != CfgReadString(NULL, L"InstallDir", fullPath, MAX_PATH, NULL))
     {
-        perror("GetModuleFileName");
+        perror("CfgReadString(InstallDir)");
         return FALSE;
     }
 
-    // cut off file name (qrexec_agent.exe)
-    lastBackslash = wcsrchr(fullPath, L'\\');
-    if (!lastBackslash)
+    LogVerbose("exe: '%s', install dir: '%s'", exeName, fullPath);
+
+    if (!PathAppend(fullPath, L"bin"))
     {
-        LogError("qrexec-agent.exe path has no backslash\n");
+        perror("PathAppend(bin)");
         return FALSE;
     }
-
-    // Leave trailing backslash
-    lastBackslash++;
-    *lastBackslash = L'\0';
-    // add an executable filename
-    PathAppend(fullPath, exeName);
+    if (!PathAppend(fullPath, exeName))
+    {
+        perror("PathAppend(exe)");
+        return FALSE;
+    }
 
     LogVerbose("success, path: '%s'", fullPath);
 
@@ -108,7 +104,7 @@ BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 /* TODO - make this configurable? */
 BOOL CheckGuiAgentPresence(void)
 {
-    WCHAR serviceFilePath[MAX_PATH + 1];
+    WCHAR serviceFilePath[MAX_PATH];
 
     LogVerbose("start");
 
@@ -120,7 +116,7 @@ BOOL CheckGuiAgentPresence(void)
 
 BOOL NotifyDom0(void)
 {
-    WCHAR qrexecClientVmPath[MAX_PATH + 1];
+    WCHAR qrexecClientVmPath[MAX_PATH];
     STARTUPINFO si = { 0 };
     PROCESS_INFORMATION pi;
 
