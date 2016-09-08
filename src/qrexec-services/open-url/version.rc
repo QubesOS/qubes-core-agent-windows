@@ -1,0 +1,3 @@
+#define QTW_FILEDESCRIPTION_STR "Qubes open URL service"
+
+#include "..\..\version_common.rc"

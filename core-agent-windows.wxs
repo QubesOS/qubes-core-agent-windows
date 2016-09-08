@@ -150,6 +150,7 @@ DisplayName='Installation directory'
                         <File Id='qubes.GetAppMenus' Source='src\qrexec-services\qubes.GetAppMenus'/>
                         <File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/>
                         <File Id='qubes.SetDateTime' Source='src\qrexec-services\qubes.SetDateTime'/>
+                        <File Id='qubes.OpenURL' Source='src\qrexec-services\qubes.OpenURL'/>
                     </Component>
                 </Directory>
                 <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
@@ -166,6 +167,7 @@ DisplayName='Installation directory'
                         <File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/>
                         <File Id='window_icon_updater.exe' Source='bin\$(env.DDK_ARCH)\window-icon-updater.exe'/>
                         <File Id='set_time.ps1' Source='src\qrexec-services\set-time.ps1'/>
+                        <File Id='open_url.exe' Source='bin\$(env.DDK_ARCH)\open-url.exe'/>
                     </Component>
                 </Directory>
             </Directory>
