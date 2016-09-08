@@ -40,7 +40,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *com
         return ERROR_INVALID_PARAMETER;
     }
 
-    LogDebug("request: %S");
+    LogDebug("request: %S", Url);
 
     if ((int)ShellExecuteA(NULL, "open", Url, NULL, NULL, SW_SHOWNORMAL) <= 32)
     {
