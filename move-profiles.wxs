@@ -45,8 +45,6 @@ DisplayName='Installation directory'
                 <Directory Id='BinDir' Name='bin'>
                     <Component Id='PrepareVolume' Guid='{220A22F3-0B73-4A4C-B825-53132A88D1DF}'>
                         <File Id='prepare_volume.exe' Source='bin\$(env.DDK_ARCH)\prepare-volume.exe' KeyPath='yes' />
-                        <!-- This needs to run *after* Xen disk drivers are loaded, so can't run directly during install as drivers will load after reboot. -->
-                        <RegistryValue Root='HKLM' Key='SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce' Name='Prepare Qubes private volume' Type='string' Value='[BinDir]prepare-volume.exe 51728'/>
                     </Component>
                 </Directory>
             </Directory>
@@ -58,6 +56,19 @@ DisplayName='Installation directory'
         </Component>
     </Directory>
 </Directory>
+
+<CustomAction
+Id='RunPrepareVolume'
+Return='ignore'
+Impersonate='no'
+Execute='deferred'
+FileKey='prepare_volume.exe'
+ExeCommand='51728'
+/>
+
+<InstallExecuteSequence>
+    <Custom Action='RunPrepareVolume' After='InstallFiles'>NOT Installed AND NOT REMOVE</Custom>
+</InstallExecuteSequence>
 
 </Module>
 </Wix>
