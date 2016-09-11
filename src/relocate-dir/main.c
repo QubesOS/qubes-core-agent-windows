@@ -21,9 +21,6 @@
 
 #include "io.h"
 
-// TODO: read from registry
-#define LOG_FILE_NAME L"c:\\move-profiles.log"
-
 HANDLE g_Heap;
 
 __declspec(dllimport)
@@ -32,6 +29,14 @@ int _vsnwprintf(
     size_t count,
     const wchar_t *format,
     va_list argptr
+    );
+
+__declspec(dllimport)
+int _snwprintf(
+    wchar_t *buffer,
+    size_t count,
+    const wchar_t *format,
+    ...
     );
 
 void Sleep(ULONG milliseconds)
@@ -72,13 +77,22 @@ void NtPrintf(IN const PWCHAR format, ...)
 void NtLog(IN BOOLEAN print, IN const PWCHAR format, ...)
 {
     va_list args;
+    WCHAR logFileName[256];
+    TIME_FIELDS tf;
+    LARGE_INTEGER systemTime, localTime;
     WCHAR buffer[1024];
     static HANDLE logFile = NULL;
     NTSTATUS status;
 
     if (!logFile)
     {
-        status = FileOpen(&logFile, LOG_FILE_NAME, TRUE, TRUE, FALSE);
+        NtQuerySystemTime(&systemTime);
+        RtlSystemTimeToLocalTime(&systemTime, &localTime);
+        RtlTimeToTimeFields(&localTime, &tf);
+        _snwprintf(logFileName, RTL_NUMBER_OF(logFileName),
+                   L"c:\\relocate-dir-%04d%02d%02d-%02d%02d%02d.log", // TODO: read from registry
+                   tf.Year, tf.Month, tf.Day, tf.Hour, tf.Minute, tf.Second);
+        status = FileOpen(&logFile, logFileName, TRUE, TRUE, FALSE);
         if (!NT_SUCCESS(status))
             goto print;
     }
