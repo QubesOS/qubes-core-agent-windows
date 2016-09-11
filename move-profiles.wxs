@@ -67,7 +67,7 @@ ExeCommand='51728'
 />
 
 <InstallExecuteSequence>
-    <Custom Action='RunPrepareVolume' After='InstallFiles'>NOT Installed AND NOT REMOVE</Custom>
+    <Custom Action='RunPrepareVolume' Before='InstallFinalize'>NOT Installed AND NOT REMOVE</Custom>
 </InstallExecuteSequence>
 
 </Module>
