@@ -81,6 +81,7 @@ void NtLog(IN BOOLEAN print, IN const PWCHAR format, ...)
     TIME_FIELDS tf;
     LARGE_INTEGER systemTime, localTime;
     WCHAR buffer[1024];
+    BYTE utf16Bom[2] = { 0xFF, 0xFE };
     static HANDLE logFile = NULL;
     NTSTATUS status;
 
@@ -95,6 +96,7 @@ void NtLog(IN BOOLEAN print, IN const PWCHAR format, ...)
         status = FileOpen(&logFile, logFileName, TRUE, TRUE, FALSE);
         if (!NT_SUCCESS(status))
             goto print;
+        FileWrite(logFile, utf16Bom, RTL_NUMBER_OF(utf16Bom), NULL);
     }
 
     va_start(args, format);
