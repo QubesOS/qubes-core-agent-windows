@@ -130,22 +130,26 @@ NTSTATUS EnablePrivileges(void)
     TOKEN_PRIVILEGES *tp = NULL;
     ULONG size;
     NTSTATUS status;
+    const int privilegeCount = 3;
 
     // This is a variable-size struct, but definition contains 1 element by default.
-    size = sizeof(TOKEN_PRIVILEGES) + sizeof(LUID_AND_ATTRIBUTES);
+    size = sizeof(TOKEN_PRIVILEGES) + (privilegeCount - 1) * sizeof(LUID_AND_ATTRIBUTES);
     tp = RtlAllocateHeap(g_Heap, 0, size);
 
     status = NtOpenProcessToken(NtCurrentProcess(), TOKEN_ALL_ACCESS, &processToken);
     if (!NT_SUCCESS(status))
         goto cleanup;
 
-    tp->PrivilegeCount = 2;
+    tp->PrivilegeCount = privilegeCount;
     tp->Privileges[0].Luid.HighPart = 0;
     tp->Privileges[0].Luid.LowPart = SE_SECURITY_PRIVILEGE; // needed for file security manipulation
     tp->Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
     tp->Privileges[1].Luid.HighPart = 0;
-    tp->Privileges[1].Luid.LowPart = SE_RESTORE_PRIVILEGE; // needed for setting file ownership
+    tp->Privileges[1].Luid.LowPart = SE_BACKUP_PRIVILEGE; // needed for reading files with ACLs that don't grant access to SYSTEM
     tp->Privileges[1].Attributes = SE_PRIVILEGE_ENABLED;
+    tp->Privileges[2].Luid.HighPart = 0;
+    tp->Privileges[2].Luid.LowPart = SE_RESTORE_PRIVILEGE; // needed for setting file ownership
+    tp->Privileges[2].Attributes = SE_PRIVILEGE_ENABLED;
 
     status = NtAdjustPrivilegesToken(processToken, FALSE, tp, size, NULL, NULL);
 

@@ -51,7 +51,7 @@ NTSTATUS FileOpen(OUT HANDLE *file, IN const PWCHAR fileName, IN BOOLEAN write, 
         NULL,
         NULL);
 
-    desiredAccess = SYNCHRONIZE | FILE_READ_ATTRIBUTES | FILE_READ_EA | READ_CONTROL | ACCESS_SYSTEM_SECURITY;
+    desiredAccess = SYNCHRONIZE | FILE_READ_ATTRIBUTES | FILE_READ_EA | FILE_TRAVERSE | READ_CONTROL | ACCESS_SYSTEM_SECURITY;
 
     if (write)
     {
@@ -561,7 +561,7 @@ NTSTATUS FileCreateDirectory(const IN PWCHAR path)
 
     status = NtCreateFile(
         &file,
-        FILE_LIST_DIRECTORY | SYNCHRONIZE | FILE_OPEN_FOR_BACKUP_INTENT,
+        SYNCHRONIZE | FILE_OPEN_FOR_BACKUP_INTENT,
         &oa,
         &iosb,
         NULL,
@@ -809,14 +809,6 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
             goto cleanup;
     }
 
-    status = FileCopySecurity(dir, target);
-    if (!NT_SUCCESS(status))
-    {
-        NtLog(TRUE, L"[!] FileCopySecurity(%s, %s) failed: %x\n", sourcePath, targetPath, status);
-        if (!ignoreErrors)
-            goto cleanup;
-    }
-
     dirInfo = RtlAllocateHeap(g_Heap, 0, 16384);
     if (!dirInfo)
     {
@@ -914,6 +906,15 @@ NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPat
         }
 
         firstQuery = FALSE;
+    }
+
+    // copy ACLs after dealing with children so we don't get tripped by restrictive access
+    status = FileCopySecurity(dir, target);
+    if (!NT_SUCCESS(status))
+    {
+        NtLog(TRUE, L"[!] FileCopySecurity(%s, %s) failed: %x\n", sourcePath, targetPath, status);
+        if (!ignoreErrors)
+            goto cleanup;
     }
 
     status = STATUS_SUCCESS;
