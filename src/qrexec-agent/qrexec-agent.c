@@ -790,17 +790,18 @@ static DWORD HandleExec(IN const struct msg_header *header, BOOL piped)
 
     if (commandLine)
     {
-    // Start the wrapper that will take care of data vchan, launch the child and redirect child's IO to data vchan if piped==TRUE.
-    status = StartChild(exec->connect_domain, exec->connect_port, userName, commandLine, FALSE, piped, interactive);
-    if (ERROR_SUCCESS != status)
-        LogError("StartChild(%s) failed", commandLine);
+        // Start the wrapper that will take care of data vchan, launch the child and redirect child's IO to data vchan if piped==TRUE.
+        status = StartChild(exec->connect_domain, exec->connect_port, userName, commandLine, FALSE, piped, interactive);
+        if (ERROR_SUCCESS != status)
+            LogError("StartChild(%s) failed", commandLine);
 
-    free(commandLine);
-    free(userName);
+        free(commandLine);
+        free(userName);
     }
     else
     {
-        // parsing failed, most likely unknown service - just ignore
+        // parsing failed, most likely unknown service - start the wrapper with dummy command line to send non-zero exit code through data vchan
+        StartChild(exec->connect_domain, exec->connect_port, userName, L"dummy", FALSE, piped, interactive);
         status = ERROR_SUCCESS;
     }
 
