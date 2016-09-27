@@ -929,8 +929,12 @@ cleanup:
     {
         if (child->Vchan)
         {
-            if (!piped) // send "exit code" (creation status really) if the io isn't piped
+            // send "exit code" (creation status really) if the io isn't piped or child creation failed
+            if (!piped || status != ERROR_SUCCESS)
+            {
+                VchanSendHello(child->Vchan);
                 VchanSendExitCode(child, status);
+            }
             libvchan_close(child->Vchan);
         }
     }
