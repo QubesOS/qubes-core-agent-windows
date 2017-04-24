@@ -186,7 +186,7 @@ ExeCommand='"[BinDir]\service-policy.cfg"'
 />
 
 <InstallExecuteSequence>
-    <Custom Action='RunServicePolicy' After='InstallFiles'>NOT Installed AND NOT REMOVE</Custom>
+    <Custom Action='RunServicePolicy' After='InstallFiles'>$ServicePolicy=3 AND NOT Installed AND NOT REMOVE</Custom>
 </InstallExecuteSequence>
 
 </Module>
