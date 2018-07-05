@@ -82,7 +82,7 @@ BOOL CALLBACK EnumWindowsProc(
         return TRUE;
 
     LogDebug("Icon for window 0x%x (%I64d)", hwnd, hwnd);
-    printf("%I64d\n", hwnd);
+    printf("%p\n", hwnd);
 
     // Create bitmap for the icon.
     if (!GetIconInfo(ico, &ii))

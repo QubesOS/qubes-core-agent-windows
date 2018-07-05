@@ -161,7 +161,7 @@ BOOL ReceiveFile(IN const WCHAR *localFilePath)
         if (GetLastError() == ERROR_FILE_EXISTS)
             fprintf(stderr, "File already exists, cleanup temp directory\n");
         else
-            fprintf(stderr, "Failed to create file '%s': 0x%x\n", localFilePath, GetLastError());
+            fprintf(stderr, "Failed to create file '%S': 0x%x\n", localFilePath, GetLastError());
 
         goto cleanup;
     }
@@ -186,7 +186,7 @@ BOOL SendFile(IN const WCHAR *localFilePath)
 
     if (localFile == INVALID_HANDLE_VALUE)
     {
-        fprintf(stderr, "Failed to open file '%s': 0x%x\n", localFilePath, GetLastError());
+        fprintf(stderr, "Failed to open file '%S': 0x%x\n", localFilePath, GetLastError());
         goto cleanup;
     }
 

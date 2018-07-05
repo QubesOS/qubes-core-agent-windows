@@ -42,6 +42,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *com
 
     LogDebug("request: %S", Url);
 
+#pragma warning(suppress:4311)
     if ((int)ShellExecuteA(NULL, "open", Url, NULL, NULL, SW_SHOWNORMAL) <= 32)
     {
         perror("ShellExecute failed");
