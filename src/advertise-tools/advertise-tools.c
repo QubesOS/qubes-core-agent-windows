@@ -226,6 +226,12 @@ int wmain(int argc, WCHAR *argv[])
         goto cleanup;
     }
 
+    if (!QdbWrite(qdb, QDB_PATH_PREFIX "gui-emulated", guiAgentPresent ? "0" : "1"))
+    {
+        perror("write 'gui-emulated' entry");
+        goto cleanup;
+    }
+
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
     {
         perror("write 'default-user' entry");
