@@ -21,6 +21,7 @@
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
+#define _CRT_NONSTDC_NO_DEPRECATE
 #include <stdlib.h>
 #include <stdio.h>
 #include <winsock2.h>
@@ -235,6 +236,8 @@ DWORD WINAPI SetupNetwork(PVOID param)
     char *qubesIp = NULL;
     char *qubesNetmask = NULL;
     char *qubesGateway = NULL;
+    char *qubesPrimaryDNS = NULL;
+    char *qubesSecondaryDNS = NULL;
     DWORD status = ERROR_UNIDENTIFIED_ERROR;
     char cmdline[255];
 
@@ -270,6 +273,20 @@ DWORD WINAPI SetupNetwork(PVOID param)
         goto cleanup;
     }
 
+    qubesPrimaryDNS = qdb_read(qdb, "/qubes-primary-dns", NULL);
+    if (!qubesPrimaryDNS)
+    {
+        // fallback to gateway address, as it was in original Qubes 3.2
+        qubesPrimaryDNS = strdup(qubesGateway);
+    }
+
+    qubesSecondaryDNS = qdb_read(qdb, "/qubes-secondary-dns", NULL);
+    if (!qubesSecondaryDNS)
+    {
+        // fallback to primary DNS address
+        qubesSecondaryDNS = strdup(qubesPrimaryDNS);
+    }
+
     LogInfo("ip: %S, netmask: %S, gateway: %S", qubesIp, qubesNetmask, qubesGateway);
 
     if (SetNetworkParameters(
@@ -285,11 +302,20 @@ DWORD WINAPI SetupNetwork(PVOID param)
     /* don't know how to programatically (and easily) set DNS address, so stay
      * with netsh... */
     _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
-        interfaceIndex, qubesGateway);
+        interfaceIndex, qubesPrimaryDNS);
 
     if (system(cmdline) != 0)
     {
-        LogError("Failed to set DNS address by calling: %S", cmdline);
+        LogError("Failed to set primary DNS address by calling: %S", cmdline);
+        goto cleanup;
+    }
+
+    _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 add dnsservers \"%d\" %s validate=no",
+        interfaceIndex, qubesSecondaryDNS);
+
+    if (system(cmdline) != 0)
+    {
+        LogError("Failed to set secondary DNS address by calling: %S", cmdline);
         goto cleanup;
     }
 
@@ -302,6 +328,10 @@ cleanup:
         free(qubesNetmask);
     if (qubesGateway)
         free(qubesGateway);
+    if (qubesPrimaryDNS)
+        free(qubesPrimaryDNS);
+    if (qubesSecondaryDNS)
+        free(qubesSecondaryDNS);
 
     if (qdb)
         qdb_close(qdb);
