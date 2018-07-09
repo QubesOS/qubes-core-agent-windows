@@ -148,6 +148,7 @@ DisplayName='Installation directory'
                         <File Id='qubes.WaitForSession' Source='src\qrexec-services\qubes.WaitForSession'/>
                         <File Id='qubes.SetGuiMode' Source='src\qrexec-services\qubes.SetGuiMode'/>
                         <File Id='qubes.GetAppMenus' Source='src\qrexec-services\qubes.GetAppMenus'/>
+                        <File Id='qubes.StartApp' Source='src\qrexec-services\qubes.StartApp'/>
                         <File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/>
                         <File Id='qubes.SetDateTime' Source='src\qrexec-services\qubes.SetDateTime'/>
                         <File Id='qubes.OpenURL' Source='src\qrexec-services\qubes.OpenURL'/>
@@ -164,6 +165,7 @@ DisplayName='Installation directory'
                         <File Id='wait_for_logon.exe' Source='bin\$(env.DDK_ARCH)\wait-for-logon.exe'/>
                         <File Id='set_gui_mode.exe' Source='bin\$(env.DDK_ARCH)\set-gui-mode.exe'/>
                         <File Id='get_appmenus.ps1' Source='src\qrexec-services\get-appmenus.ps1'/>
+                        <File Id='start_app.ps1' Source='src\qrexec-services\start-app.ps1'/>
                         <File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/>
                         <File Id='window_icon_updater.exe' Source='bin\$(env.DDK_ARCH)\window-icon-updater.exe'/>
                         <File Id='set_time.ps1' Source='src\qrexec-services\set-time.ps1'/>

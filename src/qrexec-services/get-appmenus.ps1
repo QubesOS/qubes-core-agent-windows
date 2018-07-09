@@ -54,6 +54,8 @@ Function ProcessLink($pathObj, $basepath)
 
     # Store the hash-LNK mapping in the registry for easy  retrieval by GetImageRGBA.
     New-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $targetHash -PropertyType String -Value $pathObj.FullName | Out-Null
+    # Store also basename-LNK location for qubes.StartApp service
+    New-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $desktopFileName.Replace('.lnk', '') -PropertyType String -Value $pathObj.FullName | Out-Null
 
     Write-Host "$($linkBaseName):Name=$appmenuLocation$($pathObj.BaseName)"
     Write-Host "$($linkBaseName):Exec=$($targetPath.Replace('\','\\'))"
