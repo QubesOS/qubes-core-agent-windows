@@ -72,33 +72,34 @@ DisplayName='Installation directory'
                         />
                     </Component>
                     <Component Id='QrexecClientVm' Guid='{1e74cee2-523b-4870-8e24-49d4945c4a5c}'>
-                        <File Id='qrexec_client_vm.exe' Source='bin\$(env.DDK_ARCH)\qrexec-client-vm.exe' KeyPath='yes'>
-                            <Shortcut
-                            Id='qopen_dvm_sendto_shortcut'
-                            Name='Edit in DispVM'
-                            Directory='SendToFolder'
-                            Arguments='$dispvm|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
-                            Show='minimized'
-                            />
+                        <File Id='ask_vm_and_run.exe' Source='bin\$(env.DDK_ARCH)\ask-vm-and-run.exe' KeyPath='yes'>
                         </File>
                     </Component>
                     <Component Id='QrexecWrapper' Guid='{EC103A81-6828-4ABA-9706-644DBBD4D615}'>
                         <File Id='qrexec_wrapper.exe' Source='bin\$(env.DDK_ARCH)\qrexec-wrapper.exe' KeyPath='yes'/>
                     </Component>
                     <Component Id='AskVmAndRun' Guid='{b5700d68-2ceb-4764-9e4b-11ae33b2d05b}'>
-                        <File Id='ask_vm_and_run.exe' Source='bin\$(env.DDK_ARCH)\ask-vm-and-run.exe' KeyPath='yes'>
+                        <File Id='qrexec_client_vm.exe' Source='bin\$(env.DDK_ARCH)\qrexec-client-vm.exe' KeyPath='yes'>
+                            <Shortcut
+                            Id='qopen_dvm_sendto_shortcut'
+                            Name='Edit in DispVM'
+                            Directory='SendToFolder'
+                            Arguments='@dispvm|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
+                            Show='minimized'
+                            />
+
                             <Shortcut
                             Id='CopyToVm'
                             Name='Copy to other VM'
                             Directory='SendToFolder'
-                            Arguments='qubes.Filecopy|[QubesRPCServicesDir]\file-sender.exe'
+                            Arguments='@default|qubes.Filecopy|[QubesRPCServicesDir]\file-sender.exe'
                             />
 
                             <Shortcut
                             Id='EditInVm'
                             Name='Edit in VM'
                             Directory='SendToFolder'
-                            Arguments='qubes.OpenInVM "[QubesRPCServicesDir]\open-in-vm.exe"'
+                            Arguments='@default|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
                             />
                         </File>
                     </Component>
