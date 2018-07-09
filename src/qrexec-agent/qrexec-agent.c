@@ -223,6 +223,65 @@ static DWORD Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf
     return ERROR_SUCCESS;
 }
 
+// based on https://stackoverflow.com/a/780024
+WCHAR* StrReplace(WCHAR const * const original,
+        WCHAR const * const pattern,
+        WCHAR const * const replacement
+    ) {
+    size_t const replen = wcslen(replacement);
+    size_t const patlen = wcslen(pattern);
+    size_t const orilen = wcslen(original);
+
+    size_t patcnt = 0;
+    const WCHAR * oriptr;
+    const WCHAR * patloc;
+
+    WCHAR *returned = NULL;
+    WCHAR *retptr = NULL;
+    size_t retlen;
+
+    // find how many times the pattern occurs in the original string
+    for (oriptr = original; patloc = wcsstr(oriptr, pattern); oriptr = patloc + patlen)
+    {
+        patcnt++;
+    }
+
+    // allocate memory for the new string
+    retlen = orilen + patcnt * (replen - patlen) + 1;
+    returned = (WCHAR *) malloc( sizeof(WCHAR) * retlen);
+
+    if (returned == NULL)
+        goto fail;
+
+    // copy the original string,
+    // replacing all the instances of the pattern
+    retptr = returned;
+    for (oriptr = original; patloc = wcsstr(oriptr, pattern); oriptr = patloc + patlen)
+    {
+        size_t const skplen = patloc - oriptr;
+        // copy the section until the occurence of the pattern
+        if (FAILED(StringCchCopyN(retptr, retlen, oriptr, skplen)))
+            goto fail;
+        retptr += skplen;
+        retlen -= skplen;
+        // copy the replacement
+        if (FAILED(StringCchCopyN(retptr, retlen, replacement, replen)))
+            goto fail;
+        retptr += replen;
+        retlen -= replen;
+    }
+    // copy the rest of the string.
+    if (FAILED(StringCchCopy(retptr, retlen, oriptr)))
+        goto fail;
+
+    return returned;
+fail:
+    if (returned)
+        free(returned);
+    return NULL;
+}
+
+
 /**
  * @brief Parse command line received via control vchan.
  * @param commandUtf8 Received command.
@@ -311,6 +370,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
     WCHAR serviceFilePath[MAX_PATH + 1];
     WCHAR *rawServiceFilePath = NULL;
     WCHAR *serviceArgs = NULL;
+    WCHAR *serviceCallArg = NULL;
     HANDLE serviceConfigFile;
     DWORD status;
     DWORD cbRead;
@@ -398,6 +458,38 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
 
         if (serviceConfigFile == INVALID_HANDLE_VALUE)
         {
+            // maybe there is an argument appended? look for a file with
+            // +argument stripped
+            separator = wcschr(serviceName, L'+');
+            if (separator)
+            {
+                *separator = L'\0';
+                serviceCallArg = separator+1;
+                // strip service+arg
+                separator = wcsrchr(serviceFilePath, L'\\');
+                if (!separator)
+                {
+                    // should never happen!
+                    LogError("Fail to contstruct a path for service+arg call");
+                    return ERROR_PATH_NOT_FOUND;
+                }
+                separator++;
+                *separator = L'\0';
+                PathAppendW(serviceFilePath, serviceName);
+
+                serviceConfigFile = CreateFile(
+                    serviceFilePath,    // file to open
+                    GENERIC_READ,          // open for reading
+                    FILE_SHARE_READ,       // share for reading
+                    NULL,                  // default security
+                    OPEN_EXISTING,         // existing file only
+                    FILE_ATTRIBUTE_NORMAL, // normal file
+                    NULL);                 // no attr. template
+            }
+        }
+
+        if (serviceConfigFile == INVALID_HANDLE_VALUE)
+        {
             status = perror("CreateFile");
             free(*sourceDomainName);
             LogError("Failed to open service '%s' configuration file (%s)", serviceName, serviceFilePath);
@@ -458,14 +550,18 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         }
 
         free(rawServiceFilePath);
-        *serviceCommandLine = malloc((wcslen(serviceFilePath) + 1) * sizeof(WCHAR));
+
+        // replace "%1" with an argument, if there was any, otherwise remove it
+        if (!serviceCallArg)
+            serviceCallArg = L"";
+
+        *serviceCommandLine = StrReplace(serviceFilePath, L"%1", serviceCallArg);
         if (*serviceCommandLine == NULL)
         {
             free(*sourceDomainName);
             return perror2(ERROR_NOT_ENOUGH_MEMORY, "malloc");
         }
-        LogDebug("RPC %s: %s\n", serviceName, serviceFilePath);
-        StringCchCopy(*serviceCommandLine, wcslen(serviceFilePath) + 1, serviceFilePath);
+        LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);
     }
 
     LogVerbose("success");
