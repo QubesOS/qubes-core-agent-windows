@@ -9,6 +9,7 @@
   </PropertyGroup>
   <PropertyGroup Label="Configuration">
     <PlatformToolset>v141</PlatformToolset>
+    <WindowsTargetPlatformVersion>$([Microsoft.Build.Utilities.ToolLocationHelper]::GetLatestSDKTargetPlatformVersion('Windows', '10.0'))</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
