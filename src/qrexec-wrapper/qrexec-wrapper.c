@@ -586,14 +586,23 @@ DWORD HandleDataMessage(
     return ERROR_SUCCESS;
 }
 
-DWORD WINAPI StdoutThread(
-    PVOID param
+/**
+ * @brief Read data from child's pipe, send to vchan
+ */
+static DWORD handle_child_output(
+    _Inout_ PCHILD_STATE child,
+    _In_    PIPE_TYPE pipe_type
     )
 {
-    DWORD transferred;
-    PCHILD_STATE child = param;
-    PBYTE buffer = malloc(MAX_DATA_CHUNK);
+    PPIPE_DATA pipe;
+    PBYTE buffer;
+    DWORD eof;
 
+    assert(child);
+
+    pipe = pipe_type == PTYPE_STDOUT ? &child->Stdout : &child->Stderr;
+
+    buffer = malloc(MAX_DATA_CHUNK);
     if (!buffer)
     {
         LogError("no memory");
@@ -602,70 +611,61 @@ DWORD WINAPI StdoutThread(
 
     LogVerbose("start");
 
-    // read from the child's stdout pipe, send to data vchan
-    while (TRUE)
+    eof = FALSE;
+    while (!eof)
     {
-        LogVerbose("reading...");
-        if (!ReadFile(child->Stdout.ReadEndpoint, buffer, MAX_DATA_CHUNK, &transferred, NULL)) // this can block
-        {
-            perror("ReadFile(stdout)");
-            break;
-        }
+        DWORD nread, ok;
 
-        LogVerbose("read %lu 0x%lx", transferred, transferred);
-        if (!VchanSendData(child, buffer, transferred, PTYPE_STDOUT))
+        LogVerbose("reading...");
+        ok = ReadFile(pipe->ReadEndpoint, buffer, MAX_DATA_CHUNK,
+                      &nread, NULL); // this can block
+        // nread is set to zero on entry
+        //
+        // EOF is signaled by either:
+        // - ok and nread == 0
+        // - !ok and GetLastError() == ERROR_BROKEN_PIPE.
+        //
+        // ReadFile of an anonymous pipe returns FALSE and GetLastError
+        // returns ERROR_BROKE_PIPE when the corresponding write handle 
+        // has been closed.
+        if (!ok && GetLastError() != ERROR_BROKEN_PIPE)
+        {
+            perror("ReadFile");
+            goto cleanup;
+        }
+        eof = nread == 0;
+        // EOF is signaled to the remote via zero count
+        LogVerbose("read %lu 0x%lx", nread, nread);
+        if (!VchanSendData(child, buffer, nread, pipe_type))
         {
             LogError("VchanSendData failed");
-            break;
+            goto cleanup;
         }
     }
 
 cleanup:
-    ClosePipe(&child->Stdout);
+    ClosePipe(pipe);
     LogVerbose("exiting");
     free(buffer);
     return 1;
+}
+
+DWORD WINAPI StdoutThread(
+    PVOID param
+    )
+{
+    PCHILD_STATE child = param;
+
+    return handle_child_output(child, PTYPE_STDOUT);
 }
 
 DWORD WINAPI StderrThread(
     PVOID param
     )
 {
-    DWORD transferred;
     PCHILD_STATE child = param;
-    PBYTE buffer = malloc(MAX_DATA_CHUNK);
 
-    if (!buffer)
-    {
-        LogError("no memory");
-        goto cleanup;
-    }
-
-    LogVerbose("start");
-
-    // read from the child's stderr pipe, send to data vchan
-    while (TRUE)
-    {
-        LogVerbose("reading...");
-        if (!ReadFile(child->Stderr.ReadEndpoint, buffer, MAX_DATA_CHUNK, &transferred, NULL)) // this can block
-        {
-            perror("ReadFile(stderr)");
-            break;
-        }
-
-        LogVerbose("read %lu 0x%lx", transferred, transferred);
-        if (!VchanSendData(child, buffer, transferred, PTYPE_STDERR))
-        {
-            LogError("VchanSendData failed");
-            break;
-        }
-    }
-
-cleanup:
-    ClosePipe(&child->Stderr);
-    LogVerbose("exiting");
-    free(buffer);
-    return 1;
+    return handle_child_output(child, PTYPE_STDERR);
 }
 
 static void XifLogger(int level, const char *function, const WCHAR *format, va_list args)
