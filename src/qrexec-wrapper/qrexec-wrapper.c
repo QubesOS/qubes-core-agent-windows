@@ -619,7 +619,6 @@ static DWORD handle_child_output(
         LogVerbose("reading...");
         ok = ReadFile(pipe->ReadEndpoint, buffer, MAX_DATA_CHUNK,
                       &nread, NULL); // this can block
-        // nread is set to zero on entry
         //
         // EOF is signaled by either:
         // - ok and nread == 0
@@ -630,8 +629,9 @@ static DWORD handle_child_output(
         // has been closed.
         if (!ok && GetLastError() != ERROR_BROKEN_PIPE)
         {
+            // if !ok, then nread == 0
+            // Signal error condition by sending EOF
             perror("ReadFile");
-            goto cleanup;
         }
         eof = nread == 0;
         // EOF is signaled to the remote via zero count
