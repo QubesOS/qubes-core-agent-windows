@@ -70,6 +70,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\src\service-policy\service-policy.cfg" />
+    <None Include="App.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
