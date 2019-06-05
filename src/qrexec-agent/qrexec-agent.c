@@ -22,10 +22,10 @@
 #include <windows.h>
 #include <stdlib.h>
 #include <lmcons.h>
-#include <strsafe.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <assert.h>
 #include <crtdbg.h>
+#include <strsafe.h>
 
 #include "qrexec-agent.h"
 

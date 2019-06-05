@@ -20,7 +20,7 @@
  */
 
 #include <windows.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
 

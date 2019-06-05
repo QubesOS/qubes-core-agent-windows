@@ -23,11 +23,12 @@
 
 #include "prepare-volume.h"
 #include <shellapi.h>
-#include <Shlwapi.h>
-#include <ShlObj.h>
-#include <Knownfolders.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+#include <knownfolders.h>
 #include <aclapi.h>
 #include <stdlib.h>
+#include <strsafe.h>
 
 #include "device.h"
 #include "disk.h"

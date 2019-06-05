@@ -23,6 +23,10 @@
 
 HANDLE g_Heap;
 
+#ifdef __MINGW32__
+#define TEXT(x) x
+#endif
+
 __declspec(dllimport)
 int _vsnwprintf(
     wchar_t *buffer,

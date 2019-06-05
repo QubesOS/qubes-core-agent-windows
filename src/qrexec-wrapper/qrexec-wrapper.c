@@ -25,9 +25,9 @@
 
 #include "qrexec-wrapper.h"
 #include <stdlib.h>
-#include <strsafe.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <assert.h>
+#include <strsafe.h>
 
 #include <libvchan.h>
 #include <qrexec.h>

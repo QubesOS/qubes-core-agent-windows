@@ -19,7 +19,7 @@
  *
  */
 
-#include <Windows.h>
+#include <windows.h>
 #include <stdio.h>
 #include <strsafe.h>
 #include <string.h>

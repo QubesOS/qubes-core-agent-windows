@@ -19,7 +19,7 @@
  *
  */
 
-#include <Windows.h>
+#include <windows.h>
 
 #include "filecopy.h"
 #include "crc32.h"

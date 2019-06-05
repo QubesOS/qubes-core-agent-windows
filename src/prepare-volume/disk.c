@@ -22,8 +22,12 @@
 #include "disk.h"
 #include "format.h"
 #include "wait-for-volume.h"
+#ifdef __MINGW32__
+#include "customddkinc.h"
+#endif
 
 #include <stdlib.h>
+#include <strsafe.h>
 
 // without braces
 PWCHAR DISK_CLASS_GUID = L"4d36e967-e325-11ce-bfc1-08002be10318";

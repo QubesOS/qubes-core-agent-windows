@@ -19,13 +19,13 @@
  *
  */
 
-#include <Windows.h>
+#include <windows.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <Strsafe.h>
-#include <Shellapi.h>
+#include <shellapi.h>
 #include <rpc.h>
+#include <strsafe.h>
 
 #include <log.h>
 #include <utf8-conv.h>

@@ -22,10 +22,17 @@
 #include "device.h"
 #include "disk.h"
 
-#include <SetupAPI.h>
+#include <setupapi.h>
 #include <cfgmgr32.h>
 #include <rpc.h>
 #include <devpkey.h>
+
+#ifdef __MINGW32__
+#include "customddkinc.h"
+#include "setupapifn.h"
+#endif
+
+#include <strsafe.h>
 
 // Convert backend device ID to Windows' disk target id.
 // See __ParseVbd() in xenvbd/fdo.c in the new pvdrivers.

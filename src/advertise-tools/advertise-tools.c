@@ -21,7 +21,7 @@
 
 #include <windows.h>
 #include <shlwapi.h>
-#include <Wtsapi32.h>
+#include <wtsapi32.h>
 
 #include <qubesdb-client.h>
 #include <log.h>

@@ -22,13 +22,16 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Strsafe.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <shlobj.h>
-#include <Shellapi.h>
+#include <shellapi.h>
+#include <strsafe.h>
 
 #include <log.h>
 
+#ifdef __MINGW32__
+#include "customddkinc.h"
+#endif
 #include "wdk.h"
 
 HANDLE g_stdin = INVALID_HANDLE_VALUE;

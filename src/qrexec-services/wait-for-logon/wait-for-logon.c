@@ -19,11 +19,11 @@
  *
  */
 
-#include <Windows.h>
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Wtsapi32.h>
-#include <Shlwapi.h>
+#include <wtsapi32.h>
+#include <shlwapi.h>
 
 #include <qubes-io.h>
 #include <utf8-conv.h>
