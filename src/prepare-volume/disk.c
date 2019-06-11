@@ -184,12 +184,19 @@ static ULONG Rand32(void)
 static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHAR *diskLetter)
 {
     DWORD requiredSize;
+    DWORD returnedSize;
     BYTE partitionBuffer[sizeof(DRIVE_LAYOUT_INFORMATION_EX) + 4 * sizeof(PARTITION_INFORMATION_EX)] = { 0 };
     DRIVE_LAYOUT_INFORMATION_EX *driveLayout = (DRIVE_LAYOUT_INFORMATION_EX *) partitionBuffer;
     SET_DISK_ATTRIBUTES diskAttrs = { 0 };
     CREATE_DISK createDisk;
     ULONG signature = Rand32();
-
+    DISK_GEOMETRY_EX diskGeometry = { 0 };
+    // "track0" is the first 64+ sectors reserved for MBR, partition table, etc.
+    // NOTE: using CHS-style 63 sectors causes an issue with Windows 10 format utility
+    // (BIOS reports a maximum of 63 sectors/track but this isn't the true value)
+    DWORD firstTrackSectors = 64;
+    DWORD firstTrackOffset;
+    
     // Set disk attributes.
     diskAttrs.Version = sizeof(diskAttrs);
     diskAttrs.AttributesMask = DISK_ATTRIBUTE_OFFLINE | DISK_ATTRIBUTE_READ_ONLY;
@@ -231,21 +238,31 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
         return FALSE;
     }
 
+    if (!DeviceIoControl(device, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, &diskGeometry, sizeof(diskGeometry), &returnedSize, NULL))
+    {
+        perror("IOCTL_DISK_GET_DRIVE_GEOMETRY_EX");
+        return FALSE;
+    }
+
+    LogInfo("Disk geometry: cylinders=%d tracksPerCylinder=%d sectorsPerTrack=%d bytesPerSector=%d", diskGeometry.Geometry.Cylinders, diskGeometry.Geometry.TracksPerCylinder, diskGeometry.Geometry.SectorsPerTrack, diskGeometry.Geometry.BytesPerSector);
+
+    firstTrackOffset = firstTrackSectors * diskGeometry.Geometry.BytesPerSector;
+
     // Create partition table.
     driveLayout->PartitionStyle = PARTITION_STYLE_MBR;
     driveLayout->PartitionCount = 4;
     driveLayout->Mbr.Signature = signature;
 
     driveLayout->PartitionEntry[0].PartitionStyle = PARTITION_STYLE_MBR;
-    driveLayout->PartitionEntry[0].StartingOffset.QuadPart = 63 * 512; // FIXME: use disk geometry numbers
-    driveLayout->PartitionEntry[0].PartitionLength.QuadPart = diskSize.QuadPart - 63 * 512; // make sure to subtract MBR size
+    driveLayout->PartitionEntry[0].StartingOffset.QuadPart = firstTrackOffset;
+    driveLayout->PartitionEntry[0].PartitionLength.QuadPart = diskGeometry.DiskSize.QuadPart - firstTrackOffset;
     driveLayout->PartitionEntry[0].PartitionNumber = 1; // 1-based
     driveLayout->PartitionEntry[0].RewritePartition = TRUE;
 
     driveLayout->PartitionEntry[0].Mbr.PartitionType = PARTITION_IFS;
     driveLayout->PartitionEntry[0].Mbr.RecognizedPartition = TRUE;
     driveLayout->PartitionEntry[0].Mbr.BootIndicator = FALSE;
-    driveLayout->PartitionEntry[0].Mbr.HiddenSectors = 63; // MBR size
+    driveLayout->PartitionEntry[0].Mbr.HiddenSectors = firstTrackSectors;
 
     driveLayout->PartitionEntry[1].RewritePartition = TRUE;
     driveLayout->PartitionEntry[2].RewritePartition = TRUE;
