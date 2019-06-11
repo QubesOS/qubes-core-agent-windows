@@ -13,7 +13,7 @@
 
                 <DirectoryRef Id='BinDir'>
                     <Component Id='QrexecAgent' Guid='{0e26617f-e5d9-4943-a08e-cf29013e9d72}'>
-                        <File Id='qrexec_agent.exe' Source='bin\$(env.DDK_ARCH)\qrexec-agent.exe' KeyPath='yes'/>
+                        <File Id='qrexec_agent.exe' Source='$(env.QUBES_BIN)\qrexec-agent.exe' KeyPath='yes'/>
 
                         <ServiceInstall
                         Id='QrexecService'
@@ -39,14 +39,14 @@
                         />
                     </Component>
                     <Component Id='QrexecClientVm' Guid='{1e74cee2-523b-4870-8e24-49d4945c4a5c}'>
-                        <File Id='ask_vm_and_run.exe' Source='bin\$(env.DDK_ARCH)\ask-vm-and-run.exe' KeyPath='yes'>
+                        <File Id='ask_vm_and_run.exe' Source='$(env.QUBES_BIN)\ask-vm-and-run.exe' KeyPath='yes'>
                         </File>
                     </Component>
                     <Component Id='QrexecWrapper' Guid='{EC103A81-6828-4ABA-9706-644DBBD4D615}'>
-                        <File Id='qrexec_wrapper.exe' Source='bin\$(env.DDK_ARCH)\qrexec-wrapper.exe' KeyPath='yes'/>
+                        <File Id='qrexec_wrapper.exe' Source='$(env.QUBES_BIN)\qrexec-wrapper.exe' KeyPath='yes'/>
                     </Component>
                     <Component Id='AskVmAndRun' Guid='{b5700d68-2ceb-4764-9e4b-11ae33b2d05b}'>
-                        <File Id='qrexec_client_vm.exe' Source='bin\$(env.DDK_ARCH)\qrexec-client-vm.exe' KeyPath='yes'>
+                        <File Id='qrexec_client_vm.exe' Source='$(env.QUBES_BIN)\qrexec-client-vm.exe' KeyPath='yes'>
                             <Shortcut
                             Id='qopen_dvm_sendto_shortcut'
                             Name='Edit in DispVM'
@@ -71,7 +71,7 @@
                         </File>
                     </Component>
                     <Component Id='NetworkSetup' Guid='{7201739e-35fb-11e3-9760-00163e5e6c10}'>
-                        <File Id='network_setup.exe' Source='bin\$(env.DDK_ARCH)\network-setup.exe' KeyPath='yes'/>
+                        <File Id='network_setup.exe' Source='$(env.QUBES_BIN)\network-setup.exe' KeyPath='yes'/>
 
                         <ServiceInstall
                         Id='NetworkSetupService'
@@ -103,7 +103,7 @@
                         <File Id='service_policy.cfg' Source='src\service-policy\service-policy.cfg' />
                     </Component>
                     <Component Id='AdvertiseTools' Guid='{DEDA44D9-6A58-4DE7-902A-643FB594B93C}'>
-                        <File Id='advertise_tools.exe' Source='bin\$(env.DDK_ARCH)\advertise-tools.exe' KeyPath='yes'/>
+                        <File Id='advertise_tools.exe' Source='$(env.QUBES_BIN)\advertise-tools.exe' KeyPath='yes'/>
                     </Component>
                 </DirectoryRef>
 	<DirectoryRef Id="INSTALLDIR">
@@ -125,20 +125,20 @@
                 </Directory>
                 <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
                     <Component Id='QrexecServices' Guid='{2543621b-2d67-4726-9a3b-7a1c471a1e19}'>
-                        <File Id='file_sender.exe' Source='bin\$(env.DDK_ARCH)\file-sender.exe' KeyPath='yes'/>
-                        <File Id='file_receiver.exe' Source='bin\$(env.DDK_ARCH)\file-receiver.exe'/>
-                        <File Id='clipboard_copy.exe' Source='bin\$(env.DDK_ARCH)\clipboard-copy.exe'/>
-                        <File Id='clipboard_paste.exe' Source='bin\$(env.DDK_ARCH)\clipboard-paste.exe'/>
-                        <File Id='vm_file_editor.exe' Source='bin\$(env.DDK_ARCH)\vm-file-editor.exe'/>
-                        <File Id='open_in_vm.exe' Source='bin\$(env.DDK_ARCH)\open-in-vm.exe'/>
-                        <File Id='wait_for_logon.exe' Source='bin\$(env.DDK_ARCH)\wait-for-logon.exe'/>
-                        <File Id='set_gui_mode.exe' Source='bin\$(env.DDK_ARCH)\set-gui-mode.exe'/>
+                        <File Id='file_sender.exe' Source='$(env.QUBES_BIN)\file-sender.exe' KeyPath='yes'/>
+                        <File Id='file_receiver.exe' Source='$(env.QUBES_BIN)\file-receiver.exe'/>
+                        <File Id='clipboard_copy.exe' Source='$(env.QUBES_BIN)\clipboard-copy.exe'/>
+                        <File Id='clipboard_paste.exe' Source='$(env.QUBES_BIN)\clipboard-paste.exe'/>
+                        <File Id='vm_file_editor.exe' Source='$(env.QUBES_BIN)\vm-file-editor.exe'/>
+                        <File Id='open_in_vm.exe' Source='$(env.QUBES_BIN)\open-in-vm.exe'/>
+                        <File Id='wait_for_logon.exe' Source='$(env.QUBES_BIN)\wait-for-logon.exe'/>
+                        <File Id='set_gui_mode.exe' Source='$(env.QUBES_BIN)\set-gui-mode.exe'/>
                         <File Id='get_appmenus.ps1' Source='src\qrexec-services\get-appmenus.ps1'/>
                         <File Id='start_app.ps1' Source='src\qrexec-services\start-app.ps1'/>
-                        <File Id='get_image_rgba.exe' Source='bin\$(env.DDK_ARCH)\get-image-rgba.exe'/>
-                        <File Id='window_icon_updater.exe' Source='bin\$(env.DDK_ARCH)\window-icon-updater.exe'/>
+                        <File Id='get_image_rgba.exe' Source='$(env.QUBES_BIN)\get-image-rgba.exe'/>
+                        <File Id='window_icon_updater.exe' Source='$(env.QUBES_BIN)\window-icon-updater.exe'/>
                         <File Id='set_time.ps1' Source='src\qrexec-services\set-time.ps1'/>
-                        <File Id='open_url.exe' Source='bin\$(env.DDK_ARCH)\open-url.exe'/>
+                        <File Id='open_url.exe' Source='$(env.QUBES_BIN)\open-url.exe'/>
                     </Component>
                 </Directory>
 	</DirectoryRef>
