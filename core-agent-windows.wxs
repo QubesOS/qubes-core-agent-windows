@@ -1,163 +1,200 @@
 <?xml version='1.0' encoding='windows-1252'?>
 <Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
-
-<?if $(env.DDK_ARCH) = x64 ?>
+    <?if $(env.DDK_ARCH) = x64 ?>
     <?define PFILESDIR = ProgramFiles64Folder ?>
     <?define SYSDIR = System64Folder ?>
-<?else?>
+    <?else?>
     <?define PFILESDIR = ProgramFilesFolder ?>
     <?define SYSDIR = SystemFolder ?>
-<?endif ?>
-
-<Fragment>
-
-                <DirectoryRef Id='BinDir'>
-                    <Component Id='QrexecAgent' Guid='{0e26617f-e5d9-4943-a08e-cf29013e9d72}'>
-                        <File Id='qrexec_agent.exe' Source='$(env.QUBES_BIN)\qrexec-agent.exe' KeyPath='yes'/>
-
-                        <ServiceInstall
-                        Id='QrexecService'
-                        Type='ownProcess'
-                        Vital='yes'
-                        Name='QrexecAgent'
-                        DisplayName='Qubes RPC Agent'
-                        Description='Qubes remote execute agent'
-                        Start='auto'
-                        Account='LocalSystem'
-                        ErrorControl='ignore'
-                        Interactive='no'
-                        >
-                            <ServiceDependency Id='QdbDaemon' />
-                        </ServiceInstall>
-
-                        <ServiceControl
-                        Id='QrexecServiceControl'
-                        Stop='both'
-                        Remove='uninstall'
-                        Name='QrexecAgent'
-                        Wait='yes'
-                        />
-                    </Component>
-                    <Component Id='QrexecClientVm' Guid='{1e74cee2-523b-4870-8e24-49d4945c4a5c}'>
-                        <File Id='ask_vm_and_run.exe' Source='$(env.QUBES_BIN)\ask-vm-and-run.exe' KeyPath='yes'>
-                        </File>
-                    </Component>
-                    <Component Id='QrexecWrapper' Guid='{EC103A81-6828-4ABA-9706-644DBBD4D615}'>
-                        <File Id='qrexec_wrapper.exe' Source='$(env.QUBES_BIN)\qrexec-wrapper.exe' KeyPath='yes'/>
-                    </Component>
-                    <Component Id='AskVmAndRun' Guid='{b5700d68-2ceb-4764-9e4b-11ae33b2d05b}'>
-                        <File Id='qrexec_client_vm.exe' Source='$(env.QUBES_BIN)\qrexec-client-vm.exe' KeyPath='yes'>
-                            <Shortcut
-                            Id='qopen_dvm_sendto_shortcut'
-                            Name='Edit in DispVM'
-                            Directory='SendToFolder'
-                            Arguments='@dispvm|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
-                            Show='minimized'
-                            />
-
-                            <Shortcut
-                            Id='CopyToVm'
-                            Name='Copy to other VM'
-                            Directory='SendToFolder'
-                            Arguments='@default|qubes.Filecopy|[QubesRPCServicesDir]\file-sender.exe'
-                            />
-
-                            <Shortcut
-                            Id='EditInVm'
-                            Name='Edit in VM'
-                            Directory='SendToFolder'
-                            Arguments='@default|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
-                            />
-                        </File>
-                    </Component>
-                    <Component Id='NetworkSetup' Guid='{7201739e-35fb-11e3-9760-00163e5e6c10}'>
-                        <File Id='network_setup.exe' Source='$(env.QUBES_BIN)\network-setup.exe' KeyPath='yes'/>
-
-                        <ServiceInstall
-                        Id='NetworkSetupService'
-                        Type='ownProcess'
-                        Vital='yes'
-                        Name='QubesNetworkSetup'
-                        DisplayName='Qubes Network Setup'
-                        Description='Setup network according to Qubes VM settings'
-                        Start='auto'
-                        Account='LocalSystem'
-                        ErrorControl='ignore'
-                        Interactive='no'
-                        Arguments='-service'
-                        >
-                            <ServiceDependency Id='iphlpsvc' />
-                            <ServiceDependency Id='QdbDaemon' />
-                        </ServiceInstall>
-
-                        <ServiceControl
-                        Id='NetworkSetupServiceControl'
-                        Stop='both'
-                        Remove='uninstall'
-                        Name='QubesNetworkSetup'
-                        Wait='yes'
-                        />
-                    </Component>
-                    <Component Id='ServicePolicy' Guid='{F9818E4E-76C4-40DE-A8F3-945336C954B1}'>
-                        <File Id='service_policy.exe' Source='bin\AnyCPU\service-policy.exe' KeyPath='yes' />
-                        <File Id='service_policy.cfg' Source='src\service-policy\service-policy.cfg' />
-                    </Component>
-                    <Component Id='AdvertiseTools' Guid='{DEDA44D9-6A58-4DE7-902A-643FB594B93C}'>
-                        <File Id='advertise_tools.exe' Source='$(env.QUBES_BIN)\advertise-tools.exe' KeyPath='yes'/>
-                    </Component>
-                </DirectoryRef>
-	<DirectoryRef Id="INSTALLDIR">
-                <Directory Id='QubesRPCDir' Name='qubes-rpc'>
-                    <Component Id='QrexecServicesConfig' Guid='{9efff253-25a8-40ed-861a-0d576f0ca439}'>
-                        <File Id='qubes.Filecopy' Source='src\qrexec-services\qubes.Filecopy' KeyPath='yes'/>
-                        <File Id='qubes.ClipboardCopy' Source='src\qrexec-services\qubes.ClipboardCopy'/>
-                        <File Id='qubes.ClipboardPaste' Source='src\qrexec-services\qubes.ClipboardPaste'/>
-                        <File Id='qubes.VMShell' Source='src\qrexec-services\qubes.VMShell'/>
-                        <File Id='qubes.OpenInVM' Name='qubes.OpenInVM' Source='src\qrexec-services\qubes.OpenInVM'/>
-                        <File Id='qubes.WaitForSession' Source='src\qrexec-services\qubes.WaitForSession'/>
-                        <File Id='qubes.SetGuiMode' Source='src\qrexec-services\qubes.SetGuiMode'/>
-                        <File Id='qubes.GetAppMenus' Source='src\qrexec-services\qubes.GetAppMenus'/>
-                        <File Id='qubes.StartApp' Source='src\qrexec-services\qubes.StartApp'/>
-                        <File Id='qubes.GetImageRGBA' Source='src\qrexec-services\qubes.GetImageRGBA'/>
-                        <File Id='qubes.SetDateTime' Source='src\qrexec-services\qubes.SetDateTime'/>
-                        <File Id='qubes.OpenURL' Source='src\qrexec-services\qubes.OpenURL'/>
-                    </Component>
-                </Directory>
-                <Directory Id='QubesRPCServicesDir' Name='qubes-rpc-services'>
-                    <Component Id='QrexecServices' Guid='{2543621b-2d67-4726-9a3b-7a1c471a1e19}'>
-                        <File Id='file_sender.exe' Source='$(env.QUBES_BIN)\file-sender.exe' KeyPath='yes'/>
-                        <File Id='file_receiver.exe' Source='$(env.QUBES_BIN)\file-receiver.exe'/>
-                        <File Id='clipboard_copy.exe' Source='$(env.QUBES_BIN)\clipboard-copy.exe'/>
-                        <File Id='clipboard_paste.exe' Source='$(env.QUBES_BIN)\clipboard-paste.exe'/>
-                        <File Id='vm_file_editor.exe' Source='$(env.QUBES_BIN)\vm-file-editor.exe'/>
-                        <File Id='open_in_vm.exe' Source='$(env.QUBES_BIN)\open-in-vm.exe'/>
-                        <File Id='wait_for_logon.exe' Source='$(env.QUBES_BIN)\wait-for-logon.exe'/>
-                        <File Id='set_gui_mode.exe' Source='$(env.QUBES_BIN)\set-gui-mode.exe'/>
-                        <File Id='get_appmenus.ps1' Source='src\qrexec-services\get-appmenus.ps1'/>
-                        <File Id='start_app.ps1' Source='src\qrexec-services\start-app.ps1'/>
-                        <File Id='get_image_rgba.exe' Source='$(env.QUBES_BIN)\get-image-rgba.exe'/>
-                        <File Id='window_icon_updater.exe' Source='$(env.QUBES_BIN)\window-icon-updater.exe'/>
-                        <File Id='set_time.ps1' Source='src\qrexec-services\set-time.ps1'/>
-                        <File Id='open_url.exe' Source='$(env.QUBES_BIN)\open-url.exe'/>
-                    </Component>
-                </Directory>
-	</DirectoryRef>
-<DirectoryRef Id="TARGETDIR">
-    <Directory Id='SendToFolder'/>
-</DirectoryRef>
-
-<CustomAction
-Id="RunServicePolicy"
-Return="ignore"
-Impersonate="no"
-Execute="deferred"
-FileKey="service_policy.exe"
-ExeCommand='"[BinDir]\service-policy.cfg"'
-/>
-
-<InstallExecuteSequence>
-    <Custom Action='RunServicePolicy' After='InstallFiles'>$ServicePolicy=3 AND NOT Installed AND NOT REMOVE</Custom>
-</InstallExecuteSequence>
-
-</Fragment>
+    <?endif ?>
+    <Fragment>
+        <DirectoryRef Id='BinDir'>
+            <Component Id='QrexecAgent'
+                       Guid='{0e26617f-e5d9-4943-a08e-cf29013e9d72}'>
+                       
+                <File Id='qrexec_agent.exe'
+                      Source='$(env.QUBES_BIN)\qrexec-agent.exe'
+                      KeyPath='yes' />
+                <ServiceInstall Id='QrexecService'
+                                Type='ownProcess'
+                                Vital='yes'
+                                Name='QrexecAgent'
+                                DisplayName='Qubes RPC Agent'
+                                Description='Qubes remote execute agent'
+                                Start='auto'
+                                Account='LocalSystem'
+                                ErrorControl='ignore'
+                                Interactive='no'>
+                    <ServiceDependency Id='QdbDaemon' />
+                </ServiceInstall>
+                <ServiceControl Id='QrexecServiceControl'
+                                Stop='both'
+                                Remove='uninstall'
+                                Name='QrexecAgent'
+                                Wait='yes' />
+            </Component>
+            <Component Id='QrexecClientVm'
+                       Guid='{1e74cee2-523b-4870-8e24-49d4945c4a5c}'>
+                       
+                <File Id='ask_vm_and_run.exe'
+                      Source='$(env.QUBES_BIN)\ask-vm-and-run.exe'
+                      KeyPath='yes'></File>
+            </Component>
+            <Component Id='QrexecWrapper'
+                       Guid='{EC103A81-6828-4ABA-9706-644DBBD4D615}'>
+                       
+                <File Id='qrexec_wrapper.exe'
+                      Source='$(env.QUBES_BIN)\qrexec-wrapper.exe'
+                      KeyPath='yes' />
+            </Component>
+            <Component Id='AskVmAndRun'
+                       Guid='{b5700d68-2ceb-4764-9e4b-11ae33b2d05b}'>
+                       
+                <File Id='qrexec_client_vm.exe'
+                      Source='$(env.QUBES_BIN)\qrexec-client-vm.exe'
+                      KeyPath='yes'>
+                    <Shortcut Id='qopen_dvm_sendto_shortcut'
+                              Name='Edit in DispVM'
+                              Directory='SendToFolder'
+                              Arguments='@dispvm|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe'
+                              Show='minimized' />
+                    <Shortcut Id='CopyToVm'
+                              Name='Copy to other VM'
+                              Directory='SendToFolder'
+                              Arguments='@default|qubes.Filecopy|[QubesRPCServicesDir]\file-sender.exe' />
+                    <Shortcut Id='EditInVm'
+                              Name='Edit in VM'
+                              Directory='SendToFolder'
+                              Arguments='@default|qubes.OpenInVM|[QubesRPCServicesDir]\open-in-vm.exe' />
+                </File>
+            </Component>
+            <Component Id='NetworkSetup'
+                       Guid='{7201739e-35fb-11e3-9760-00163e5e6c10}'>
+                       
+                <File Id='network_setup.exe'
+                      Source='$(env.QUBES_BIN)\network-setup.exe'
+                      KeyPath='yes' />
+                <ServiceInstall Id='NetworkSetupService'
+                                Type='ownProcess'
+                                Vital='yes'
+                                Name='QubesNetworkSetup'
+                                DisplayName='Qubes Network Setup'
+                                Description='Setup network according to Qubes VM settings'
+                                Start='auto'
+                                Account='LocalSystem'
+                                ErrorControl='ignore'
+                                Interactive='no'
+                                Arguments='-service'>
+                    <ServiceDependency Id='iphlpsvc' />
+                    <ServiceDependency Id='QdbDaemon' />
+                </ServiceInstall>
+                <ServiceControl Id='NetworkSetupServiceControl'
+                                Stop='both'
+                                Remove='uninstall'
+                                Name='QubesNetworkSetup'
+                                Wait='yes' />
+            </Component>
+            <Component Id='ServicePolicy'
+                       Guid='{F9818E4E-76C4-40DE-A8F3-945336C954B1}'>
+                       
+                <File Id='service_policy.exe'
+                      Source='bin\AnyCPU\service-policy.exe'
+                      KeyPath='yes' />
+                <File Id='service_policy.cfg'
+                      Source='src\service-policy\service-policy.cfg' />
+            </Component>
+            <Component Id='AdvertiseTools'
+                       Guid='{DEDA44D9-6A58-4DE7-902A-643FB594B93C}'>
+                       
+                <File Id='advertise_tools.exe'
+                      Source='$(env.QUBES_BIN)\advertise-tools.exe'
+                      KeyPath='yes' />
+            </Component>
+        </DirectoryRef>
+        <DirectoryRef Id="INSTALLDIR">
+            <Directory Id='QubesRPCDir'
+                       Name='qubes-rpc'>
+                <Component Id='QrexecServicesConfig'
+                           Guid='{9efff253-25a8-40ed-861a-0d576f0ca439}'>
+                           
+                    <File Id='qubes.Filecopy'
+                          Source='src\qrexec-services\qubes.Filecopy'
+                          KeyPath='yes' />
+                    <File Id='qubes.ClipboardCopy'
+                          Source='src\qrexec-services\qubes.ClipboardCopy' />
+                    <File Id='qubes.ClipboardPaste'
+                          Source='src\qrexec-services\qubes.ClipboardPaste' />
+                    <File Id='qubes.VMShell'
+                          Source='src\qrexec-services\qubes.VMShell' />
+                    <File Id='qubes.OpenInVM'
+                          Name='qubes.OpenInVM'
+                          Source='src\qrexec-services\qubes.OpenInVM' />
+                    <File Id='qubes.WaitForSession'
+                          Source='src\qrexec-services\qubes.WaitForSession' />
+                    <File Id='qubes.SetGuiMode'
+                          Source='src\qrexec-services\qubes.SetGuiMode' />
+                    <File Id='qubes.GetAppMenus'
+                          Source='src\qrexec-services\qubes.GetAppMenus' />
+                    <File Id='qubes.StartApp'
+                          Source='src\qrexec-services\qubes.StartApp' />
+                    <File Id='qubes.GetImageRGBA'
+                          Source='src\qrexec-services\qubes.GetImageRGBA' />
+                    <File Id='qubes.SetDateTime'
+                          Source='src\qrexec-services\qubes.SetDateTime' />
+                    <File Id='qubes.OpenURL'
+                          Source='src\qrexec-services\qubes.OpenURL' />
+                </Component>
+            </Directory>
+            <Directory Id='QubesRPCServicesDir'
+                       Name='qubes-rpc-services'>
+                <Component Id='QrexecServices'
+                           Guid='{2543621b-2d67-4726-9a3b-7a1c471a1e19}'>
+                           
+                    <File Id='file_sender.exe'
+                          Source='$(env.QUBES_BIN)\file-sender.exe'
+                          KeyPath='yes' />
+                    <File Id='file_receiver.exe'
+                          Source='$(env.QUBES_BIN)\file-receiver.exe' />
+                    <File Id='clipboard_copy.exe'
+                          Source='$(env.QUBES_BIN)\clipboard-copy.exe' />
+                    <File Id='clipboard_paste.exe'
+                          Source='$(env.QUBES_BIN)\clipboard-paste.exe' />
+                    <File Id='vm_file_editor.exe'
+                          Source='$(env.QUBES_BIN)\vm-file-editor.exe' />
+                    <File Id='open_in_vm.exe'
+                          Source='$(env.QUBES_BIN)\open-in-vm.exe' />
+                    <File Id='wait_for_logon.exe'
+                          Source='$(env.QUBES_BIN)\wait-for-logon.exe' />
+                    <File Id='set_gui_mode.exe'
+                          Source='$(env.QUBES_BIN)\set-gui-mode.exe' />
+                    <File Id='get_appmenus.ps1'
+                          Source='src\qrexec-services\get-appmenus.ps1' />
+                    <File Id='start_app.ps1'
+                          Source='src\qrexec-services\start-app.ps1' />
+                    <File Id='get_image_rgba.exe'
+                          Source='$(env.QUBES_BIN)\get-image-rgba.exe' />
+                    <File Id='window_icon_updater.exe'
+                          Source='$(env.QUBES_BIN)\window-icon-updater.exe' />
+                    <File Id='set_time.ps1'
+                          Source='src\qrexec-services\set-time.ps1' />
+                    <File Id='open_url.exe'
+                          Source='$(env.QUBES_BIN)\open-url.exe' />
+                </Component>
+            </Directory>
+        </DirectoryRef>
+        <DirectoryRef Id="TARGETDIR">
+            <Directory Id='SendToFolder' />
+        </DirectoryRef>
+        <CustomAction Id="RunServicePolicy"
+                      Return="ignore"
+                      Impersonate="no"
+                      Execute="deferred"
+                      FileKey="service_policy.exe"
+                      ExeCommand='"[BinDir]\service-policy.cfg"' />
+        <InstallExecuteSequence>
+            <Custom Action='RunServicePolicy'
+                    After='InstallFiles'>$ServicePolicy=3 AND NOT
+                    Installed AND NOT REMOVE</Custom>
+        </InstallExecuteSequence>
+    </Fragment>
 </Wix>
