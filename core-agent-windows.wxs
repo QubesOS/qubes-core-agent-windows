@@ -9,42 +9,9 @@
     <?define SYSDIR = SystemFolder ?>
 <?endif ?>
 
-<Module
-Id='CoreAgent'
-Language='1033'
-Codepage='1252'
-Version='$(env.VERSION)'
->
+<Fragment>
 
-<Package
-Id='{8925880F-EA34-4984-A4E1-F6CFF4AE7784}'
-Description='Qubes Agent for Windows'
-Manufacturer='Invisible Things Lab'
-InstallScope='perMachine'
-InstallerVersion='200'
-Languages='1033'
-SummaryCodepage='1252'
-InstallPrivileges='elevated'
-/>
-
-<Configuration
-Name='ProductFolder'
-Format='Key'
-Type='Identifier'
-DefaultValue='QubesProgramFilesDir'
-Description='Installation directory'
-DisplayName='Installation directory'
-/>
-
-<Substitution Table='Directory' Column='Directory_Parent' Row='BinDir' Value='[=ProductFolder]'/>
-<Substitution Table='Directory' Column='Directory_Parent' Row='QubesRPCDir' Value='[=ProductFolder]'/>
-<Substitution Table='Directory' Column='Directory_Parent' Row='QubesRPCServicesDir' Value='[=ProductFolder]'/>
-
-<Directory Id='TARGETDIR' Name='SourceDir'>
-    <Directory Id='$(var.PFILESDIR)'>
-        <Directory Id='ITLProgramFilesDir' Name='Invisible Things Lab'>
-            <Directory Id='QubesProgramFilesDir' Name='Qubes Tools'>
-                <Directory Id='BinDir' Name='bin'>
+                <DirectoryRef Id='BinDir'>
                     <Component Id='QrexecAgent' Guid='{0e26617f-e5d9-4943-a08e-cf29013e9d72}'>
                         <File Id='qrexec_agent.exe' Source='bin\$(env.DDK_ARCH)\qrexec-agent.exe' KeyPath='yes'/>
 
@@ -138,7 +105,8 @@ DisplayName='Installation directory'
                     <Component Id='AdvertiseTools' Guid='{DEDA44D9-6A58-4DE7-902A-643FB594B93C}'>
                         <File Id='advertise_tools.exe' Source='bin\$(env.DDK_ARCH)\advertise-tools.exe' KeyPath='yes'/>
                     </Component>
-                </Directory>
+                </DirectoryRef>
+	<DirectoryRef Id="INSTALLDIR">
                 <Directory Id='QubesRPCDir' Name='qubes-rpc'>
                     <Component Id='QrexecServicesConfig' Guid='{9efff253-25a8-40ed-861a-0d576f0ca439}'>
                         <File Id='qubes.Filecopy' Source='src\qrexec-services\qubes.Filecopy' KeyPath='yes'/>
@@ -173,11 +141,10 @@ DisplayName='Installation directory'
                         <File Id='open_url.exe' Source='bin\$(env.DDK_ARCH)\open-url.exe'/>
                     </Component>
                 </Directory>
-            </Directory>
-        </Directory>
-    </Directory>
+	</DirectoryRef>
+<DirectoryRef Id="TARGETDIR">
     <Directory Id='SendToFolder'/>
-</Directory>
+</DirectoryRef>
 
 <CustomAction
 Id="RunServicePolicy"
@@ -192,5 +159,5 @@ ExeCommand='"[BinDir]\service-policy.cfg"'
     <Custom Action='RunServicePolicy' After='InstallFiles'>$ServicePolicy=3 AND NOT Installed AND NOT REMOVE</Custom>
 </InstallExecuteSequence>
 
-</Module>
+</Fragment>
 </Wix>
