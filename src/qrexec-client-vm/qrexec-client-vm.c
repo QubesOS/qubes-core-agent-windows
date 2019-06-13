@@ -62,22 +62,22 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     argumentUtf8 = NULL;
     status = ConvertUTF16ToUTF8(serviceName, &argumentUtf8, NULL);
     if (ERROR_SUCCESS != status)
-        return perror2(status, "ConvertUTF16ToUTF8");
+        return win_perror2(status, "ConvertUTF16ToUTF8");
 
     hresult = StringCchCopyA(triggerParams.service_name, sizeof(triggerParams.service_name), argumentUtf8);
     if (FAILED(hresult))
-        return perror2(hresult, "StringCchCopyA");
+        return win_perror2(hresult, "StringCchCopyA");
 
     ConvertFree(argumentUtf8);
     argumentUtf8 = NULL;
 
     status = ConvertUTF16ToUTF8(domainName, &argumentUtf8, NULL);
     if (ERROR_SUCCESS != status)
-        return perror2(status, "ConvertUTF16ToUTF8");
+        return win_perror2(status, "ConvertUTF16ToUTF8");
 
     hresult = StringCchCopyA(triggerParams.target_domain, sizeof(triggerParams.target_domain), argumentUtf8);
     if (FAILED(hresult))
-        return perror2(hresult, "StringCchCopyA");
+        return win_perror2(hresult, "StringCchCopyA");
 
     ConvertFree(argumentUtf8);
     argumentUtf8 = NULL;
@@ -85,20 +85,20 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     LogDebug("Connecting to qrexec-agent");
 
     if (ERROR_SUCCESS != QpsConnect(pipeName, &readPipe, &writePipe))
-        return perror("open agent pipe");
+        return win_perror("open agent pipe");
 
     CloseHandle(readPipe);
     LogDebug("Sending the parameters to qrexec-agent");
 
     if (!QioWriteBuffer(writePipe, &triggerParams, sizeof(triggerParams)))
-        return perror("write trigger params to agent");
+        return win_perror("write trigger params to agent");
 
     size = (wcslen(commandLine) + 1) * sizeof(WCHAR);
     if (!QioWriteBuffer(writePipe, &size, sizeof(size)))
-        return perror("write command size to agent");
+        return win_perror("write command size to agent");
 
     if (!QioWriteBuffer(writePipe, commandLine, (DWORD)size))
-        return perror("write command to agent");
+        return win_perror("write command to agent");
 
     CloseHandle(writePipe);
 

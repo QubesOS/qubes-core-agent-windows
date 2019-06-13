@@ -42,7 +42,7 @@ BOOL GetCurrentUser(OUT char **userName)
 
     if (!WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessionInfo, &sessionCount))
     {
-        perror("WTSEnumerateSessionsA");
+        win_perror("WTSEnumerateSessionsA");
         return FALSE;
     }
 
@@ -58,7 +58,7 @@ BOOL GetCurrentUser(OUT char **userName)
                 userName,
                 &cbUserName))
             {
-                perror("WTSQuerySessionInformationA");
+                win_perror("WTSQuerySessionInformationA");
                 goto cleanup;
             }
             LogDebug("Found session: %S\n", *userName);
@@ -79,7 +79,7 @@ BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 {
     if (ERROR_SUCCESS != CfgReadString(NULL, L"InstallDir", fullPath, MAX_PATH, NULL))
     {
-        perror("CfgReadString(InstallDir)");
+        win_perror("CfgReadString(InstallDir)");
         return FALSE;
     }
 
@@ -87,12 +87,12 @@ BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 
     if (!PathAppend(fullPath, L"bin"))
     {
-        perror("PathAppend(bin)");
+        win_perror("PathAppend(bin)");
         return FALSE;
     }
     if (!PathAppend(fullPath, exeName))
     {
-        perror("PathAppend(exe)");
+        win_perror("PathAppend(exe)");
         return FALSE;
     }
 
@@ -141,7 +141,7 @@ BOOL NotifyDom0(void)
         &si,
         &pi))
     {
-        perror("CreateProcess(qrexec-client-vm.exe)");
+        win_perror("CreateProcess(qrexec-client-vm.exe)");
         return FALSE;
     }
 
@@ -178,7 +178,7 @@ int wmain(int argc, WCHAR *argv[])
     qdb = qdb_open(NULL);
     if (!qdb)
     {
-        perror("qdb_open");
+        win_perror("qdb_open");
         goto cleanup;
     }
 
@@ -204,37 +204,37 @@ int wmain(int argc, WCHAR *argv[])
     /* for now mostly hardcoded values, but this can change in the future */
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "version", "1"))
     {
-        perror("write 'version' entry");
+        win_perror("write 'version' entry");
         goto cleanup;
     }
 
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "os", "Windows"))
     {
-        perror("write 'os' entry");
+        win_perror("write 'os' entry");
         goto cleanup;
     }
 
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "qrexec", qrexecAgentPresent ? "1" : "0"))
     {
-        perror("write 'qrexec' entry");
+        win_perror("write 'qrexec' entry");
         goto cleanup;
     }
 
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "gui", guiAgentPresent ? "1" : "0"))
     {
-        perror("write 'gui' entry");
+        win_perror("write 'gui' entry");
         goto cleanup;
     }
 
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "gui-emulated", guiAgentPresent ? "0" : "1"))
     {
-        perror("write 'gui-emulated' entry");
+        win_perror("write 'gui-emulated' entry");
         goto cleanup;
     }
 
     if (!QdbWrite(qdb, QDB_PATH_PREFIX "default-user", userName))
     {
-        perror("write 'default-user' entry");
+        win_perror("write 'default-user' entry");
         goto cleanup;
     }
 

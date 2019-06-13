@@ -38,7 +38,7 @@ static void MessagePump(void)
     {
         if (retval == -1)
         {
-            perror("GetMessage");
+            win_perror("GetMessage");
             break;
         }
         else
@@ -70,7 +70,7 @@ static BOOL DoRegisterDeviceInterface(
 
     if (NULL == *deviceNotify)
     {
-        perror("RegisterDeviceNotification");
+        win_perror("RegisterDeviceNotification");
         return FALSE;
     }
 
@@ -97,7 +97,7 @@ static INT_PTR WINAPI DevNotifyWndProc(
             hWnd,
             &hDeviceNotify))
         {
-            perror("DoRegisterDeviceInterfaceToHwnd");
+            win_perror("DoRegisterDeviceInterfaceToHwnd");
             ExitThread(1);
         }
 
@@ -139,7 +139,7 @@ static INT_PTR WINAPI DevNotifyWndProc(
     case WM_CLOSE:
         if (!UnregisterDeviceNotification(hDeviceNotify))
         {
-            perror("UnregisterDeviceNotification");
+            win_perror("UnregisterDeviceNotification");
         }
         DestroyWindow(hWnd);
         break;
@@ -173,7 +173,7 @@ static BOOL InitWindowClass(void)
 
     if (!RegisterClassEx(&wndClass))
     {
-        perror("RegisterClassEx");
+        win_perror("RegisterClassEx");
         return FALSE;
     }
 
@@ -204,7 +204,7 @@ static DWORD WINAPI DevNotifyThread(void *param)
 
     if (hWnd == NULL)
     {
-        perror("CreateWindowEx: main appwindow hWnd");
+        win_perror("CreateWindowEx: main appwindow hWnd");
         return 2;
     }
 
@@ -234,7 +234,7 @@ WCHAR WaitForVolumeArrival(void)
     notifyThread = CreateThread(NULL, 0, DevNotifyThread, &diskLetter, 0, NULL);
     if (!notifyThread)
     {
-        perror("CreateThread");
+        win_perror("CreateThread");
         return 0;
     }
 
@@ -250,7 +250,7 @@ WCHAR WaitForVolumeArrival(void)
     // Check thread's exit code.
     if (!GetExitCodeThread(notifyThread, &exitCode))
     {
-        perror("GetExitCodeThread");
+        win_perror("GetExitCodeThread");
         return 0;
     }
 

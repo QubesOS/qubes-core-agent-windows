@@ -87,7 +87,7 @@ BOOL CALLBACK EnumWindowsProc(
     // Create bitmap for the icon.
     if (!GetIconInfo(ico, &ii))
     {
-        status = perror("GetIconInfo");
+        status = win_perror("GetIconInfo");
         goto cleanup;
     }
 

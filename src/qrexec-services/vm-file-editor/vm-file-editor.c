@@ -221,7 +221,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     g_stdIn = GetStdHandle(STD_INPUT_HANDLE);
     if (g_stdIn == INVALID_HANDLE_VALUE)
     {
-        exitCode = perror("GetStdHandle(STD_INPUT_HANDLE)");
+        exitCode = win_perror("GetStdHandle(STD_INPUT_HANDLE)");
         fprintf(stderr, "Failed to open STDIN: 0x%x\n", exitCode);
         goto cleanup;
     }
@@ -229,7 +229,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     g_stdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (g_stdOut == INVALID_HANDLE_VALUE)
     {
-        exitCode = perror("GetStdHandle(STD_OUTPUT_HANDLE)");
+        exitCode = win_perror("GetStdHandle(STD_OUTPUT_HANDLE)");
         fprintf(stderr, "Failed to open STDOUT: 0x%x\n", exitCode);
         goto cleanup;
     }
@@ -240,7 +240,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (!GetFileAttributesEx(filePath, GetFileExInfoStandard, &attributesPre))
     {
-        exitCode = perror("GetFileAttributesEx pre");
+        exitCode = win_perror("GetFileAttributesEx pre");
         fprintf(stderr, "Failed to get file attributes pre: 0x%x\n", exitCode);
         goto cleanup;
     }
@@ -259,7 +259,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (!ShellExecuteEx(&sei))
     {
-        exitCode = perror("ShellExecuteEx");
+        exitCode = win_perror("ShellExecuteEx");
         fprintf(stderr, "Editor startup failed: 0x%x\n", exitCode);
         goto cleanup;
     }
@@ -276,7 +276,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (!GetExitCodeProcess(sei.hProcess, &childExitCode))
     {
-        exitCode = perror("GetExitCodeProcess");
+        exitCode = win_perror("GetExitCodeProcess");
         fprintf(stderr, "Cannot get editor exit code: 0x%x\n", exitCode);
         goto cleanup;
     }
@@ -294,7 +294,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (!GetFileAttributesEx(filePath, GetFileExInfoStandard, &attributesPost))
     {
-        exitCode = perror("GetFileAttributesEx post");
+        exitCode = win_perror("GetFileAttributesEx post");
         fprintf(stderr, "Failed to get file attributes post: 0x%x\n", exitCode);
         goto cleanup;
     }

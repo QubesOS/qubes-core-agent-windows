@@ -87,7 +87,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, LPTSTR com
     // build qrexec-client-vm path, first get our own
     if (!GetModuleFileName(NULL, qrexecClientPath, RTL_NUMBER_OF(qrexecClientPath)))
     {
-        status = perror("GetModuleFileName");
+        status = win_perror("GetModuleFileName");
         ReportError(L"Failed to get " QREXEC_CLIENT_VM L" path");
         return status;
     }
@@ -130,7 +130,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, LPTSTR com
 
     if (!CreateProcess(qrexecClientPath, qrexecClientCmdLine, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
     {
-        status = perror("CreateProcess");
+        status = win_perror("CreateProcess");
         ReportError(L"Failed to execute qrexec-client-vm.exe");
         return status;
     }

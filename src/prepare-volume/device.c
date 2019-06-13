@@ -122,7 +122,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT ULONG *driveNumber)
 
     if (deviceInfoSet == INVALID_HANDLE_VALUE)
     {
-        perror("SetupDiGetClassDevs");
+        win_perror("SetupDiGetClassDevs");
         return FALSE;
     }
 
@@ -133,7 +133,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT ULONG *driveNumber)
     {
         if (!SetupDiGetDeviceInstanceId(deviceInfoSet, &deviceInfoData, deviceId, RTL_NUMBER_OF(deviceId), &returnedSize))
         {
-            perror("SetupDiGetDeviceInstanceId");
+            win_perror("SetupDiGetDeviceInstanceId");
             continue;
         }
 
@@ -144,7 +144,7 @@ BOOL GetPrivateImgDriveNumber(IN ULONG xenVbdId, OUT ULONG *driveNumber)
         if (!SetupDiGetDeviceProperty(deviceInfoSet, &deviceInfoData, &DEVPKEY_Device_LocationInfo, &devPropType,
             (BYTE *)locationString, sizeof(locationString), &returnedSize, 0))
         {
-            perror("SetupDiGetDeviceProperty(location)");
+            win_perror("SetupDiGetDeviceProperty(location)");
             continue;
         }
 

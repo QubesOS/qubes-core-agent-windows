@@ -45,7 +45,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *com
 #pragma warning(suppress:4311)
     if ((int)ShellExecuteA(NULL, "open", Url, NULL, NULL, SW_SHOWNORMAL) <= 32)
     {
-        perror("ShellExecute failed");
+        win_perror("ShellExecute failed");
         return GetLastError();
     }
 

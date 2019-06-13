@@ -42,14 +42,14 @@ BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
 
     if (!OpenClipboard(window))
     {
-        perror("OpenClipboard");
+        win_perror("OpenClipboard");
         return FALSE;
     }
 
     clipData = GetClipboardData(CLIPBOARD_FORMAT);
     if (!clipData)
     {
-        perror("GetClipboardData");
+        win_perror("GetClipboardData");
         CloseClipboard();
         return FALSE;
     }
@@ -57,14 +57,14 @@ BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
     clipText = GlobalLock(clipData);
     if (!clipText)
     {
-        perror("GlobalLock");
+        win_perror("GlobalLock");
         CloseClipboard();
         return FALSE;
     }
 
     if (FAILED(ConvertUTF16ToUTF8(clipText, &clipTextUtf8, &cbTextUtf8)))
     {
-        perror("ConvertUTF16ToUTF8");
+        win_perror("ConvertUTF16ToUTF8");
         GlobalUnlock(clipData);
         CloseClipboard();
         return FALSE;
@@ -72,7 +72,7 @@ BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
 
     if (!QioWriteBuffer(outputFile, clipTextUtf8, (DWORD)cbTextUtf8))
     {
-        perror("QioWriteBuffer");
+        win_perror("QioWriteBuffer");
         GlobalUnlock(clipData);
         CloseClipboard();
         return FALSE;
@@ -90,7 +90,7 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *com
     stdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (stdOut == INVALID_HANDLE_VALUE)
     {
-        perror("GetStdHandle");
+        win_perror("GetStdHandle");
         return 1;
     }
     if (!WriteClipboardText(NULL, stdOut))

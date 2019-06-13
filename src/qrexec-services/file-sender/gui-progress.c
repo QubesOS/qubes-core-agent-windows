@@ -99,7 +99,7 @@ static void CreateProgressWindow(void)
     g_progressWindowThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) TaskDialogThread, NULL, 0, NULL);
     if (!g_progressWindowThread)
     {
-        perror("CreateThread");
+        win_perror("CreateThread");
         return;
     }
 

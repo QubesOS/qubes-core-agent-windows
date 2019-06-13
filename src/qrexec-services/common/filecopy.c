@@ -43,7 +43,7 @@ FC_COPY_STATUS FcCopyFile(IN HANDLE output, IN HANDLE input, IN UINT64 size, OUT
 
         if (!ReadFile(input, buffer, cbToRead, &cbRead, NULL))
         {
-            perror("ReadFile");
+            win_perror("ReadFile");
             return COPY_FILE_READ_ERROR;
         }
 

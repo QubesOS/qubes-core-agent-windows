@@ -191,7 +191,7 @@ static DWORD Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf
         hresult = StringCbCopyW(bufferUtf16, cbStringUtf8 - cbSkipChars + sizeof(WCHAR), (STRSAFE_LPCWSTR)(stringUtf8 + cbSkipChars));
         if (FAILED(hresult))
         {
-            perror2(hresult, "StringCbCopyW");
+            win_perror2(hresult, "StringCbCopyW");
             free(bufferUtf16);
             return hresult;
         }
@@ -215,7 +215,7 @@ static DWORD Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf
     status = ConvertUTF8ToUTF16(stringUtf8 + cbSkipChars, stringUtf16, NULL);
     if (ERROR_SUCCESS != status)
     {
-        return perror2(status, "ConvertUTF8ToUTF16");
+        return win_perror2(status, "ConvertUTF8ToUTF16");
     }
 
     LogVerbose("success");
@@ -309,7 +309,7 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf
     status = ConvertUTF8ToUTF16(commandUtf8, commandUtf16, NULL);
     if (ERROR_SUCCESS != status)
     {
-        return perror2(status, "ConvertUTF8ToUTF16");
+        return win_perror2(status, "ConvertUTF8ToUTF16");
     }
 
     LogInfo("Command: %s", *commandUtf16);
@@ -396,7 +396,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             *sourceDomainName = _wcsdup(separator);
             if (*sourceDomainName == NULL)
             {
-                return perror2(ERROR_NOT_ENOUGH_MEMORY, "_wcsdup");
+                return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "_wcsdup");
             }
             LogDebug("source domain: '%s'", *sourceDomainName);
         }
@@ -415,7 +415,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         {
             status = GetLastError();
             free(*sourceDomainName);
-            return perror2(status, "GetModuleFileName");
+            return win_perror2(status, "GetModuleFileName");
         }
         // cut off file name (qrexec_agent.exe)
         separator = wcsrchr(serviceFilePath, L'\\');
@@ -490,7 +490,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
 
         if (serviceConfigFile == INVALID_HANDLE_VALUE)
         {
-            status = perror("CreateFile");
+            status = win_perror("CreateFile");
             free(*sourceDomainName);
             LogError("Failed to open service '%s' configuration file (%s)", serviceName, serviceFilePath);
             return status;
@@ -501,7 +501,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
 
         if (!ReadFile(serviceConfigFile, serviceConfigContents, sizeof(WCHAR) * MAX_PATH, &cbRead, NULL))
         {
-            status = perror("ReadFile");
+            status = win_perror("ReadFile");
             free(*sourceDomainName);
             LogError("Failed to read RPC %s configuration file (%s)", serviceName, serviceFilePath);
             CloseHandle(serviceConfigFile);
@@ -512,7 +512,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         status = Utf8WithBomToUtf16(serviceConfigContents, cbRead, &rawServiceFilePath);
         if (status != ERROR_SUCCESS)
         {
-            perror2(status, "TextBOMToUTF16");
+            win_perror2(status, "TextBOMToUTF16");
             free(*sourceDomainName);
             LogError("Failed to parse the encoding in RPC '%s' configuration file (%s)", serviceName, serviceFilePath);
             return status;
@@ -559,7 +559,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         if (*serviceCommandLine == NULL)
         {
             free(*sourceDomainName);
-            return perror2(ERROR_NOT_ENOUGH_MEMORY, "malloc");
+            return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "malloc");
         }
         LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);
     }
@@ -738,7 +738,7 @@ DWORD HandleServiceConnect(IN const struct msg_header *header)
     // TODO: should all service handlers run as current user (SYSTEM)?
     status = StartChild(params->connect_domain, params->connect_port, NULL, context->CommandLine, TRUE, TRUE, TRUE);
     if (ERROR_SUCCESS != status)
-        perror("StartChild");
+        win_perror("StartChild");
 
     EnterCriticalSection(&g_RequestCriticalSection);
     RemoveEntryList(&context->ListEntry);
@@ -947,7 +947,7 @@ static DWORD HandleDaemonMessage(void)
     LogVerbose("start");
 
     if (!VchanReceiveBuffer(g_DaemonVchan, &header, sizeof header, L"daemon header"))
-        return perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
+        return win_perror2(ERROR_INVALID_FUNCTION, "VchanReceiveBuffer");
 
     switch (header.type)
     {
@@ -991,14 +991,14 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
     // Don't do anything before qdb is available, otherwise advertise-tools may fail.
     if (!WaitForQdb())
-        return perror2(ERROR_INVALID_FUNCTION, "WaitForQdb");
+        return win_perror2(ERROR_INVALID_FUNCTION, "WaitForQdb");
 
     // We give a 5 minute timeout here because xeniface can take some time
     // to load the first time after reboot after pvdrivers installation.
     g_DaemonVchan = VchanInitServer(0, VCHAN_BASE_PORT, VCHAN_BUFFER_SIZE, 5 * 60 * 1000);
 
     if (!g_DaemonVchan)
-        return perror2(ERROR_INVALID_FUNCTION, "VchanInitServer");
+        return win_perror2(ERROR_INVALID_FUNCTION, "VchanInitServer");
 
     LogDebug("port %d: daemon vchan = %p", VCHAN_BASE_PORT, g_DaemonVchan);
     LogInfo("Waiting for qrexec daemon connection, write buffer size: %d", VchanGetWriteBufferSize(g_DaemonVchan));
@@ -1027,7 +1027,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
         if (signaledEvent != 1)
         {
-            status = perror("WaitForMultipleObjects");
+            status = win_perror("WaitForMultipleObjects");
             break;
         }
 
@@ -1055,7 +1055,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
             }
             else
             {
-                perror("Failed to create advertise-tools process");
+                win_perror("Failed to create advertise-tools process");
                 // this is non-fatal?
             }
             continue;
@@ -1075,7 +1075,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
             if (ERROR_SUCCESS != status)
             {
                 run = FALSE;
-                perror2(status, "HandleDaemonMessage");
+                win_perror2(status, "HandleDaemonMessage");
                 goto out;
             }
         }
@@ -1134,7 +1134,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
     status = QpsRead(g_PipeServer, clientId, &context->ServiceParams, sizeof(context->ServiceParams));
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "QpsRead(params)");
+        win_perror2(status, "QpsRead(params)");
         goto cleanup;
     }
 
@@ -1142,7 +1142,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
     status = QpsRead(g_PipeServer, clientId, &commandSize, sizeof(commandSize));
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "QpsRead(cmd size)");
+        win_perror2(status, "QpsRead(cmd size)");
         goto cleanup;
     }
 
@@ -1156,7 +1156,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
     status = QpsRead(g_PipeServer, clientId, context->CommandLine, (DWORD)commandSize);
     if (ERROR_SUCCESS != status)
     {
-        return perror2(status, "QpsRead(cmd)");
+        return win_perror2(status, "QpsRead(cmd)");
         goto cleanup;
     }
 
@@ -1204,7 +1204,7 @@ void ClientConnectedCallback(PIPE_SERVER server, LONGLONG id, PVOID context)
     clientThread = CreateThread(NULL, 0, PipeClientThread, (PVOID)id, 0, NULL);
     if (!clientThread)
     {
-        perror("create client thread");
+        win_perror("create client thread");
         return;
     }
     CloseHandle(clientThread);
@@ -1242,7 +1242,7 @@ DWORD WINAPI ServiceExecutionThread(void *param)
 
     status = CreatePublicPipeSecurityDescriptor(&sd, &acl);
     if (status != ERROR_SUCCESS)
-        return perror("create pipe security descriptor");
+        return win_perror("create pipe security descriptor");
 
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = FALSE;
@@ -1260,7 +1260,7 @@ DWORD WINAPI ServiceExecutionThread(void *param)
                        &g_PipeServer);
 
     if (ERROR_SUCCESS != status)
-        perror2(status, "create pipe server");
+        win_perror2(status, "create pipe server");
 
     LogVerbose("pipe server: %p", g_PipeServer);
 
@@ -1268,14 +1268,14 @@ DWORD WINAPI ServiceExecutionThread(void *param)
     if (!pipeServerThread)
     {
         status = GetLastError();
-        return perror2(status, "create pipe server thread");
+        return win_perror2(status, "create pipe server thread");
     }
 
     LogVerbose("pipe thread: %p, entering loop", pipeServerThread);
 
     status = WatchForEvents(ctx->StopEvent);
     if (ERROR_SUCCESS != status)
-        perror2(status, "WatchForEvents");
+        win_perror2(status, "WatchForEvents");
 
 // FIXME: pipe server doesn't have the ability for graceful stop
 

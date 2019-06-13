@@ -65,7 +65,7 @@ DWORD InitPipe(
     sa.lpSecurityDescriptor = securityDescriptor;
 
     if (!CreatePipe(&pipeData->ReadEndpoint, &pipeData->WriteEndpoint, &sa, PIPE_BUFFER_SIZE))
-        return perror("CreatePipe");
+        return win_perror("CreatePipe");
 
     return ERROR_SUCCESS;
 }
@@ -113,7 +113,7 @@ DWORD CreateChildPipes(
     // create pipes and make sure endpoints we use are not inherited
     status = InitPipe(&child->Stdout, PTYPE_STDOUT, child->PipeSd);
     if (ERROR_SUCCESS != status)
-        return perror2(status, "InitPipe(STDOUT)");
+        return win_perror2(status, "InitPipe(STDOUT)");
 
     SetHandleInformation(child->Stdout.ReadEndpoint, HANDLE_FLAG_INHERIT, 0);
 
@@ -121,7 +121,7 @@ DWORD CreateChildPipes(
     if (ERROR_SUCCESS != status)
     {
         ClosePipe(&child->Stdout);
-        return perror2(status, "InitPipe(STDERR)");
+        return win_perror2(status, "InitPipe(STDERR)");
     }
 
     SetHandleInformation(child->Stderr.ReadEndpoint, HANDLE_FLAG_INHERIT, 0);
@@ -131,7 +131,7 @@ DWORD CreateChildPipes(
     {
         ClosePipe(&child->Stdout);
         ClosePipe(&child->Stderr);
-        return perror2(status, "InitPipe(STDIN)");
+        return win_perror2(status, "InitPipe(STDIN)");
     }
 
     SetHandleInformation(child->Stdin.WriteEndpoint, HANDLE_FLAG_INHERIT, 0);
@@ -173,7 +173,7 @@ DWORD StartChild(
     {
         status = CreateChildPipes(child);
         if (ERROR_SUCCESS != status)
-            return perror2(status, "CreateChildPipes");
+            return win_perror2(status, "CreateChildPipes");
     }
 
     if (userName)
@@ -192,7 +192,7 @@ DWORD StartChild(
 
             if (ERROR_SUCCESS != status)
             {
-                perror2(status, "CreatePipedProcessAsUser");
+                win_perror2(status, "CreatePipedProcessAsUser");
                 status = CreatePipedProcessAsCurrentUser(
                     commandLine,
                     interactive,
@@ -213,7 +213,7 @@ DWORD StartChild(
 
             if (ERROR_SUCCESS != status)
             {
-                perror2(status, "CreateNormalProcessAsUser");
+                win_perror2(status, "CreateNormalProcessAsUser");
                 status = CreateNormalProcessAsCurrentUser(
                     commandLine,
                     &child->Process);
@@ -259,10 +259,10 @@ DWORD StartChild(
             CloseHandle(child->Stdin.WriteEndpoint);
             CloseHandle(child->Stdout.ReadEndpoint);
             CloseHandle(child->Stderr.ReadEndpoint);
-            return perror2(status, "CreatePipedProcessAsCurrentUser");
+            return win_perror2(status, "CreatePipedProcessAsCurrentUser");
         }
 
-        return perror2(status, "CreateNormalProcessAsCurrentUser");
+        return win_perror2(status, "CreateNormalProcessAsCurrentUser");
     }
 
     return ERROR_SUCCESS;
@@ -444,7 +444,7 @@ DWORD HandleRemoteData(
         LogVerbose("writing %d bytes of inbound data to child", header->len);
         if (!QioWriteBuffer(child->Stdin.WriteEndpoint, buffer, header->len))
         {
-            status = perror("writing stdin data");
+            status = win_perror("writing stdin data");
             goto cleanup;
         }
     }
@@ -608,7 +608,7 @@ DWORD WINAPI StdoutThread(
         LogVerbose("reading...");
         if (!ReadFile(child->Stdout.ReadEndpoint, buffer, MAX_DATA_CHUNK, &transferred, NULL)) // this can block
         {
-            perror("ReadFile(stdout)");
+            win_perror("ReadFile(stdout)");
             break;
         }
 
@@ -649,7 +649,7 @@ DWORD WINAPI StderrThread(
         LogVerbose("reading...");
         if (!ReadFile(child->Stderr.ReadEndpoint, buffer, MAX_DATA_CHUNK, &transferred, NULL)) // this can block
         {
-            perror("ReadFile(stderr)");
+            win_perror("ReadFile(stderr)");
             break;
         }
 
@@ -779,7 +779,7 @@ DWORD EventLoop(
 
             if (!GetExitCodeProcess(child->Process, &exitCode))
             {
-                perror("GetExitCodeProcess");
+                win_perror("GetExitCodeProcess");
                 exitCode = 0;
             }
 
@@ -895,7 +895,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     status = CreatePublicPipeSecurityDescriptor(&child->PipeSd, &child->PipeAcl);
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "create pipe security descriptor");
+        win_perror2(status, "create pipe security descriptor");
         goto cleanup;
     }
 
@@ -908,14 +908,14 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         child->StdoutThread = CreateThread(NULL, 0, StdoutThread, child, 0, NULL);
         if (!child->StdoutThread)
         {
-            status = perror("create stdout thread");
+            status = win_perror("create stdout thread");
             goto cleanup;
         }
 
         child->StderrThread = CreateThread(NULL, 0, StderrThread, child, 0, NULL);
         if (!child->StderrThread)
         {
-            status = perror("create stderr thread");
+            status = win_perror("create stderr thread");
             goto cleanup;
         }
 
