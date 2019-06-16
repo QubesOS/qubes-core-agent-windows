@@ -120,7 +120,7 @@ BOOL FormatVolume(IN DWORD diskNumber)
             g_fmifsDll = LoadLibrary(L"fmifs");
             if (!g_fmifsDll)
             {
-                perror("LoadLibrary(fmifs)");
+                win_perror("LoadLibrary(fmifs)");
                 return FALSE;
             }
         }
@@ -130,7 +130,7 @@ BOOL FormatVolume(IN DWORD diskNumber)
             g_FormatEx = (FormatEx_t) GetProcAddress(g_fmifsDll, "FormatEx");
             if (!g_FormatEx)
             {
-                perror("GetProcAddress(fmifs, FormatEx)");
+                win_perror("GetProcAddress(fmifs, FormatEx)");
                 return FALSE;
             }
         }

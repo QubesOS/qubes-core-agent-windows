@@ -23,8 +23,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <Strsafe.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
+#include <strsafe.h>
 
 #include <utf8-conv.h>
 #include <qubes-io.h>

@@ -20,7 +20,7 @@
  */
 
 #include <windows.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <strsafe.h>
 #include <stdlib.h>
 
@@ -57,21 +57,21 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
 
     if (ERROR_SUCCESS != ConvertUTF8ToUTF16(inputText, &text, &cchText))
     {
-        perror("ConvertUTF8ToUTF16");
+        win_perror("ConvertUTF8ToUTF16");
         goto fail;
     }
 
     clipData = GlobalAlloc(GMEM_MOVEABLE, (cchText + 1) * sizeof(WCHAR));
     if (!clipData)
     {
-        perror("GlobalAlloc");
+        win_perror("GlobalAlloc");
         goto fail;
     }
 
     textLocked = GlobalLock(clipData);
     if (!textLocked)
     {
-        perror("GlobalLock");
+        win_perror("GlobalLock");
         GlobalFree(clipData);
         goto fail;
     }
@@ -83,14 +83,14 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
 
     if (!OpenClipboard(window))
     {
-        perror("OpenClipboard");
+        win_perror("OpenClipboard");
         GlobalFree(clipData);
         goto fail;
     }
 
     if (!EmptyClipboard())
     {
-        perror("EmptyClipboard");
+        win_perror("EmptyClipboard");
         GlobalFree(clipData);
         CloseClipboard();
         goto fail;
@@ -98,7 +98,7 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
 
     if (!SetClipboardData(CLIPBOARD_FORMAT, clipData))
     {
-        perror("SetClipboardData");
+        win_perror("SetClipboardData");
         GlobalFree(clipData);
         CloseClipboard();
         goto fail;
@@ -133,7 +133,7 @@ HWND CreateMainWindow(IN HINSTANCE instance)
     windowClassAtom = RegisterClassEx(&wc);
     if (!windowClassAtom)
     {
-        perror("RegisterClassEx");
+        win_perror("RegisterClassEx");
         return NULL;
     }
 
@@ -157,13 +157,13 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *com
     stdIn = GetStdHandle(STD_INPUT_HANDLE);
     if (stdIn == INVALID_HANDLE_VALUE)
     {
-        return perror("GetStdHandle");
+        return win_perror("GetStdHandle");
     }
 
     window = CreateMainWindow(instance);
     if (!window)
     {
-        return perror("createMainWindow");
+        return win_perror("createMainWindow");
     }
 
     if (!ReadClipboardText(window, stdIn))

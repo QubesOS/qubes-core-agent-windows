@@ -72,14 +72,14 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
 
     if (status != ERROR_BUFFER_OVERFLOW)
     {
-        perror2(status, "GetAdaptersInfo");
+        win_perror2(status, "GetAdaptersInfo");
         goto cleanup;
     }
     adapterInfo = (IP_ADAPTER_INFO *) malloc(cbAdaptersInfo);
 
     if ((status = GetAdaptersInfo(adapterInfo, &cbAdaptersInfo)) != ERROR_SUCCESS)
     {
-        perror2(status, "GetAdaptersInfo 2");
+        win_perror2(status, "GetAdaptersInfo 2");
         goto cleanup;
     }
 
@@ -107,7 +107,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
                     status = DeleteIPAddress(addrCurrent->Context);
                     if (status != ERROR_SUCCESS)
                     {
-                        perror2(status, "DeleteIPAddress");
+                        win_perror2(status, "DeleteIPAddress");
                         goto cleanup;
                     }
                     addrCurrent = addrCurrent->Next;
@@ -117,7 +117,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
                 status = AddIPAddress(ip, netmask, adapterInfoCurrent->Index, &nteContext, &nteInstance);
                 if (status != ERROR_SUCCESS)
                 {
-                    perror2(status, "AddIPAddress");
+                    win_perror2(status, "AddIPAddress");
                     goto cleanup;
                 }
 
@@ -147,7 +147,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
 
     if (status != ERROR_SUCCESS)
     {
-        perror2(status, "GetIpForwardTable");
+        win_perror2(status, "GetIpForwardTable");
         goto cleanup;
     }
 
@@ -164,7 +164,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
 
             if (status != ERROR_SUCCESS)
             {
-                perror2(status, "DeleteIpForwardEntry");
+                win_perror2(status, "DeleteIpForwardEntry");
                 goto cleanup;
             }
         }
@@ -176,7 +176,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
     status = GetIpInterfaceEntry(&ipInterfaceRow);
     if (status != NO_ERROR)
     {
-        perror2(status, "GetIpInterfaceEntry");
+        win_perror2(status, "GetIpInterfaceEntry");
         goto cleanup;
     }
 
@@ -190,7 +190,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
     status = CreateIpForwardEntry(&ipForwardRow);
 
     if (status != NO_ERROR)
-        perror2(status, "CreateIpForwardEntry");
+        win_perror2(status, "CreateIpForwardEntry");
 
     status = ERROR_SUCCESS;
 
@@ -248,7 +248,7 @@ DWORD WINAPI SetupNetwork(PVOID param)
     qdb = qdb_open(NULL);
     if (!qdb)
     {
-        perror("qdb_open");
+        win_perror("qdb_open");
         goto cleanup;
     }
 

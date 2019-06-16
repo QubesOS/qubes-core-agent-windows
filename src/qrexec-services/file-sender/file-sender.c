@@ -24,9 +24,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <Strsafe.h>
-#include <Shlwapi.h>
-#include <Shellapi.h>
+#include <shlwapi.h>
+#include <shellapi.h>
+#include <strsafe.h>
 
 #include <log.h>
 #include <utf8-conv.h>
