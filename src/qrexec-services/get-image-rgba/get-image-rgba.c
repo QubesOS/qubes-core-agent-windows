@@ -22,6 +22,7 @@
 #include <windows.h>
 #include <Shlwapi.h>
 #include <shellapi.h>
+#include <CommCtrl.h>
 
 #include <stdio.h>
 #include <io.h>
@@ -124,7 +125,7 @@ int wmain(int argc, WCHAR *argv[])
     BYTE *buffer;
     BITMAPINFO bmi;
     int x, y;
-    DWORD_PTR ret;
+    HIMAGELIST imgList;
     DWORD status;
 #ifdef WRITE_PPM
     FILE *f1;
@@ -148,33 +149,24 @@ int wmain(int argc, WCHAR *argv[])
     LogDebug("LinkPath: %s", linkPath);
 
     CoInitialize(NULL);
-    // We use SHGFI_ICONLOCATION and load the icon manually later, because icons retrieved by
+    // We use SHGFI_SYSICONINDEX and load the icon manually later, because icons retrieved by
     // SHGFI_ICON always have the shortcut arrow overlay even if the overlay is not visible
     // normally (eg. for start menu shortcuts).
-    ret = SHGetFileInfo(linkPath, 0, &shfi, sizeof(shfi), SHGFI_ICONLOCATION);
-    LogDebug("SHGetFileInfo(%s) returned 0x%x, shfi.szDisplayName='%s', shfi.iIcon=%d", linkPath, ret, shfi.szDisplayName, shfi.iIcon);
-    if (!ret)
+    // https://devblogs.microsoft.com/oldnewthing/?p=11653
+    imgList = (HIMAGELIST)SHGetFileInfo(linkPath, 0, &shfi, sizeof(shfi), SHGFI_SYSICONINDEX);
+    LogDebug("SHGetFileInfo(%s) returned 0x%x, shfi.iIcon=%d", linkPath, imgList, shfi.iIcon);
+    if (!imgList)
     {
-        status = perror("SHGetFileInfo(SHGFI_ICONLOCATION)");
+        status = perror("SHGetFileInfo(SHGFI_SYSICONINDEX)");
         goto cleanup;
     }
 
-    if (shfi.szDisplayName[0] == 0)
+    // Retrieve the icon directly from the system image list
+    ico = ImageList_GetIcon(imgList, shfi.iIcon, ILD_TRANSPARENT);
+    if (!ico)
     {
-        // This can happen for some reason: SHGetFileInfo returns nonzero (success according to MSDN),
-        // but the icon info is missing, even if the file clearly has an icon. We fall back to
-        // SHGFI_ICON which will retrieve an icon with the shortcut arrow overlay.
-        ret = SHGetFileInfo(linkPath, 0, &shfi, sizeof(shfi), SHGFI_ICON);
-        if (!ret)
-        {
-            status = perror("SHGetFileInfo(SHGFI_ICON)");
-            goto cleanup;
-        }
-        ico = shfi.hIcon;
-    }
-    else
-    {
-        ico = ExtractIcon(0, shfi.szDisplayName, shfi.iIcon);
+        status = perror("ImageList_GetIcon(ILD_TRANSPARENT)");
+        goto cleanup;
     }
 
     // Create bitmap for the icon.
