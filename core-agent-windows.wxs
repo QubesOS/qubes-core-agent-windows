@@ -133,6 +133,7 @@ DisplayName='Installation directory'
                     </Component>
                     <Component Id='ServicePolicy' Guid='{F9818E4E-76C4-40DE-A8F3-945336C954B1}'>
                         <File Id='service_policy.exe' Source='bin\AnyCPU\service-policy.exe' KeyPath='yes' />
+                        <File Id='service_policy.exe.config' Source='bin\AnyCPU\service-policy.exe.config'/>
                         <File Id='service_policy.cfg' Source='src\service-policy\service-policy.cfg' />
                     </Component>
                     <Component Id='AdvertiseTools' Guid='{DEDA44D9-6A58-4DE7-902A-643FB594B93C}'>
