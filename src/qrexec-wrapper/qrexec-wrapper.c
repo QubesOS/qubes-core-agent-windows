@@ -38,7 +38,8 @@
 #include <utf8-conv.h>
 #include <qubes-io.h>
 
-CRITICAL_SECTION g_VchanCs;
+static CRITICAL_SECTION g_VchanCs;
+static BOOL g_exitCodeReceived = FALSE;
 
 /**
  * @brief Create an anonymous pipe that will be used as one of the std handles for a child process.
@@ -479,6 +480,7 @@ DWORD HandleExitCode(
 
     LogDebug("remote exit code: %d", code);
 
+    g_exitCodeReceived = TRUE;
     return ERROR_SUCCESS;
 }
 
@@ -826,7 +828,7 @@ void Usage(
     wprintf(L"         0x01 act as vchan server (default is client)\n");
     wprintf(L"         0x02 pipe child process' io to vchan (default is not)\n");
     wprintf(L"         0x04 run the child process in the interactive session (requires that a user is logged on)\n");
-    wprintf(L"command_line: local program to execute and connect to data vchan\n");
+    wprintf(L"command_line: local program to execute and connect to data vchan or (null) if local program is not needed\n");
 }
 
 /**
@@ -850,6 +852,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     BOOL piped, interactive;
     PWSTR domainName, portStr, flagsStr, userName, commandLine;
     DWORD status = ERROR_NOT_ENOUGH_MEMORY;
+    BOOL startLocalProcess = TRUE;
 
     LogVerbose("start");
 
@@ -891,6 +894,53 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (wcscmp(userName, L"(null)") == 0)
         userName = NULL;
+    if (wcsncmp(commandLine, L"(null)", 6) == 0)
+        startLocalProcess = FALSE;
+
+    if (!startLocalProcess)
+    {
+        status = ERROR_SUCCESS;
+        BOOL run = TRUE;
+        while (run)
+        {
+            DWORD signaled = WaitForSingleObject(libvchan_fd_for_select(child->Vchan), INFINITE);
+            if (signaled != WAIT_OBJECT_0)
+            {
+                status = (DWORD)-1;
+                goto cleanup;
+            }
+            // vchan data ready or disconnected
+            if (!libvchan_is_open(child->Vchan))
+            {
+                LogDebug("vchan closed");
+                status = (DWORD)-1;
+                break;
+            }
+
+            while (VchanGetReadBufferSize(child->Vchan) > 0)
+            {
+                status = HandleDataMessage(child);
+                if (status != ERROR_SUCCESS)
+                {
+                    status = (DWORD)-2;
+                    run = FALSE;
+                    break;
+                }
+            }
+            if (g_exitCodeReceived)
+                break;
+        }
+        if (child)
+        {
+            if (child->Vchan)
+            {
+                libvchan_close(child->Vchan);
+            }
+            free(child);
+            child = NULL;
+        }
+        goto cleanup;
+    }
 
     status = CreatePublicPipeSecurityDescriptor(&child->PipeSd, &child->PipeAcl);
     if (ERROR_SUCCESS != status)
@@ -924,6 +974,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
 cleanup:
     LogVerbose("exiting");
+    DeleteCriticalSection(&g_VchanCs);
 
     if (child)
     {
@@ -937,6 +988,7 @@ cleanup:
             }
             libvchan_close(child->Vchan);
         }
+        free(child);
     }
 
     return status;
