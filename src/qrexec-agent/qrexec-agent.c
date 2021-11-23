@@ -973,6 +973,8 @@ static DWORD HandleDaemonMessage(void)
     }
 }
 
+static DWORD WINAPI ServiceCleanup(void);
+
 /**
  * @brief Vchan event loop.
  * @param stopEvent When this event is signaled, the function should exit.
@@ -1087,8 +1089,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
     LogVerbose("loop finished");
 
-    if (daemonConnected)
-        libvchan_close(g_DaemonVchan);
+    ServiceCleanup();
 
     return status;
 }
@@ -1278,6 +1279,7 @@ DWORD WINAPI ServiceExecutionThread(void *param)
     if (ERROR_SUCCESS != status)
         win_perror2(status, "WatchForEvents");
 
+    ServiceCleanup();
 // FIXME: pipe server doesn't have the ability for graceful stop
 
     LogDebug("Waiting for the pipe server thread to exit");
@@ -1290,6 +1292,16 @@ DWORD WINAPI ServiceExecutionThread(void *param)
 
     LogInfo("Shutting down");
 
+    return ERROR_SUCCESS;
+}
+
+static DWORD WINAPI ServiceCleanup(void)
+{
+    if (g_DaemonVchan)
+    {
+        libvchan_close(g_DaemonVchan);
+        g_DaemonVchan = NULL;
+    }
     return ERROR_SUCCESS;
 }
 
