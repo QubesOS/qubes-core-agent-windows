@@ -91,7 +91,7 @@ BOOL WaitForQdb(void)
 
     if (qdb == NULL)
     {
-        LogError("timed out");
+        LogError("timed out: connect to qdb server");
         return FALSE;
     }
 
@@ -491,7 +491,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
 
         if (serviceConfigFile == INVALID_HANDLE_VALUE)
         {
-            status = win_perror("CreateFile");
+            status = GetLastError(); // win_perror("CreateFile");
             free(*sourceDomainName);
             LogError("Failed to open service '%s' configuration file (%s)", serviceName, serviceFilePath);
             return status;
@@ -502,7 +502,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
 
         if (!ReadFile(serviceConfigFile, serviceConfigContents, sizeof(WCHAR) * MAX_PATH, &cbRead, NULL))
         {
-            status = win_perror("ReadFile");
+            status = GetLastError(); // win_perror("ReadFile");
             free(*sourceDomainName);
             LogError("Failed to read RPC %s configuration file (%s)", serviceName, serviceFilePath);
             CloseHandle(serviceConfigFile);
@@ -833,7 +833,7 @@ struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OU
     status = InterceptRPCRequest(*commandLine, &serviceCommandLine, &remoteDomainName);
     if (ERROR_SUCCESS != status)
     {
-        LogError("InterceptRPCRequest failed");
+        LogWarning("InterceptRPCRequest failed");
         free(command);
         *commandLine = NULL;
         return exec;
@@ -994,7 +994,10 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
     // Don't do anything before qdb is available, otherwise advertise-tools may fail.
     if (!WaitForQdb())
-        return win_perror2(ERROR_INVALID_FUNCTION, "WaitForQdb");
+    {
+        LogDebug("WaitForQdb failed");
+        return GetLastError();
+    }
 
     // We give a 5 minute timeout here because xeniface can take some time
     // to load the first time after reboot after pvdrivers installation.
@@ -1277,7 +1280,7 @@ DWORD WINAPI ServiceExecutionThread(void *param)
 
     status = WatchForEvents(ctx->StopEvent);
     if (ERROR_SUCCESS != status)
-        win_perror2(status, "WatchForEvents");
+        LogDebug("WatchForEvents failed");
 
     ServiceCleanup();
 // FIXME: pipe server doesn't have the ability for graceful stop

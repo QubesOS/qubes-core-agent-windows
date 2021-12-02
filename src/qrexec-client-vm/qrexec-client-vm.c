@@ -85,7 +85,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     LogDebug("Connecting to qrexec-agent");
 
     if (ERROR_SUCCESS != QpsConnect(pipeName, &readPipe, &writePipe))
-        return win_perror("open agent pipe");
+        return (int)GetLastError(); // win_perror("open agent pipe");
 
     CloseHandle(readPipe);
     LogDebug("Sending the parameters to qrexec-agent");
