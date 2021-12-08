@@ -460,21 +460,22 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         {
             // maybe there is an argument appended? look for a file with
             // +argument stripped
-            separator = wcschr(serviceName, L'+');
-            if (separator)
+            WCHAR *newsep = NULL;
+            newsep = wcschr(serviceName, L'+');
+            if (newsep)
             {
-                *separator = L'\0';
-                serviceCallArg = separator+1;
+                *newsep = L'\0';
+                serviceCallArg = newsep+1;
                 // strip service+arg
-                separator = wcsrchr(serviceFilePath, L'\\');
-                if (!separator)
+                newsep = wcsrchr(serviceFilePath, L'\\');
+                if (!newsep)
                 {
                     // should never happen!
                     LogError("Fail to contstruct a path for service+arg call");
                     return ERROR_PATH_NOT_FOUND;
                 }
-                separator++;
-                *separator = L'\0';
+                newsep++;
+                *newsep = L'\0';
                 PathAppendW(serviceFilePath, serviceName);
 
                 serviceConfigFile = CreateFile(
