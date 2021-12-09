@@ -926,9 +926,9 @@ static DWORD HandleDaemonHello(struct msg_header *header)
 
     if (info.version != QREXEC_PROTOCOL_VERSION)
     {
-        LogError("incompatible protocol version (%d instead of %d)",
+        LogWarning("incompatible protocol version (%d instead of %d)",
                  info.version, QREXEC_PROTOCOL_VERSION);
-        return ERROR_INVALID_FUNCTION;
+        //return ERROR_INVALID_FUNCTION;
     }
 
     LogDebug("received protocol version %d", info.version);
