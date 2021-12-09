@@ -22,13 +22,16 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Strsafe.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <shlobj.h>
-#include <Shellapi.h>
+#include <shellapi.h>
+#include <strsafe.h>
 
 #include <log.h>
 
+#ifdef __MINGW32__
+#include "customddkinc.h"
+#endif
 #include "wdk.h"
 
 HANDLE g_stdin = INVALID_HANDLE_VALUE;
@@ -70,19 +73,19 @@ ULONG MapDriveLetter(IN const WCHAR *targetDirectory, OUT WCHAR *driveLetter)
 
     if (FAILED(hresult))
     {
-        return perror2(hresult, "StringCchPrintf");
+        return win_perror2(hresult, "StringCchPrintf");
     }
 
     hresult = StringCchCopyN(targetDirectoryDriveLetter, RTL_NUMBER_OF(targetDirectoryDriveLetter), targetDirectory, 2);
     if (FAILED(hresult))
     {
-        return perror2(hresult, "StringCchCopyN");
+        return win_perror2(hresult, "StringCchCopyN");
     }
 
     ZeroMemory(&devicePath, sizeof(devicePath));
     if (!QueryDosDevice(targetDirectoryDriveLetter, devicePath, RTL_NUMBER_OF(devicePath)))
     {
-        return perror("QueryDosDevice");
+        return win_perror("QueryDosDevice");
     }
 
     // Translate the directory path to a form of \Device\HarddiskVolumeN\path
@@ -95,7 +98,7 @@ ULONG MapDriveLetter(IN const WCHAR *targetDirectory, OUT WCHAR *driveLetter)
 
     if (FAILED(hresult))
     {
-        return perror2(hresult, "StringCchPrintf");
+        return win_perror2(hresult, "StringCchPrintf");
     }
 
     logicalDrives = GetLogicalDrives();
@@ -160,30 +163,30 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     g_stderr = GetStdHandle(STD_ERROR_HANDLE);
     if (g_stderr == NULL || g_stderr == INVALID_HANDLE_VALUE)
     {
-        return perror("GetStdHandle(STD_ERROR_HANDLE)");
+        return win_perror("GetStdHandle(STD_ERROR_HANDLE)");
     }
 
     g_stdin = GetStdHandle(STD_INPUT_HANDLE);
     if (g_stdin == NULL || g_stdin == INVALID_HANDLE_VALUE)
     {
-        return perror("GetStdHandle(STD_INPUT_HANDLE)");
+        return win_perror("GetStdHandle(STD_INPUT_HANDLE)");
     }
 
     g_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
     if (g_stdout == NULL || g_stdout == INVALID_HANDLE_VALUE)
     {
-        return perror("GetStdHandle(STD_OUTPUT_HANDLE)");
+        return win_perror("GetStdHandle(STD_OUTPUT_HANDLE)");
     }
 
     if (!GetEnvironmentVariable(L"QREXEC_REMOTE_DOMAIN", remoteDomainName, RTL_NUMBER_OF(remoteDomainName)))
     {
-        return perror("GetEnvironmentVariable(QREXEC_REMOTE_DOMAIN)");
+        return win_perror("GetEnvironmentVariable(QREXEC_REMOTE_DOMAIN)");
     }
 
     hresult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &documentsPath);
     if (FAILED(hresult))
     {
-        return perror2(hresult, "SHGetKnownFolderPath");
+        return win_perror2(hresult, "SHGetKnownFolderPath");
     }
 
     hresult = StringCchPrintf(
@@ -198,19 +201,19 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     if (FAILED(hresult))
     {
-        return perror2(hresult, "StringCchPrintf");
+        return win_perror2(hresult, "StringCchPrintf");
     }
 
     errorCode = SHCreateDirectoryEx(NULL, incomingDir, NULL);
     if (ERROR_SUCCESS != errorCode && ERROR_ALREADY_EXISTS != errorCode)
     {
-        return perror2(hresult, "SHCreateDirectoryEx");
+        return win_perror2(hresult, "SHCreateDirectoryEx");
     }
 
     errorCode = MapDriveLetter(incomingDir, &g_mappedDriveLetter);
     if (ERROR_SUCCESS != errorCode)
     {
-        return perror2(errorCode, "MapDriveLetter");
+        return win_perror2(errorCode, "MapDriveLetter");
     }
 
     return ReceiveFiles();

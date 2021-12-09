@@ -22,7 +22,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Strsafe.h>
+#include <strsafe.h>
 
 #include <log.h>
 

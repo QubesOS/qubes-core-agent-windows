@@ -20,9 +20,9 @@
  */
 
 #include <windows.h>
-#include <Shlwapi.h>
+#include <shlwapi.h>
 #include <shellapi.h>
-#include <CommCtrl.h>
+#include <commctrl.h>
 
 #include <stdio.h>
 #include <io.h>
@@ -51,7 +51,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     size = QioReadUntilEof(GetStdHandle(STD_INPUT_HANDLE), param, sizeof(param) - 1);
     if (size == 0)
     {
-        status = perror("QioReadUntilEof(stdin)");
+        status = win_perror("QioReadUntilEof(stdin)");
         goto cleanup;
     }
 
@@ -76,7 +76,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     // convert ascii to wchar
     if (ERROR_SUCCESS != ConvertUTF8ToUTF16(param, &valueName, NULL))
     {
-        status = perror("ConvertUTF8ToUTF16");
+        status = win_perror("ConvertUTF8ToUTF16");
         goto cleanup;
     }
 
@@ -85,7 +85,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     SetLastError(status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, APP_MAP_KEY, 0, KEY_READ, &key));
     if (status != ERROR_SUCCESS)
     {
-        status = perror("RegOpenKeyEx(AppMap key)");
+        status = win_perror("RegOpenKeyEx(AppMap key)");
         goto cleanup;
     }
 
@@ -93,14 +93,14 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     SetLastError(status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (BYTE *) linkPath, &size));
     if (status != ERROR_SUCCESS)
     {
-        status = perror("RegQueryValueEx");
+        status = win_perror("RegQueryValueEx");
         goto cleanup;
     }
 
     if (valueType != REG_SZ)
     {
         SetLastError(status = ERROR_DATATYPE_MISMATCH);
-        perror("RegQueryValueEx");
+        win_perror("RegQueryValueEx");
         goto cleanup;
     }
 
@@ -142,7 +142,7 @@ int wmain(int argc, WCHAR *argv[])
     // Read input and convert it to the shortcut path.
     if (ERROR_SUCCESS != GetShortcutPath(linkPath, MAX_PATH_LONG))
     {
-        status = perror("GetShortcutPath");
+        status = win_perror("GetShortcutPath");
         goto cleanup;
     }
 
@@ -157,7 +157,7 @@ int wmain(int argc, WCHAR *argv[])
     LogDebug("SHGetFileInfo(%s) returned 0x%x, shfi.iIcon=%d", linkPath, imgList, shfi.iIcon);
     if (!imgList)
     {
-        status = perror("SHGetFileInfo(SHGFI_SYSICONINDEX)");
+        status = win_perror("SHGetFileInfo(SHGFI_SYSICONINDEX)");
         goto cleanup;
     }
 
@@ -165,14 +165,14 @@ int wmain(int argc, WCHAR *argv[])
     ico = ImageList_GetIcon(imgList, shfi.iIcon, ILD_TRANSPARENT);
     if (!ico)
     {
-        status = perror("ImageList_GetIcon(ILD_TRANSPARENT)");
+        status = win_perror("ImageList_GetIcon(ILD_TRANSPARENT)");
         goto cleanup;
     }
 
     // Create bitmap for the icon.
     if (!GetIconInfo(ico, &ii))
     {
-        status = perror("GetIconInfo");
+        status = win_perror("GetIconInfo");
         goto cleanup;
     }
 

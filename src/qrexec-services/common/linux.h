@@ -24,6 +24,7 @@
 #define UNIX_EPOCH_OFFSET 11644478640LL
 
 #pragma warning(suppress:4005) // macro redefinition: ENAMETOOLONG is defined as 38 in crt's errno.h even though MSDN claims it should be Unix compatible
+#undef ENAMETOOLONG
 #define ENAMETOOLONG    36      /* File name too long */
 #define EDQUOT          122     /* Quota exceeded */
 

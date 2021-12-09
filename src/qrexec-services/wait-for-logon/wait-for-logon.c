@@ -19,11 +19,11 @@
  *
  */
 
-#include <Windows.h>
+#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <Wtsapi32.h>
-#include <Shlwapi.h>
+#include <wtsapi32.h>
+#include <shlwapi.h>
 
 #include <qubes-io.h>
 #include <utf8-conv.h>
@@ -39,7 +39,7 @@ BOOL CheckSession(DWORD	sessionId)
 
     if (!WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE, sessionId, WTSUserName, &userName, &cbUserName))
     {
-        perror("WTSQuerySessionInformation");
+        win_perror("WTSQuerySessionInformation");
         return FALSE;
     }
 
@@ -62,7 +62,7 @@ BOOL CheckIfUserLoggedIn(void)
 
     if (!WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessionInfo, &sessionCount))
     {
-        perror("WTSEnumerateSessions");
+        win_perror("WTSEnumerateSessions");
         return FALSE;
     }
 
@@ -126,7 +126,7 @@ HWND CreateMainWindow(HINSTANCE instance)
     windowClassAtom = RegisterClassEx(&wc);
     if (!windowClassAtom)
     {
-        perror("RegisterClassEx");
+        win_perror("RegisterClassEx");
         return NULL;
     }
 
@@ -161,7 +161,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
         hStdIn = GetStdHandle(STD_INPUT_HANDLE);
         if (hStdIn == INVALID_HANDLE_VALUE)
         {
-            perror("GetStdHandle");
+            win_perror("GetStdHandle");
             return 1;
         }
 
@@ -183,7 +183,7 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
 
         if (ERROR_SUCCESS != ConvertUTF8ToUTF16(pszExpectedUserUtf8, &g_expectedUser, &cchExpectedUser))
         {
-            perror("Converting user name to UTF16");
+            win_perror("Converting user name to UTF16");
             return 1;
         }
     }
@@ -193,13 +193,13 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
 
     if (hMainWindow == INVALID_HANDLE_VALUE)
     {
-        perror("Creating main window");
+        win_perror("Creating main window");
         return 1;
     }
 
     if (!WTSRegisterSessionNotification(hMainWindow, NOTIFY_FOR_ALL_SESSIONS))
     {
-        perror("WTSRegisterSessionNotification");
+        win_perror("WTSRegisterSessionNotification");
         DestroyWindow(hMainWindow);
         return 1;
     }

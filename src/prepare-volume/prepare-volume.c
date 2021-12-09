@@ -23,11 +23,12 @@
 
 #include "prepare-volume.h"
 #include <shellapi.h>
-#include <Shlwapi.h>
-#include <ShlObj.h>
-#include <Knownfolders.h>
+#include <shlobj.h>
+#include <shlwapi.h>
+#include <knownfolders.h>
 #include <aclapi.h>
 #include <stdlib.h>
+#include <strsafe.h>
 
 #include "device.h"
 #include "disk.h"
@@ -44,7 +45,7 @@ DWORD EnablePrivilege(HANDLE token, const WCHAR *privilegeName)
     LUID luid;
 
     if (!LookupPrivilegeValue(NULL, privilegeName, &luid))
-        return perror("LookupPrivilegeValue");
+        return win_perror("LookupPrivilegeValue");
 
     tp.PrivilegeCount = 1;
     tp.Privileges[0].Luid = luid;
@@ -57,7 +58,7 @@ DWORD EnablePrivilege(HANDLE token, const WCHAR *privilegeName)
         sizeof(TOKEN_PRIVILEGES),
         (PTOKEN_PRIVILEGES) NULL,
         (PDWORD) NULL))
-        return perror("AdjustTokenPrivileges");
+        return win_perror("AdjustTokenPrivileges");
 
     if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
     {
@@ -132,7 +133,7 @@ int wmain(int argc, WCHAR *argv[])
     // Check if profiles directory is already a junction point to the private volume.
     if (S_OK != SHGetKnownFolderPath(&FOLDERID_UserProfiles, 0, NULL, &usersPath))
     {
-        perror("SHGetKnownFolderPath(FOLDERID_UserProfiles)");
+        win_perror("SHGetKnownFolderPath(FOLDERID_UserProfiles)");
         return 1;
     }
 
@@ -153,7 +154,7 @@ int wmain(int argc, WCHAR *argv[])
     status = CfgReadString(NULL, LOG_CONFIG_PATH_VALUE, logPath, MAX_PATH_LONG, NULL);
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "Reading log path from registry");
+        win_perror2(status, "Reading log path from registry");
         return 1;
     }
 
@@ -164,7 +165,7 @@ int wmain(int argc, WCHAR *argv[])
     status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager", 0, KEY_READ | KEY_WRITE, &key);
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "Opening Session Manager registry key");
+        win_perror2(status, "Opening Session Manager registry key");
         return 1;
     }
 
@@ -172,7 +173,7 @@ int wmain(int argc, WCHAR *argv[])
     status = RegQueryValueEx(key, L"BootExecute", NULL, &valueType, (PBYTE)valueData, &size);
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "Reading BootExecute entry");
+        win_perror2(status, "Reading BootExecute entry");
         return 1;
     }
 
@@ -217,7 +218,7 @@ int wmain(int argc, WCHAR *argv[])
     status = RegSetValueEx(key, L"BootExecute", 0, REG_MULTI_SZ, (PBYTE)valueData, MultiWStrSize(valueData, NULL));
     if (ERROR_SUCCESS != status)
     {
-        perror2(status, "RegSetValueEx");
+        win_perror2(status, "RegSetValueEx");
         return 1;
     }
 

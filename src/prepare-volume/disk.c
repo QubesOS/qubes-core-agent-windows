@@ -22,8 +22,12 @@
 #include "disk.h"
 #include "format.h"
 #include "wait-for-volume.h"
+#ifdef __MINGW32__
+#include "customddkinc.h"
+#endif
 
 #include <stdlib.h>
+#include <strsafe.h>
 
 // without braces
 PWCHAR DISK_CLASS_GUID = L"4d36e967-e325-11ce-bfc1-08002be10318";
@@ -38,14 +42,14 @@ BOOL GetPhysicalDriveNumber(IN WCHAR *deviceName, OUT ULONG *driveNumber)
 
     if (device == INVALID_HANDLE_VALUE)
     {
-        perror("CreateFile");
+        win_perror("CreateFile");
         goto cleanup;
     }
 
     // Get device number.
     if (!DeviceIoControl(device, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0, &deviceNumber, sizeof(deviceNumber), &returnedSize, NULL))
     {
-        perror("IOCTL_STORAGE_GET_DEVICE_NUMBER");
+        win_perror("IOCTL_STORAGE_GET_DEVICE_NUMBER");
         goto cleanup;
     }
 
@@ -87,7 +91,7 @@ static BOOL VolumeNameToDiskLetter(IN WCHAR *volumeName, OUT WCHAR *diskLetter)
     ZeroMemory(mountPoints, returned*sizeof(WCHAR));
     if (!GetVolumePathNamesForVolumeName(volumeName, mountPoints, returned, &returned))
     {
-        perror("GetVolumePathNamesForVolumeName");
+        win_perror("GetVolumePathNamesForVolumeName");
         free(mountPoints);
         return FALSE;
     }
@@ -121,7 +125,7 @@ BOOL DriveNumberToVolumeName(IN DWORD driveNumber, OUT WCHAR *volumeName, IN DWO
     findHandle = FindFirstVolume(volumeName, volumeNameLength);
     if (findHandle == INVALID_HANDLE_VALUE)
     {
-        perror("FindFirstVolume");
+        win_perror("FindFirstVolume");
         return FALSE;
     }
 
@@ -134,14 +138,14 @@ BOOL DriveNumberToVolumeName(IN DWORD driveNumber, OUT WCHAR *volumeName, IN DWO
         volume = CreateFile(volumeName, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
         if (volume == INVALID_HANDLE_VALUE)
         {
-            perror("open volume");
+            win_perror("open volume");
             goto skip;
         }
 
         // Get volume disk extents.
         if (!DeviceIoControl(volume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, &extents, sizeof(extents), &returnedSize, NULL))
         {
-            perror("IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS");
+            win_perror("IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS");
             goto skip;
         }
 
@@ -205,14 +209,14 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
 
     if (!DeviceIoControl(device, IOCTL_DISK_SET_DISK_ATTRIBUTES, &diskAttrs, sizeof(diskAttrs), NULL, 0, &requiredSize, NULL))
     {
-        perror("IOCTL_DISK_SET_DISK_ATTRIBUTES");
+        win_perror("IOCTL_DISK_SET_DISK_ATTRIBUTES");
         return FALSE;
     }
 
     // Tell the system that the disk was changed.
     if (!DeviceIoControl(device, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &requiredSize, NULL))
     {
-        perror("IOCTL_DISK_UPDATE_PROPERTIES");
+        win_perror("IOCTL_DISK_UPDATE_PROPERTIES");
         return FALSE;
     }
 
@@ -226,7 +230,7 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
 
     if (!DeviceIoControl(device, IOCTL_DISK_CREATE_DISK, &createDisk, sizeof(createDisk), NULL, 0, &requiredSize, NULL))
     {
-        perror("IOCTL_DISK_CREATE_DISK");
+        win_perror("IOCTL_DISK_CREATE_DISK");
         return FALSE;
     }
 
@@ -234,7 +238,7 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
 
     if (!DeviceIoControl(device, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &requiredSize, NULL))
     {
-        perror("IOCTL_DISK_UPDATE_PROPERTIES");
+        win_perror("IOCTL_DISK_UPDATE_PROPERTIES");
         return FALSE;
     }
 
@@ -270,13 +274,13 @@ static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHA
 
     if (!DeviceIoControl(device, IOCTL_DISK_SET_DRIVE_LAYOUT_EX, partitionBuffer, sizeof(partitionBuffer), NULL, 0, &requiredSize, NULL))
     {
-        perror("IOCTL_DISK_SET_DRIVE_LAYOUT_EX");
+        win_perror("IOCTL_DISK_SET_DRIVE_LAYOUT_EX");
         return FALSE;
     }
 
     if (!DeviceIoControl(device, IOCTL_DISK_UPDATE_PROPERTIES, NULL, 0, NULL, 0, &requiredSize, NULL))
     {
-        perror("IOCTL_DISK_UPDATE_PROPERTIES");
+        win_perror("IOCTL_DISK_UPDATE_PROPERTIES");
         return FALSE;
     }
 
@@ -315,14 +319,14 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT WCHAR *diskLetter)
     device = CreateFile(driveName, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
     if (device == INVALID_HANDLE_VALUE)
     {
-        perror("CreateFile");
+        win_perror("CreateFile");
         return FALSE;
     }
 
     // Get partition information.
     if (!DeviceIoControl(device, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, buf, sizeof(buf), &returnedSize, NULL))
     {
-        perror("IOCTL_DISK_GET_DRIVE_LAYOUT_EX");
+        win_perror("IOCTL_DISK_GET_DRIVE_LAYOUT_EX");
         goto cleanup;
     }
 
@@ -355,7 +359,7 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT WCHAR *diskLetter)
                 // Check the filesystem.
                 if (!GetVolumeInformation(volumeName, NULL, 0, NULL, NULL, NULL, filesystemName, RTL_NUMBER_OF(filesystemName)))
                 {
-                    perror("GetVolumeInformation");
+                    win_perror("GetVolumeInformation");
                     reinitialize = TRUE;
                 }
                 else
@@ -394,7 +398,7 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT WCHAR *diskLetter)
         // Get disk size.
         if (!DeviceIoControl(device, IOCTL_DISK_GET_LENGTH_INFO, NULL, 0, &lengthInfo, sizeof(lengthInfo), &returnedSize, NULL))
         {
-            perror("IOCTL_DISK_GET_LENGTH_INFO");
+            win_perror("IOCTL_DISK_GET_LENGTH_INFO");
             goto cleanup;
         }
 
