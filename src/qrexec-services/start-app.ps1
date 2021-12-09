@@ -27,4 +27,4 @@ $desktopBaseName = $args[0]
 
 $desktopFullName = Get-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $desktopBaseName
 
-Invoke-Item $desktopFullName.$desktopBaseName
+Start-Process -Wait $desktopFullName.$desktopBaseName
