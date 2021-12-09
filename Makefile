@@ -38,8 +38,8 @@ $(OUTDIR_ANY)/service-policy.exe: $(wildcard src/service-policy/*.cs)
 $(OUTDIR_ANY)/service-policy.cfg: src/service-policy/service-policy.cfg
 	cp $^ $@
 
-$(OUTDIR)/relocate-dir.exe: $(wildcard src/relocate-dir/*.c)
-	$(CC) $^ $(CFLAGS) -I$(DDK_PATH) -e NtProcessStartup -Wl,--subsystem,native -L $(OUTDIR) -lntdll -nostdlib -D__INTRINSIC_DEFINED__InterlockedAdd64 -fstack-check -Wl,--stack,16777216 -mno-stack-arg-probe -municode -Wl,--no-insert-timestamp -o $@
+$(OUTDIR)/relocate-dir.exe: $(wildcard src/relocate-dir/*.c) src/relocate-dir/chkstk.S
+	$(CC) $^ $(CFLAGS) -I$(DDK_PATH) -e NtProcessStartup -Wl,--subsystem,native -L $(OUTDIR) -lntdll -nostdlib -D__INTRINSIC_DEFINED__InterlockedAdd64 -municode -Wl,--no-insert-timestamp -o $@
 
 $(RPC_FILES): $(OUTDIR_ANY)/qubes-rpc/%: src/qrexec-services/%
 	cp $^ $@
