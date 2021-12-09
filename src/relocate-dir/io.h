@@ -50,3 +50,8 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
 NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath);
 NTSTATUS FileCopyDirectory(IN const PWCHAR sourcePath, IN const PWCHAR targetPath, IN BOOLEAN ignoreErrors);
 NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf);
+
+#ifndef IO_REPARSE_TAG_APPEXECLINK
+#define IO_REPARSE_TAG_APPEXECLINK (0x8000001BL)
+#endif
+

@@ -57,6 +57,8 @@ NTSTATUS FileOpen(OUT HANDLE *file, IN const PWCHAR fileName, IN BOOLEAN write, 
     {
         if (!isReparse)
             desiredAccess |= FILE_WRITE_DATA | FILE_APPEND_DATA | FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA | WRITE_DAC | WRITE_OWNER | DELETE;
+	else
+	    desiredAccess |= DELETE;
 
         if (overwrite)
         {
@@ -528,6 +530,7 @@ NTSTATUS FileDelete(IN HANDLE file)
         if (!NT_SUCCESS(status))
         {
             NtLog(TRUE, L"[!] FileDelete: FSCTL_DELETE_REPARSE_POINT failed: %x\n", status);
+            if (rdb->ReparseTag != IO_REPARSE_TAG_APPEXECLINK)
             goto cleanup;
         }
     }
@@ -699,6 +702,10 @@ NTSTATUS FileCopyReparsePoint(IN const PWCHAR sourcePath, IN const PWCHAR target
 
         NtLog(FALSE, L"[*] Mount point: '%s' -> '%s'\n", sourcePath, dest);
         break;
+
+    case IO_REPARSE_TAG_APPEXECLINK:
+	NtLog(FALSE, L"[*] AppExecLink: '%s'\n", sourcePath);
+	break;
 
     default:
 
@@ -1061,6 +1068,10 @@ NTSTATUS FileDeleteDirectory(IN const PWCHAR path, IN BOOLEAN deleteSelf)
                 {
                     // just delete
                     status = FileOpen(&file, fullPath, TRUE, FALSE, FALSE);
+                    
+                    if ((!NT_SUCCESS(status)) && (entry->FileAttributes  & FILE_ATTRIBUTE_REPARSE_POINT))
+		        status = FileOpen(&file, fullPath, TRUE, FALSE, TRUE);
+
                     if (!NT_SUCCESS(status))
                     {
                         NtLog(TRUE, L"[!] FileOpen(%s) failed: %x\n", fullPath, status);
