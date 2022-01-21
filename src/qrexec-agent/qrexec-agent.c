@@ -925,11 +925,11 @@ static DWORD HandleDaemonHello(struct msg_header *header)
     if (!VchanReceiveBuffer(g_DaemonVchan, &info, sizeof(info), L"peer info"))
         return ERROR_INVALID_FUNCTION;
 
-    if (info.version != QREXEC_PROTOCOL_VERSION)
+    if (info.version < QREXEC_PROTOCOL_VERSION)
     {
         LogWarning("incompatible protocol version (%d instead of %d)",
                  info.version, QREXEC_PROTOCOL_VERSION);
-        //return ERROR_INVALID_FUNCTION;
+        return ERROR_INVALID_FUNCTION;
     }
 
     LogDebug("received protocol version %d", info.version);

@@ -551,10 +551,10 @@ DWORD HandleDataMessage(
 
         LogDebug("protocol version %d", peerInfo.version);
 
-        if (peerInfo.version != QREXEC_PROTOCOL_VERSION)
+        if (peerInfo.version < QREXEC_PROTOCOL_VERSION)
         {
             LogWarning("incompatible protocol version (got %d, expected %d)", peerInfo.version, QREXEC_PROTOCOL_VERSION);
-            //return ERROR_INVALID_FUNCTION;
+            return ERROR_INVALID_FUNCTION;
         }
 
         if (!child->IsVchanServer) // we're vchan client, reply with HELLO
