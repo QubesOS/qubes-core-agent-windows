@@ -297,6 +297,10 @@ BOOL VchanSendMessage(
     header.len = cbData;
     EnterCriticalSection(&g_VchanCs);
 
+    if (!libvchan_is_open(vchan))
+    {
+        goto cleanup;
+    }
     if (!VchanSendBuffer(vchan, &header, sizeof(header), L"header"))
     {
         LogError("VchanSendBuffer(header for %s) failed", what);
@@ -338,6 +342,8 @@ BOOL VchanSendData(
     ULONG messageType;
 
     assert(child && child->Vchan);
+    if (!child || !child->Vchan)
+        return FALSE;
 
     LogVerbose("data %p, size %lu, type %d", data, cbData, pipeType);
 
@@ -977,7 +983,7 @@ cleanup:
 
     if (child)
     {
-        if (child->Vchan)
+        if (child->Vchan && libvchan_is_open(child->Vchan))
         {
             // send "exit code" (creation status really) if the io isn't piped or child creation failed
             if (!piped || status != ERROR_SUCCESS)
