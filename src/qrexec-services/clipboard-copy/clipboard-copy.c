@@ -30,11 +30,33 @@
 
 #define CLIPBOARD_FORMAT CF_UNICODETEXT
 
-BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
+static BOOL PrepareClipText(IN WCHAR *clipText, OUT WCHAR **clipTextPrepared)
+{
+    if (!clipText || !clipTextPrepared)
+        return FALSE;
+    // replace \r\n -> \r
+    *clipTextPrepared = (WCHAR*)calloc((wcslen(clipText) + 1) * sizeof(WCHAR), 1);
+    WCHAR* src = clipText;
+    WCHAR* dst = *clipTextPrepared;
+    size_t strLen = wcslen(clipText);
+    for (size_t i = 0; i < strLen; i++)
+    {
+        if ((*src) != L'\r')
+        {
+            *dst++ = *src;
+        }
+        src++;
+    }
+    *dst = 0;
+    return TRUE;
+}
+
+static BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
 {
     HANDLE clipData;
     WCHAR *clipText;
-    UCHAR *clipTextUtf8;
+    WCHAR *clipTextPrepared;
+    CHAR *clipTextUtf8;
     size_t cbTextUtf8;
 
     if (!IsClipboardFormatAvailable(CLIPBOARD_FORMAT))
@@ -62,24 +84,36 @@ BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
         return FALSE;
     }
 
-    if (FAILED(ConvertUTF16ToUTF8(clipText, &clipTextUtf8, &cbTextUtf8)))
+    if (!PrepareClipText(clipText, &clipTextPrepared))
+    {
+        win_perror("PrepareClipText");
+        free(clipTextPrepared);
+        CloseClipboard();
+        GlobalUnlock(clipData);
+        return FALSE;
+    }
+
+    CloseClipboard();
+    GlobalUnlock(clipData);
+
+    if (FAILED(ConvertUTF16ToUTF8(clipTextPrepared, &clipTextUtf8, &cbTextUtf8)))
     {
         win_perror("ConvertUTF16ToUTF8");
-        GlobalUnlock(clipData);
-        CloseClipboard();
+        free(clipTextPrepared);
+        free(clipTextUtf8);
         return FALSE;
     }
 
     if (!QioWriteBuffer(outputFile, clipTextUtf8, (DWORD)cbTextUtf8))
     {
         win_perror("QioWriteBuffer");
-        GlobalUnlock(clipData);
-        CloseClipboard();
+        free(clipTextPrepared);
+        free(clipTextUtf8);
         return FALSE;
     }
 
-    GlobalUnlock(clipData);
-    CloseClipboard();
+    free(clipTextPrepared);
+    free(clipTextUtf8);
     return TRUE;
 }
 
