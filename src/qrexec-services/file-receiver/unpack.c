@@ -194,7 +194,9 @@ void ProcessRegularFile(IN const struct file_header *untrustedHeader, IN const c
     WCHAR trustedFilePath[MAX_PATH + 1];
     HRESULT hresult;
 
-    untrustedFileName = (WCHAR*)calloc(MAX_PATH + 1, 1);
+    untrustedFileName = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
+    if (!untrustedFileName)
+        SendStatusAndExit(EINVAL, NULL);
     int result = xutftowcs_path(untrustedFileName, untrustedNameUtf8);
     if (result <= 0)
         SendStatusAndExit(EINVAL, NULL);
@@ -246,7 +248,9 @@ void ProcessDirectory(IN const struct file_header *untrustedHeader, IN const cha
     WCHAR trustedDirectoryPath[MAX_PATH + 1];
     HRESULT hresult;
 
-    untrustedDirectoryName = (WCHAR*)calloc(MAX_PATH + 1, 1);
+    untrustedDirectoryName = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
+    if (!untrustedDirectoryName)
+        SendStatusAndExit(EINVAL, NULL);
     int result = xutftowcs_path(untrustedDirectoryName, untrustedNameUtf8);
     if (result <= 0)
         SendStatusAndExit(EINVAL, NULL);
@@ -283,7 +287,9 @@ void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *un
     HRESULT hresult;
     BOOL targetIsFile = FALSE; /* default to directory links */
 
-    untrustedName = (WCHAR*)calloc(MAX_PATH + 1, 1);
+    untrustedName = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
+    if (!untrustedName)
+        SendStatusAndExit(EINVAL, NULL);
     int result = xutftowcs_path(untrustedName, untrustedNameUtf8);
     if (result <= 0)
         SendStatusAndExit(EINVAL, NULL);
@@ -310,7 +316,9 @@ void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *un
 
     untrustedLinkTargetPathUtf8[linkTargetSize] = 0;
 
-    untrustedLinkTargetPath = (WCHAR*)calloc(MAX_PATH + 1, 1);
+    untrustedLinkTargetPath = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
+    if (!untrustedLinkTargetPath)
+        SendStatusAndExit(EINVAL, NULL);
     result = xutftowcs_path(untrustedLinkTargetPath, untrustedLinkTargetPathUtf8);
     if (result <= 0)
         SendStatusAndExit(EINVAL, untrustedNameUtf8);
