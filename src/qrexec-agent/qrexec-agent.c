@@ -46,6 +46,7 @@ libvchan_t *g_DaemonVchan;
 
 CRITICAL_SECTION g_DaemonCriticalSection;
 CRITICAL_SECTION g_RequestCriticalSection;
+SRWLOCK g_ConnectionsHandlesLock;
 
 PIPE_SERVER g_PipeServer = NULL; // for handling qrexec-client-vm requests
 LIST_ENTRY g_RequestList; // pending service requests (local)
@@ -77,24 +78,25 @@ struct _connection_info
     int connect_port;
 };
 
-#define MAX_FDS 256
+#define MAX_FDS 128
 static struct _connection_info connection_info[MAX_FDS];
 
 static void register_vchan_connection(HANDLE handle, int domain, int port)
 {
+    AcquireSRWLockExclusive(&g_ConnectionsHandlesLock);
     for (int i = 0; i < MAX_FDS; i++)
     {
         if (connection_info[i].handle == NULL)
         {
-            EnterCriticalSection(&g_DaemonCriticalSection);
             connection_info[i].handle = handle;
             connection_info[i].connect_domain = domain;
             connection_info[i].connect_port = port;
-            LeaveCriticalSection(&g_DaemonCriticalSection);
+            ReleaseSRWLockExclusive(&g_ConnectionsHandlesLock);
             return;
         }
     }
-    LogError("No free slot for child %d (connection to %d:%d)", (int)handle, domain, port);
+    ReleaseSRWLockExclusive(&g_ConnectionsHandlesLock);
+    LogError("No free slot for child %p (connection to %d:%d)", handle, domain, port);
 }
 
 static void release_connection(int id)
@@ -122,42 +124,6 @@ static void release_connection(int id)
     return;
 }
 
-static BOOL handle_is_running(HANDLE hProcess)
-{
-    if (hProcess == INVALID_HANDLE_VALUE)
-    {
-        return FALSE;
-    }
-    DWORD dwRetval = WaitForSingleObject(hProcess, 0);
-
-    switch(dwRetval)
-    {
-    case WAIT_OBJECT_0:
-        return FALSE;
-    case WAIT_TIMEOUT:
-        return TRUE;
-    default:
-        return FALSE;
-    }
-    return FALSE;
-}
-
-static void check_connections()
-{
-    for (int i = 0; i < MAX_FDS; i++)
-    {
-        HANDLE handle = connection_info[i].handle;
-        if (handle != NULL)
-        {
-            if (!handle_is_running(handle))
-            {
-                EnterCriticalSection(&g_DaemonCriticalSection);
-                release_connection(i);
-                LeaveCriticalSection(&g_DaemonCriticalSection);
-            }
-        }
-    }
-}
 
 /**
  * @brief Wait for qubesdb service to start.
@@ -1076,7 +1042,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
     DWORD status = ERROR_INVALID_FUNCTION;
     BOOL run = TRUE;
     BOOL daemonConnected = FALSE;
-    HANDLE waitObjects[2];
+    HANDLE waitObjects[2 + MAX_FDS];
     HANDLE advertiseToolsProcess;
     WCHAR advertiseCommand[] = L"advertise-tools.exe 1"; // must be non-const
 
@@ -1108,11 +1074,26 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
         status = ERROR_SUCCESS;
 
+        DWORD waitObjectsIndex = 2;
+        // add registered processes's handles to watch
+        for (int i = 0; i < MAX_FDS; i++)
+        {
+            if (connection_info[i].handle != NULL)
+            {
+                waitObjects[waitObjectsIndex++] = connection_info[i].handle;
+            }
+        }
         LogVerbose("waiting for event");
 
-        signaledEvent = WaitForMultipleObjects(2, waitObjects, FALSE, INFINITE) - WAIT_OBJECT_0;
+        signaledEvent = WaitForMultipleObjects(waitObjectsIndex, waitObjects, FALSE, INFINITE) - WAIT_OBJECT_0;
 
         LogVerbose("event %d", signaledEvent);
+
+        if (WAIT_FAILED == signaledEvent)
+        {
+            status = win_perror("WaitForMultipleObjects");
+            break;
+        }
 
         if (0 == signaledEvent) // stop event
         {
@@ -1121,64 +1102,72 @@ static DWORD WatchForEvents(HANDLE stopEvent)
             break;
         }
 
-        if (signaledEvent != 1)
+        if (1 == signaledEvent) // control vchan event
         {
-            status = win_perror("WaitForMultipleObjects");
-            break;
-        }
-
-        // control vchan event
-        EnterCriticalSection(&g_DaemonCriticalSection);
-        if (!daemonConnected)
-        {
-            LogInfo("qrexec-daemon has connected (event %d)");
-
-            if (!VchanSendHello(g_DaemonVchan))
+            // control vchan event
+            EnterCriticalSection(&g_DaemonCriticalSection);
+            if (!daemonConnected)
             {
-                LogError("failed to send hello to daemon");
-                goto out;
+                LogInfo("qrexec-daemon has connected (event %d)");
+
+                if (!VchanSendHello(g_DaemonVchan))
+                {
+                    LogError("failed to send hello to daemon");
+                    goto out;
+                }
+
+                daemonConnected = TRUE;
+                LeaveCriticalSection(&g_DaemonCriticalSection);
+
+                // advertise tools presence to dom0 by writing appropriate entries to qubesdb
+                // it waits for user logon
+                status = CreateNormalProcessAsCurrentUser(advertiseCommand, &advertiseToolsProcess);
+                if (status == ERROR_SUCCESS)
+                {
+                    CloseHandle(advertiseToolsProcess);
+                }
+                else
+                {
+                    win_perror("Failed to create advertise-tools process");
+                    // this is non-fatal?
+                }
+                continue;
             }
 
-            daemonConnected = TRUE;
+            if (!libvchan_is_open(g_DaemonVchan)) // vchan broken
+            {
+                LogWarning("vchan broken");
+                LeaveCriticalSection(&g_DaemonCriticalSection);
+                break;
+            }
+
+            // handle data from daemon
+            while (VchanGetReadBufferSize(g_DaemonVchan) > 0)
+            {
+                status = HandleDaemonMessage();
+                if (ERROR_SUCCESS != status)
+                {
+                    run = FALSE;
+                    win_perror2(status, "HandleDaemonMessage");
+                    goto out;
+                }
+            }
+out:
             LeaveCriticalSection(&g_DaemonCriticalSection);
-
-            // advertise tools presence to dom0 by writing appropriate entries to qubesdb
-            // it waits for user logon
-            status = CreateNormalProcessAsCurrentUser(advertiseCommand, &advertiseToolsProcess);
-            if (status == ERROR_SUCCESS)
-            {
-                CloseHandle(advertiseToolsProcess);
-            }
-            else
-            {
-                win_perror("Failed to create advertise-tools process");
-                // this is non-fatal?
-            }
             continue;
         }
 
-        if (!libvchan_is_open(g_DaemonVchan)) // vchan broken
+        if (signaledEvent < waitObjectsIndex) // wrapped processes
         {
-            LogWarning("vchan broken");
-            LeaveCriticalSection(&g_DaemonCriticalSection);
-            break;
-        }
-
-        // handle data from daemon
-        while (VchanGetReadBufferSize(g_DaemonVchan) > 0)
-        {
-            status = HandleDaemonMessage();
-            if (ERROR_SUCCESS != status)
+            for (int i = 0; i < MAX_FDS; i++)
             {
-                run = FALSE;
-                win_perror2(status, "HandleDaemonMessage");
-                goto out;
+                if (connection_info[i].handle == waitObjects[signaledEvent])
+                {
+                    release_connection(i);
+                    break;
+                }
             }
-            check_connections();
         }
-
-    out:
-        LeaveCriticalSection(&g_DaemonCriticalSection);
     }
 
     LogVerbose("loop finished");
@@ -1410,6 +1399,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     InitializeCriticalSection(&g_DaemonCriticalSection);
     InitializeCriticalSection(&g_RequestCriticalSection);
+    InitializeSRWLock(&g_ConnectionsHandlesLock);
     InitializeListHead(&g_RequestList);
 
     status = SvcMainLoop(
