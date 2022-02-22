@@ -36,6 +36,8 @@ static BOOL PrepareClipText(IN WCHAR *clipText, OUT WCHAR **clipTextPrepared)
         return FALSE;
     // replace \r\n -> \r
     *clipTextPrepared = (WCHAR*)calloc((wcslen(clipText) + 1) * sizeof(WCHAR), 1);
+    if (!*clipTextPrepared)
+        return FALSE;
     WCHAR* src = clipText;
     WCHAR* dst = *clipTextPrepared;
     size_t strLen = wcslen(clipText);
