@@ -1,0 +1,3 @@
+#define QTW_FILEDESCRIPTION_STR "Qubes RPC STDIO forwarder"
+
+#include "..\version_common.rc"
