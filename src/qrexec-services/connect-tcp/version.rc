@@ -1,0 +1,3 @@
+#define QTW_FILEDESCRIPTION_STR "Qubes connect tcp service"
+
+#include "..\..\version_common.rc"
