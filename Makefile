@@ -9,6 +9,8 @@ QREXEC_SERVICES = $(addprefix $(OUTDIR)/, clipboard-copy.exe clipboard-paste.exe
 RPC_FILES = $(addprefix $(OUTDIR_ANY)/qubes-rpc/,qubes.ClipboardCopy qubes.ClipboardPaste qubes.Filecopy qubes.GetAppMenus qubes.GetImageRGBA qubes.OpenInVM qubes.OpenURL qubes.SetDateTime qubes.SetGuiMode qubes.StartApp qubes.VMShell qubes.WaitForSession qubes.SuspendPostAll)
 RPC_SCRIPTS = $(addprefix $(OUTDIR_ANY)/, get-appmenus.ps1 set-time.ps1 start-app.ps1 update-time.bat)
 
+RELOCATE_DIR_LDFLAGS := $(if $(wildcard /usr/*-w64-mingw32/sys-root/mingw/lib/libntdllcrt.a),-lntdllcrt)
+
 
 all: $(OUTDIR) $(OUTDIR_ANY) $(OUTDIR_ANY)/qubes-rpc $(TOOLS) $(QREXEC_SERVICES) $(RPC_FILES) $(RPC_SCRIPTS) $(OUTDIR_ANY)/service-policy.exe $(OUTDIR_ANY)/service-policy.cfg $(OUTDIR)/relocate-dir.exe
 
@@ -39,7 +41,7 @@ $(OUTDIR_ANY)/service-policy.cfg: src/service-policy/service-policy.cfg
 	cp $^ $@
 
 $(OUTDIR)/relocate-dir.exe: $(wildcard src/relocate-dir/*.c) src/relocate-dir/chkstk.S
-	$(CC) $^ $(CFLAGS) -I$(DDK_PATH) -e NtProcessStartup -Wl,--subsystem,native -L $(OUTDIR) -lntdll -nostdlib -D__INTRINSIC_DEFINED__InterlockedAdd64 -municode -Wl,--no-insert-timestamp -o $@
+	$(CC) $^ $(CFLAGS) -I$(DDK_PATH) -e NtProcessStartup -Wl,--subsystem,native -L $(OUTDIR) -lntdll $(RELOCATE_DIR_LDFLAGS) -nostdlib -D__INTRINSIC_DEFINED__InterlockedAdd64 -municode -Wl,--no-insert-timestamp -o $@
 
 $(RPC_FILES): $(OUTDIR_ANY)/qubes-rpc/%: src/qrexec-services/%
 	cp $^ $@
