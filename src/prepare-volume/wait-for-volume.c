@@ -21,6 +21,7 @@
 
 #include "wait-for-volume.h"
 #include <dbt.h>
+#include <winioctl.h>
 
 // All functions except WaitForVolume run in a separate thread.
 
@@ -105,7 +106,7 @@ static INT_PTR WINAPI DevNotifyWndProc(
 
     case WM_DEVICECHANGE:
     {
-        DEV_BROADCAST_DEVICEINTERFACE *b = (DEV_BROADCAST_DEVICEINTERFACE *) lParam;
+        //DEV_BROADCAST_DEVICEINTERFACE *b = (DEV_BROADCAST_DEVICEINTERFACE *) lParam;
 
         switch (wParam)
         {

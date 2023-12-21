@@ -1,8 +1,2 @@
-qubescore-win7.iso
-wincoresources.img
-*.msm
-*.VC.db
-*.VC.opendb
-*.user
-bin/
-*.opensdf
+/bin/
+/qwt_version.h

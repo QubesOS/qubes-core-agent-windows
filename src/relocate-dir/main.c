@@ -60,7 +60,7 @@ void DisplayString(IN const PWCHAR msg)
     // The call below doesn't change the string.
     us.Buffer = msg;
 #pragma warning(pop)
-    us.Length = wcslen(msg) * sizeof(WCHAR);
+    us.Length = (USHORT)wcslen(msg) * sizeof(WCHAR);
     us.MaximumLength = us.Length + sizeof(WCHAR);
 
     NtDisplayString(&us);
@@ -111,7 +111,7 @@ print:
     if (print)
         DisplayString(buffer);
     if (logFile)
-        FileWrite(logFile, buffer, sizeof(WCHAR)*wcslen(buffer), NULL);
+        FileWrite(logFile, buffer, (ULONG)(sizeof(WCHAR)*wcslen(buffer)), NULL);
 }
 
 HANDLE InitHeap(void)
@@ -177,7 +177,7 @@ NTSTATUS RemoveBootExecuteEntry(void)
     NTSTATUS status;
 
     keyNameU.Buffer = keyName;
-    keyNameU.Length = wcslen(keyName) * sizeof(WCHAR);
+    keyNameU.Length = (USHORT)wcslen(keyName) * sizeof(WCHAR);
     keyNameU.MaximumLength = keyNameU.Length + sizeof(WCHAR);
 
     InitializeObjectAttributes(
@@ -195,7 +195,7 @@ NTSTATUS RemoveBootExecuteEntry(void)
     }
 
     valueNameU.Buffer = valueName;
-    valueNameU.Length = wcslen(valueName) * sizeof(WCHAR);
+    valueNameU.Length = (USHORT)wcslen(valueName) * sizeof(WCHAR);
     valueNameU.MaximumLength = valueNameU.Length + sizeof(WCHAR);
 
     status = NtSetValueKey(key, &valueNameU, 0, REG_MULTI_SZ, defaultValue, sizeof(defaultValue));
@@ -219,6 +219,9 @@ NTSTATUS wmain(INT argc, WCHAR *argv[], WCHAR *envp[], ULONG DebugFlag OPTIONAL)
     ULONG attrs;
     TIME_FIELDS tf;
     LARGE_INTEGER systemTime, localTime;
+
+    UNREFERENCED_PARAMETER(envp);
+    UNREFERENCED_PARAMETER(DebugFlag);
 
     NtLog(TRUE, L"move-profiles (" TEXT(__DATE__) L" " TEXT(__TIME__) L")\n");
 
@@ -324,7 +327,7 @@ void EnvironmentStringToUnicodeString(IN WCHAR *wsIn, OUT UNICODE_STRING *usOut)
         currentChar++;
 
         usOut->Buffer = wsIn;
-        usOut->MaximumLength = usOut->Length = (currentChar - wsIn) * sizeof(WCHAR);
+        usOut->MaximumLength = usOut->Length = (USHORT)(currentChar - wsIn) * sizeof(WCHAR);
     }
     else
     {
@@ -339,7 +342,7 @@ void NtProcessStartup(PPEB2 Peb)
     NTSTATUS Status;
     PRTL_USER_PROCESS_PARAMETERS ProcessParameters;
     UNICODE_STRING *CmdLineString;
-    UNICODE_STRING UnicodeEnvironment;
+    //UNICODE_STRING UnicodeEnvironment;
     PWCHAR NullPointer = NULL;
     INT argc = 0;
     PWCHAR *argv;

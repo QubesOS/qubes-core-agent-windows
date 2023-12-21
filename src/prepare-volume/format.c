@@ -28,6 +28,7 @@ static HMODULE g_fmifsDll = NULL;
 
 static BOOLEAN WINAPI FormatExCallback(FILE_SYSTEM_CALLBACK_COMMAND Command, DWORD Action, void *pData)
 {
+    UNREFERENCED_PARAMETER(Action);
     switch (Command)
     {
     case FCC_DONE:

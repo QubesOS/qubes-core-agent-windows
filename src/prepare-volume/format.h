@@ -21,6 +21,7 @@
 
 #pragma once
 #include "prepare-volume.h"
+#include <winioctl.h>
 
 typedef enum
 {

@@ -22,9 +22,6 @@
 #include "disk.h"
 #include "format.h"
 #include "wait-for-volume.h"
-#ifdef __MINGW32__
-#include "customddkinc.h"
-#endif
 
 #include <stdlib.h>
 #include <strsafe.h>
@@ -185,7 +182,7 @@ static ULONG Rand32(void)
 }
 
 // Make sure the disk is initialized and partitioned.
-static BOOL InitializeDisk(IN HANDLE device, IN LARGE_INTEGER diskSize, OUT WCHAR *diskLetter)
+static BOOL InitializeDisk(IN HANDLE device, /*IN LARGE_INTEGER diskSize,*/ OUT WCHAR* diskLetter)
 {
     DWORD requiredSize;
     DWORD returnedSize;
@@ -309,7 +306,6 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT WCHAR *diskLetter)
     WCHAR volumeName[MAX_PATH] = { 0 };
     WCHAR filesystemName[MAX_PATH + 1];
     BOOL reinitialize = FALSE;
-    BOOL retval = FALSE;
     WCHAR newDiskLetter;
 
     // Open the device.
@@ -405,7 +401,7 @@ BOOL PreparePrivateVolume(IN ULONG driveNumber, OUT WCHAR *diskLetter)
         LogInfo("Disk size: %I64d", lengthInfo.Length.QuadPart);
 
         LogDebug("Initializing disk %d", driveNumber);
-        if (!InitializeDisk(device, lengthInfo.Length, &newDiskLetter))
+        if (!InitializeDisk(device, /*lengthInfo.Length,*/ &newDiskLetter))
         {
             LogError("Failed to initialize disk");
             goto cleanup;

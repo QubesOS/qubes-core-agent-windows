@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\open-in-vm\qopen-in-vm.c" />
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\common\filecopy.c" />
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\common\filecopy-error.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\..\..\src\qubes-rpc-services\open-in-vm\version.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy.h" />
+    <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy-error.h" />
+    <ClInclude Include="..\..\..\src\qubes-rpc-services\common\dvm2.h" />
+  </ItemGroup>
+</Project>

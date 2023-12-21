@@ -1,3 +1,3 @@
-#define QTW_FILEDESCRIPTION_STR "Qubes network setup"
+#define QWT_FILEDESCRIPTION_STR "Qubes network setup"
 
 #include "..\version_common.rc"

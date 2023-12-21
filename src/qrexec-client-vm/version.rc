@@ -1,3 +1,3 @@
-#define QTW_FILEDESCRIPTION_STR "Qubes RPC client"
+#define QWT_FILEDESCRIPTION_STR "Qubes RPC client"
 
 #include "..\version_common.rc"

@@ -598,7 +598,7 @@ NTSTATUS FileSetSymlink(IN const PWCHAR sourcePath, IN const PWCHAR targetPath)
     if (!NT_SUCCESS(status))
         goto cleanup;
 
-    targetSize = wcslen(targetPath) * sizeof(WCHAR);
+    targetSize = (ULONG)wcslen(targetPath) * sizeof(WCHAR);
 
     rdb->ReparseTag = IO_REPARSE_TAG_SYMLINK;
     // 12 = SymbolicLinkReparseBuffer fields without PathBuffer

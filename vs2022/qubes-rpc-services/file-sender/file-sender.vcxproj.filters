@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\file-sender\gui-progress.c" />
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\file-sender\file-sender.c" />
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\common\filecopy.c" />
+    <ClCompile Include="..\..\..\src\qubes-rpc-services\common\filecopy-error.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-sender\version.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\src\qubes-rpc-services\file-sender\gui-progress.h" />
+    <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy.h" />
+    <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy-error.h" />
+  </ItemGroup>
+</Project>

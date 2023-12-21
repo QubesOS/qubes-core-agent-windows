@@ -27,11 +27,6 @@
 #include <rpc.h>
 #include <devpkey.h>
 
-#ifdef __MINGW32__
-#include "customddkinc.h"
-#include "setupapifn.h"
-#endif
-
 #include <strsafe.h>
 
 // Convert backend device ID to Windows' disk target id.
