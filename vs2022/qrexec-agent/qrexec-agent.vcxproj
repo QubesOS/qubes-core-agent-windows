@@ -51,6 +51,9 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(SolutionDir)\dirs.props" Condition="exists('$(SolutionDir)\dirs.props')" Label="Installer include/lib directory overrides" />
+  </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDE)</IncludePath>
@@ -78,7 +81,7 @@
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;libvchan.lib;qubesdb-client.lib;windows-utils.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>powershell $(SolutionDir)\..\set_version.ps1 $(SolutionDir)\..\version $(SolutionDir)\..\qwt_version.h</Command>
+      <Command>powershell $(ProjectDir)\..\..\set_version.ps1 $(ProjectDir)\..\..\version $(ProjectDir)\..\..\qwt_version.h</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate qwt_version.h</Message>
@@ -107,7 +110,7 @@
       <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;libvchan.lib;qubesdb-client.lib;windows-utils.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>powershell $(SolutionDir)\..\set_version.ps1 $(SolutionDir)\..\version $(SolutionDir)\..\qwt_version.h</Command>
+      <Command>powershell $(ProjectDir)\..\..\set_version.ps1 $(ProjectDir)\..\..\version $(ProjectDir)\..\..\qwt_version.h</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate qwt_version.h</Message>
