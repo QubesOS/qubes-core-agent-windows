@@ -1,3 +1,3 @@
-#define QTW_FILEDESCRIPTION_STR "Qubes set GUI mode service"
+#define QWT_FILEDESCRIPTION_STR "Qubes set GUI mode service"
 
 #include "..\..\version_common.rc"
