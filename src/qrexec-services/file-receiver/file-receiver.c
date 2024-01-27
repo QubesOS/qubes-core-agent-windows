@@ -155,7 +155,6 @@ ULONG MapDriveLetter(IN const WCHAR *targetDirectory, OUT WCHAR *driveLetter)
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
     WCHAR incomingDir[MAX_PATH + 1];
-    WCHAR *documentsPath = NULL;
     HRESULT hresult;
     ULONG errorCode;
     WCHAR remoteDomainName[MAX_PATH];
@@ -183,21 +182,30 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         return win_perror("GetEnvironmentVariable(QREXEC_REMOTE_DOMAIN)");
     }
 
-    hresult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &documentsPath);
-    if (FAILED(hresult))
-    {
-        return win_perror2(hresult, "SHGetKnownFolderPath");
+    if (argc >= 2) {
+        hresult = StringCchPrintf(incomingDir, RTL_NUMBER_OF(incomingDir), L"%s", argv[1]);
+    }
+    else {
+        WCHAR *documentsPath = NULL;
+
+        hresult = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &documentsPath);
+        if (FAILED(hresult))
+        {
+            return win_perror2(hresult, "SHGetKnownFolderPath");
+        }
+
+        hresult = StringCchPrintf(
+            incomingDir,
+            RTL_NUMBER_OF(incomingDir),
+            L"%s\\%s\\%s",
+            documentsPath,
+            INCOMING_DIR_ROOT,
+            remoteDomainName);
+
+        CoTaskMemFree(documentsPath);
     }
 
-    hresult = StringCchPrintf(
-        incomingDir,
-        RTL_NUMBER_OF(incomingDir),
-        L"%s\\%s\\%s",
-        documentsPath,
-        INCOMING_DIR_ROOT,
-        remoteDomainName);
-
-    CoTaskMemFree(documentsPath);
+    LogDebug("Incoming directory path: %s", incomingDir);
 
     if (FAILED(hresult))
     {
