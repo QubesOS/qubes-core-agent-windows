@@ -68,11 +68,13 @@
     <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDE)</IncludePath>
     <LibraryPath>$(VCToolsInstallDir)lib\Spectre\onecore\$(Platform);$(LibraryPath);$(QUBES_LIBS);$(EWDK_LIB)</LibraryPath>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDE)</IncludePath>
     <LibraryPath>$(VCToolsInstallDir)lib\Spectre\onecore\$(Platform);$(LibraryPath);$(QUBES_LIBS);$(EWDK_LIB)</LibraryPath>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
