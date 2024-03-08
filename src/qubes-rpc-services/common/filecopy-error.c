@@ -91,6 +91,7 @@ static void ProduceMessage(IN DWORD errorCode, IN DWORD icon, IN const WCHAR *fo
 
     // message for qrexec log in dom0
     fwprintf(stderr, L"%s", buffer);
+    LogError("%s", buffer);
     MessageBox(g_parentWindow, buffer, L"Qubes file copy error", MB_OK | icon);
     LocalFree(message);
 }

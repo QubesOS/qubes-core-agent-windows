@@ -1,2 +1,2 @@
 #include "winuser.h"
-1 RT_MANIFEST file-sender.exe.manifest
+1 RT_MANIFEST "file-sender.manifest"

@@ -8,10 +8,14 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-sender\version.rc" />
+    <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-sender\file-sender.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\qubes-rpc-services\file-sender\gui-progress.h" />
     <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy.h" />
     <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy-error.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\..\src\qubes-rpc-services\file-sender\file-sender.manifest" />
   </ItemGroup>
 </Project>

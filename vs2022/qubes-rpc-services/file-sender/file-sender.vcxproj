@@ -17,12 +17,16 @@
     <ClCompile Include="..\..\..\src\qubes-rpc-services\file-sender\gui-progress.c" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-sender\file-sender.rc" />
     <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-sender\version.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy-error.h" />
     <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy.h" />
     <ClInclude Include="..\..\..\src\qubes-rpc-services\file-sender\gui-progress.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\..\src\qubes-rpc-services\file-sender\file-sender.manifest" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -66,6 +70,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDE);$(ProjectDir)\..\..\..\src\qubes-rpc-services\common</IncludePath>
@@ -73,6 +78,7 @@
     <LinkIncremental>false</LinkIncremental>
     <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>

@@ -380,6 +380,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     WCHAR *directory, *baseName;
     WCHAR currentDirectory[MAX_PATH_LENGTH];
 
+    LogVerbose("start");
     g_stderr = GetStdHandle(STD_ERROR_HANDLE);
 
     if (g_stderr == NULL || g_stderr == INVALID_HANDLE_VALUE)
@@ -413,6 +414,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         exit(1);
     }
 
+    LogDebug("Current directory: %s", currentDirectory);
     // calculate total size for progressbar purpose
     g_totalSize = 0;
 
@@ -433,7 +435,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
         if (!directory)
         {
-            FcReportError(ERROR_BAD_PATHNAME, TRUE, L"GetAbsolutePath '%s'", argv[i]);
+            FcReportError(ERROR_BAD_PATHNAME, TRUE, L"GetAbsolutePath '%s'", argv[i]); // exits
         }
 
         // absolute path has at least one character
@@ -454,5 +456,6 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     NotifyEndAndWaitForResult();
     NotifyProgress(0, PROGRESS_TYPE_DONE);
+    LogVerbose("end");
     return 0;
 }
