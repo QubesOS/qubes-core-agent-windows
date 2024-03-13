@@ -880,7 +880,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     ZeroMemory(child, sizeof(*child));
 
     InitializeCriticalSection(&g_VchanCs);
-    libvchan_register_logger(XifLogger);
+    libvchan_register_logger(XifLogger, LogGetLevel());
 
     domain = _wtoi(domainName);
     port = _wtoi(portStr);

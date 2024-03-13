@@ -1323,7 +1323,7 @@ DWORD WINAPI ServiceExecutionThread(void *param)
 
     LogInfo("Service started");
 
-    libvchan_register_logger(XifLogger);
+    libvchan_register_logger(XifLogger, LogGetLevel());
 
     status = CreatePublicPipeSecurityDescriptor(&sd, &acl);
     if (status != ERROR_SUCCESS)
