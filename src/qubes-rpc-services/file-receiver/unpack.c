@@ -188,7 +188,6 @@ void SendStatusAndExit(IN UINT32 statusCode, IN const char *lastFileName)
 void ProcessRegularFile(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
 {
     FC_COPY_STATUS copyStatus;
-    ULONG errorCode;
     HANDLE outputFile;
     WCHAR *untrustedFileName = NULL;
     WCHAR trustedFilePath[MAX_PATH + 1];
