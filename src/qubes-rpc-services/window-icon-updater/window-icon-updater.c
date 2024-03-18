@@ -29,7 +29,6 @@
 #include <fcntl.h>
 
 #include <qubes-io.h>
-#include <utf8-conv.h>
 #include <log.h>
 
 HICON GetIcon(HWND window)

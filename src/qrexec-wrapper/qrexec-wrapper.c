@@ -35,7 +35,6 @@
 #include <log.h>
 #include <vchan-common.h>
 #include <exec.h>
-#include <utf8-conv.h>
 #include <qubes-io.h>
 
 static CRITICAL_SECTION g_VchanCs;

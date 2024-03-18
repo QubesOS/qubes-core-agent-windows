@@ -130,7 +130,7 @@ WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
     }
 
     // convert to utf16
-    if (ERROR_SUCCESS != ConvertUTF8ToUTF16(fileNameUtf8, &fileName, &cchFileName))
+    if (ERROR_SUCCESS != ConvertUTF8ToUTF16Static(fileNameUtf8, &fileName, &cchFileName))
     {
         fprintf(stderr, "Invalid file name\n");
         return NULL;
@@ -138,7 +138,6 @@ WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
 
     if (!GetTempDirectory(tempDirPath, &cchTempDirPath))
     {
-        free(fileName);
         fprintf(stderr, "Failed to get tmpdir\n");
         return NULL;
     }
@@ -147,7 +146,6 @@ WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
     fullPath = malloc(sizeof(WCHAR) * cchFullPath);
 
     StringCchPrintf(fullPath, cchFullPath, L"%s%s", *tempDirPath, fileName);
-    free(fileName);
     return fullPath;
 }
 

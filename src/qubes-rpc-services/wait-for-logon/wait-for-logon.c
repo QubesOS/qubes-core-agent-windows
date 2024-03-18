@@ -181,7 +181,8 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
             cbExpectedUserUtf8--;
         pszExpectedUserUtf8[cbExpectedUserUtf8] = '\0';
 
-        if (ERROR_SUCCESS != ConvertUTF8ToUTF16(pszExpectedUserUtf8, &g_expectedUser, &cchExpectedUser))
+        // this call uses a static output buffer but we only call it here
+        if (ERROR_SUCCESS != ConvertUTF8ToUTF16Static(pszExpectedUserUtf8, &g_expectedUser, &cchExpectedUser))
         {
             win_perror("Converting user name to UTF16");
             return 1;
@@ -231,7 +232,5 @@ int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLin
     WTSUnRegisterSessionNotification(hMainWindow);
     DestroyWindow(hMainWindow);
 
-    if (cchExpectedUser)
-        free(g_expectedUser);
     return 0;
 }

@@ -32,6 +32,7 @@
 #include <utf8-conv.h>
 #include <log.h>
 
+// FIXME hardcoded reg path, use config library
 #define APP_MAP_KEY L"Software\\Invisible Things Lab\\Qubes Tools\\AppMap"
 #define MAX_PATH_LONG 32768
 #define INPUT_PREFIX "xdgicon:"
@@ -74,9 +75,9 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     }
 
     // convert ascii to wchar
-    if (ERROR_SUCCESS != ConvertUTF8ToUTF16(param, &valueName, NULL))
+    if (ERROR_SUCCESS != ConvertUTF8ToUTF16Static(param, &valueName, NULL))
     {
-        status = win_perror("ConvertUTF8ToUTF16");
+        status = win_perror("ConvertUTF8ToUTF16Static");
         goto cleanup;
     }
 
@@ -107,8 +108,6 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
 cleanup:
     if (key)
         RegCloseKey(key);
-    if (valueName)
-        free(valueName);
     return status;
 }
 
@@ -235,7 +234,7 @@ int wmain(int argc, WCHAR *argv[])
     status = ERROR_SUCCESS;
 
 cleanup:
-    if (status != ERROR_SUCCESS && linkPath)
+    if (status == ERROR_SUCCESS && linkPath)
         LogError("LinkPath: %s", linkPath);
     // Everything will be cleaned up upon process exit.
     LogDebug("returning %lu", status);

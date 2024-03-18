@@ -45,6 +45,7 @@ extern HANDLE g_stdin;
 extern HANDLE g_stdout;
 extern WCHAR g_mappedDriveLetter;
 
+// FIXME: see how this differs from ConvertUTF8ToUTF16 and possibly update the latter
 static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
 {
     int upos = 0, wpos = 0;

@@ -89,7 +89,6 @@ static BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
     if (!PrepareClipText(clipText, &clipTextPrepared))
     {
         win_perror("PrepareClipText");
-        free(clipTextPrepared);
         CloseClipboard();
         GlobalUnlock(clipData);
         return FALSE;
@@ -98,11 +97,10 @@ static BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
     CloseClipboard();
     GlobalUnlock(clipData);
 
-    if (FAILED(ConvertUTF16ToUTF8(clipTextPrepared, &clipTextUtf8, &cbTextUtf8)))
+    if (FAILED(ConvertUTF16ToUTF8Static(clipTextPrepared, &clipTextUtf8, &cbTextUtf8)))
     {
-        win_perror("ConvertUTF16ToUTF8");
+        win_perror("ConvertUTF16ToUTF8Static");
         free(clipTextPrepared);
-        free(clipTextUtf8);
         return FALSE;
     }
 
@@ -110,12 +108,10 @@ static BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
     {
         win_perror("QioWriteBuffer");
         free(clipTextPrepared);
-        free(clipTextUtf8);
         return FALSE;
     }
 
     free(clipTextPrepared);
-    free(clipTextUtf8);
     return TRUE;
 }
 

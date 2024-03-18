@@ -60,26 +60,24 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     // Prepare the parameter structure containing the first two arguments.
     argumentUtf8 = NULL;
-    status = ConvertUTF16ToUTF8(serviceName, &argumentUtf8, NULL);
+    status = ConvertUTF16ToUTF8Static(serviceName, &argumentUtf8, NULL);
     if (ERROR_SUCCESS != status)
-        return win_perror2(status, "ConvertUTF16ToUTF8");
+        return win_perror2(status, "ConvertUTF16ToUTF8Static(serviceName)");
 
     hresult = StringCchCopyA(triggerParams.service_name, sizeof(triggerParams.service_name), argumentUtf8);
     if (FAILED(hresult))
         return win_perror2(hresult, "StringCchCopyA");
 
-    ConvertFree(argumentUtf8);
     argumentUtf8 = NULL;
 
-    status = ConvertUTF16ToUTF8(domainName, &argumentUtf8, NULL);
+    status = ConvertUTF16ToUTF8Static(domainName, &argumentUtf8, NULL);
     if (ERROR_SUCCESS != status)
-        return win_perror2(status, "ConvertUTF16ToUTF8");
+        return win_perror2(status, "ConvertUTF16ToUTF8Static(domainName)");
 
     hresult = StringCchCopyA(triggerParams.target_domain, sizeof(triggerParams.target_domain), argumentUtf8);
     if (FAILED(hresult))
         return win_perror2(hresult, "StringCchCopyA");
 
-    ConvertFree(argumentUtf8);
     argumentUtf8 = NULL;
 
     LogDebug("Connecting to qrexec-agent");

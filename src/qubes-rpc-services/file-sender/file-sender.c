@@ -145,7 +145,7 @@ static void WriteHeaders(IN struct file_header *hdr, IN const WCHAR *fileName)
     size_t cbFileNameUtf8;
 
     LogVerbose("start");
-    if (ERROR_SUCCESS != ConvertUTF16ToUTF8(fileName, &fileNameUtf8, &cbFileNameUtf8))
+    if (ERROR_SUCCESS != ConvertUTF16ToUTF8Static(fileName, &fileNameUtf8, &cbFileNameUtf8))
         FcReportError(GetLastError(), TRUE, L"Cannot convert path '%s' to UTF-8", fileName);
 
     hdr->namelen = (UINT32)cbFileNameUtf8;
@@ -155,7 +155,6 @@ static void WriteHeaders(IN struct file_header *hdr, IN const WCHAR *fileName)
         WaitForResult();
         exit(1);
     }
-    free(fileNameUtf8);
 }
 
 static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)

@@ -55,9 +55,9 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
 
     inputText[cbRead] = '\0';
 
-    if (ERROR_SUCCESS != ConvertUTF8ToUTF16(inputText, &text, &cchText))
+    if (ERROR_SUCCESS != ConvertUTF8ToUTF16Static(inputText, &text, &cchText))
     {
-        win_perror("ConvertUTF8ToUTF16");
+        win_perror("ConvertUTF8ToUTF16Static");
         goto fail;
     }
 
@@ -77,7 +77,6 @@ BOOL ReadClipboardText(IN HWND window, IN HANDLE inputFile)
     }
 
     memcpy(textLocked, text, (cchText + 1) * sizeof(WCHAR));
-    free(text);
 
     GlobalUnlock(clipData);
 

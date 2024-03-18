@@ -208,76 +208,6 @@ cleanup:
     return status;
 }
 
-// FIXME: is this necessary? Convert* from windows-utils isn't enough?
-static DWORD Utf8WithBomToUtf16(IN const char *stringUtf8, IN size_t cbStringUtf8, OUT WCHAR **stringUtf16)
-{
-    size_t cbSkipChars = 0;
-    WCHAR *bufferUtf16 = NULL;
-    DWORD status;
-    HRESULT hresult;
-
-    LogVerbose("utf8 '%S', size %d", stringUtf8, cbStringUtf8);
-
-    if (!stringUtf8 || !cbStringUtf8 || !stringUtf16)
-        return ERROR_INVALID_PARAMETER;
-
-    *stringUtf16 = NULL;
-
-    // see http://en.wikipedia.org/wiki/Byte-order_mark for explanation of the BOM encoding
-    if (cbStringUtf8 >= 3 && stringUtf8[0] == 0xEF && stringUtf8[1] == 0xBB && stringUtf8[2] == 0xBF)
-    {
-        // UTF-8
-        cbSkipChars = 3;
-    }
-    else if (cbStringUtf8 >= 2 && stringUtf8[0] == 0xFE && stringUtf8[1] == 0xFF)
-    {
-        // UTF-16BE
-        return ERROR_NOT_SUPPORTED;
-    }
-    else if (cbStringUtf8 >= 2 && stringUtf8[0] == 0xFF && stringUtf8[1] == 0xFE)
-    {
-        // UTF-16LE
-        cbSkipChars = 2;
-
-        bufferUtf16 = malloc(cbStringUtf8 - cbSkipChars + sizeof(WCHAR));
-        if (!bufferUtf16)
-            return ERROR_NOT_ENOUGH_MEMORY;
-
-        hresult = StringCbCopyW(bufferUtf16, cbStringUtf8 - cbSkipChars + sizeof(WCHAR), (STRSAFE_LPCWSTR)(stringUtf8 + cbSkipChars));
-        if (FAILED(hresult))
-        {
-            win_perror2(hresult, "StringCbCopyW");
-            free(bufferUtf16);
-            return hresult;
-        }
-
-        *stringUtf16 = bufferUtf16;
-        return ERROR_SUCCESS;
-    }
-    else if (cbStringUtf8 >= 4 && stringUtf8[0] == 0 && stringUtf8[1] == 0 && stringUtf8[2] == 0xFE && stringUtf8[3] == 0xFF)
-    {
-        // UTF-32BE
-        return ERROR_NOT_SUPPORTED;
-    }
-    else if (cbStringUtf8 >= 4 && stringUtf8[0] == 0xFF && stringUtf8[1] == 0xFE && stringUtf8[2] == 0 && stringUtf8[3] == 0)
-    {
-        // UTF-32LE
-        return ERROR_NOT_SUPPORTED;
-    }
-
-    // Try UTF-8
-
-    status = ConvertUTF8ToUTF16(stringUtf8 + cbSkipChars, stringUtf16, NULL);
-    if (ERROR_SUCCESS != status)
-    {
-        return win_perror2(status, "ConvertUTF8ToUTF16");
-    }
-
-    LogVerbose("success");
-
-    return ERROR_SUCCESS;
-}
-
 // based on https://stackoverflow.com/a/780024
 WCHAR* StrReplace(WCHAR const * const original,
         WCHAR const * const pattern,
@@ -346,7 +276,8 @@ fail:
  * @param runInteractively Determines whether the command should be run interactively.
  * @return Error code.
  */
-static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf16, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively)
+static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf16, OUT WCHAR **userName,
+                              OUT WCHAR **commandLine, OUT BOOL *runInteractively)
 {
     DWORD status;
     WCHAR *separator = NULL;
@@ -361,10 +292,17 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf
     *commandLine = NULL;
     *runInteractively = TRUE;
 
-    status = ConvertUTF8ToUTF16(commandUtf8, commandUtf16, NULL);
+    *commandUtf16 = (WCHAR*) malloc(CONVERT_MAX_BUFFER_SIZE_UTF16);
+    if (!*commandUtf16)
+    {
+        return win_perror2(ERROR_OUTOFMEMORY, "allocating utf16 conversion buffer");
+    }
+
+    status = ConvertUTF8ToUTF16(commandUtf8, *commandUtf16, NULL);
     if (ERROR_SUCCESS != status)
     {
-        return win_perror2(status, "ConvertUTF8ToUTF16");
+        free(*commandUtf16);
+        return win_perror2(status, "ConvertUTF8ToUTF16(command)");
     }
 
     LogInfo("Command: %s", *commandUtf16);
@@ -470,6 +408,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         {
             status = GetLastError();
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             return win_perror2(status, "GetModuleFileName");
         }
         // cut off file name (qrexec_agent.exe)
@@ -477,6 +416,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         if (!separator)
         {
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             LogError("Cannot find dir containing qrexec-agent.exe");
             return ERROR_PATH_NOT_FOUND;
         }
@@ -486,20 +426,23 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         if (!separator)
         {
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             LogError("Cannot find dir containing bin\\qrexec-agent.exe");
             return ERROR_PATH_NOT_FOUND;
         }
         // Leave trailing backslash
         separator++;
         *separator = L'\0';
+        // FIXME hardcoded path
         if (wcslen(serviceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(serviceName) > MAX_PATH)
         {
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             LogError("RPC service config file path too long");
             return ERROR_PATH_NOT_FOUND;
         }
 
-        PathAppendW(serviceFilePath, L"qubes-rpc");
+        PathAppendW(serviceFilePath, L"qubes-rpc"); // FIXME hardcoded path
         PathAppendW(serviceFilePath, serviceName);
 
         serviceConfigFile = CreateFile(
@@ -526,7 +469,9 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
                 if (!newsep)
                 {
                     // should never happen!
-                    LogError("Fail to contstruct a path for service+arg call");
+                    free(*sourceDomainName);
+                    *sourceDomainName = NULL;
+                    LogError("Fail to construct a path for service+arg call");
                     return ERROR_PATH_NOT_FOUND;
                 }
                 newsep++;
@@ -548,6 +493,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         {
             status = GetLastError(); // win_perror("CreateFile");
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             LogError("Failed to open service '%s' configuration file (%s)", serviceName, serviceFilePath);
             return status;
         }
@@ -555,21 +501,24 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         cbRead = 0;
         ZeroMemory(serviceConfigContents, sizeof(serviceConfigContents));
 
-        if (!ReadFile(serviceConfigFile, serviceConfigContents, sizeof(WCHAR) * MAX_PATH, &cbRead, NULL))
+        if (!ReadFile(serviceConfigFile, serviceConfigContents, sizeof(serviceConfigContents) - sizeof(WCHAR), &cbRead, NULL))
         {
             status = GetLastError(); // win_perror("ReadFile");
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             LogError("Failed to read RPC %s configuration file (%s)", serviceName, serviceFilePath);
             CloseHandle(serviceConfigFile);
             return status;
         }
         CloseHandle(serviceConfigFile);
 
-        status = Utf8WithBomToUtf16(serviceConfigContents, cbRead, &rawServiceFilePath);
+        size_t cfg_size;
+        status = ConvertUTF8ToUTF16Static(serviceConfigContents, &rawServiceFilePath, &cfg_size);
         if (status != ERROR_SUCCESS)
         {
-            win_perror2(status, "TextBOMToUTF16");
+            win_perror2(status, "ConvertUTF8ToUTF16Static(serviceConfigContents)");
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             LogError("Failed to parse the encoding in RPC '%s' configuration file (%s)", serviceName, serviceFilePath);
             return status;
         }
@@ -590,7 +539,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             // relative path are based in qubes-rpc-services
             // reuse separator found when preparing previous file path
             *separator = L'\0';
-            PathAppend(serviceFilePath, L"qubes-rpc-services");
+            PathAppend(serviceFilePath, L"qubes-rpc-services"); // FIXME hardcoded path
             PathAppend(serviceFilePath, rawServiceFilePath);
         }
         else
@@ -605,7 +554,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             StringCchCat(serviceFilePath, MAX_PATH + 1, serviceArgs);
         }
 
-        free(rawServiceFilePath);
+        //free(rawServiceFilePath);
 
         // replace "%1" with an argument, if there was any, otherwise remove it
         if (!serviceCallArg)
@@ -615,6 +564,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         if (*serviceCommandLine == NULL)
         {
             free(*sourceDomainName);
+            *sourceDomainName = NULL;
             return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "malloc");
         }
         LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);

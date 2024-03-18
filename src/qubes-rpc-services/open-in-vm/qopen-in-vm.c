@@ -58,7 +58,7 @@ void SendFile(IN const WCHAR *filePath)
     else
         base = filePath;
 
-    if (ERROR_SUCCESS != ConvertUTF16ToUTF8(base, &baseUtf8, NULL))
+    if (ERROR_SUCCESS != ConvertUTF16ToUTF8Static(base, &baseUtf8, NULL))
         FcReportError(GetLastError(), TRUE, L"Failed to convert filename '%s' to UTF8", base);
 
     if (strlen(baseUtf8) >= DVM_FILENAME_SIZE)
@@ -66,8 +66,6 @@ void SendFile(IN const WCHAR *filePath)
 
     ZeroMemory(basePadded, sizeof(basePadded));
     StringCbCopyA(basePadded, sizeof(basePadded), baseUtf8);
-
-    free(baseUtf8);
 
     if (!QioWriteBuffer(stdOut, basePadded, DVM_FILENAME_SIZE))
         FcReportError(GetLastError(), TRUE, L"send filename to dispVM");
