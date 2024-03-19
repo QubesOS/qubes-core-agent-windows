@@ -58,7 +58,7 @@ static void ProduceMessage(IN DWORD errorCode, IN DWORD icon, IN const WCHAR *fo
         NULL,
         errorCode,
         MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        message,
+        (LPWSTR)&message,
         0,
         NULL);
 
