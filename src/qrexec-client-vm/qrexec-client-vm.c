@@ -38,7 +38,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 {
     HANDLE readPipe, writePipe;
     BOOL success = FALSE;
-    PWSTR pipeName = L"\\\\.\\pipe\\qrexec_trigger";
+    PWSTR pipeName = L"\\\\.\\pipe\\qrexec_trigger"; // FIXME hardcoded path
     struct trigger_service_params triggerParams = { 0 };
     ULONG status;
     UCHAR *argumentUtf8;

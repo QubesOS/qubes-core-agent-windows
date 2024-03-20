@@ -81,50 +81,6 @@ struct _connection_info
 #define MAX_FDS 128
 static struct _connection_info connection_info[MAX_FDS];
 
-static void register_vchan_connection(HANDLE handle, int domain, int port)
-{
-    AcquireSRWLockExclusive(&g_ConnectionsHandlesLock);
-    for (int i = 0; i < MAX_FDS; i++)
-    {
-        if (connection_info[i].handle == NULL)
-        {
-            connection_info[i].handle = handle;
-            connection_info[i].connect_domain = domain;
-            connection_info[i].connect_port = port;
-            ReleaseSRWLockExclusive(&g_ConnectionsHandlesLock);
-            return;
-        }
-    }
-    ReleaseSRWLockExclusive(&g_ConnectionsHandlesLock);
-    LogError("No free slot for child %p (connection to %d:%d)", handle, domain, port);
-}
-
-static void release_connection(int id)
-{
-    struct msg_header hdr;
-    struct exec_params params;
-
-    HANDLE handle = connection_info[id].handle;
-    hdr.type = MSG_CONNECTION_TERMINATED;
-    hdr.len = sizeof(struct exec_params);
-    params.connect_domain = connection_info[id].connect_domain;
-    params.connect_port = connection_info[id].connect_port;
-    if (libvchan_send(g_DaemonVchan, &hdr, sizeof(hdr)) != sizeof(hdr))
-    {
-        LogError("send (MSG_CONNECTION_TERMINATED hdr)");
-        return;
-    }
-    if (libvchan_send(g_DaemonVchan, &params, sizeof(params)) != sizeof(params))
-    {
-        LogError("send (MSG_CONNECTION_TERMINATED data)");
-        return;
-    }
-    CloseHandle(handle);
-    connection_info[id].handle = NULL;
-    return;
-}
-
-
 /**
  * @brief Wait for qubesdb service to start.
  * @return TRUE if a connection could be opened, FALSE if timed out (60 seconds).
@@ -208,7 +164,49 @@ cleanup:
     return status;
 }
 
+static void register_vchan_connection(HANDLE handle, int domain, int port)
+{
+    AcquireSRWLockExclusive(&g_ConnectionsHandlesLock);
+    for (int i = 0; i < MAX_FDS; i++)
+    {
+        if (connection_info[i].handle == NULL)
+        {
+            LogVerbose("child %p, %d:%d", handle, domain, port);
+            connection_info[i].handle = handle;
+            connection_info[i].connect_domain = domain;
+            connection_info[i].connect_port = port;
+            ReleaseSRWLockExclusive(&g_ConnectionsHandlesLock);
+            return;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_ConnectionsHandlesLock);
+    LogError("No free slot for child %p (connection to %d:%d)", handle, domain, port);
+    // FIXME: error
+}
+
+static void release_connection(int id)
+{
+    struct exec_params params;
+
+    HANDLE handle = connection_info[id].handle;
+    params.connect_domain = connection_info[id].connect_domain;
+    params.connect_port = connection_info[id].connect_port;
+    LogVerbose("child %p, %d:%d", handle, params.connect_domain, params.connect_port);
+
+    // data size is just sizeof(struct exec_params) so no command line
+    if (!VchanSendMessage(g_DaemonVchan, MSG_CONNECTION_TERMINATED, &params, sizeof(struct exec_params),
+        L"terminate connection"))
+    {
+        LogError("Failed to send MSG_CONNECTION_TERMINATED for %d:%d", params.connect_domain, params.connect_port);
+        // FIXME: error
+    }
+
+    CloseHandle(handle);
+    connection_info[id].handle = NULL;
+}
+
 // based on https://stackoverflow.com/a/780024
+// Caller must free the returned string.
 WCHAR* StrReplace(WCHAR const * const original,
         WCHAR const * const pattern,
         WCHAR const * const replacement
@@ -266,69 +264,58 @@ fail:
     return NULL;
 }
 
-
 /**
  * @brief Parse command line received via control vchan.
  * @param commandUtf8 Received command.
- * @param commandUtf16 Converted command. Must be freed by the caller on success.
- * @param userName Requested user name. This is a pointer inside commandUtf16.
- * @param commandLine Actual command line. This is a pointer inside commandUtf16.
+ * @param userName Requested user name. Must be freed by the caller on success.
+ * @param commandLine Actual command line. Must be freed by the caller on success.
  * @param runInteractively Determines whether the command should be run interactively.
  * @return Error code.
  */
-static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf16, OUT WCHAR **userName,
+static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
                               OUT WCHAR **commandLine, OUT BOOL *runInteractively)
 {
     DWORD status;
     WCHAR *separator = NULL;
-
-    LogVerbose("command '%S'", commandUtf8);
+    WCHAR *commandUtf16 = NULL;
 
     if (!commandUtf8 || !runInteractively)
         return ERROR_INVALID_PARAMETER;
 
-    *commandUtf16 = NULL;
     *userName = NULL;
     *commandLine = NULL;
     *runInteractively = TRUE;
 
-    *commandUtf16 = (WCHAR*) malloc(CONVERT_MAX_BUFFER_SIZE_UTF16);
-    if (!*commandUtf16)
+    commandUtf16 = (WCHAR*) malloc(CONVERT_MAX_BUFFER_SIZE_UTF16);
+    if (!commandUtf16)
     {
         return win_perror2(ERROR_OUTOFMEMORY, "allocating utf16 conversion buffer");
     }
 
-    status = ConvertUTF8ToUTF16(commandUtf8, *commandUtf16, NULL);
+    status = ConvertUTF8ToUTF16(commandUtf8, commandUtf16, NULL);
     if (ERROR_SUCCESS != status)
     {
-        free(*commandUtf16);
+        free(commandUtf16);
         return win_perror2(status, "ConvertUTF8ToUTF16(command)");
     }
 
-    LogInfo("Command: %s", *commandUtf16);
+    LogInfo("Command: %s", commandUtf16);
 
-    *userName = *commandUtf16;
-    separator = wcschr(*commandUtf16, L':');
+    separator = wcschr(commandUtf16, L':');
     if (!separator)
     {
-        free(*commandUtf16);
-        LogWarning("Command line is supposed to be in 'user:[nogui:]command' form\n");
+        free(commandUtf16);
+        LogWarning("Command line is supposed to be in 'user:[nogui:]command' form");
         return ERROR_INVALID_PARAMETER;
     }
 
     *separator = L'\0';
     separator++;
+    *userName = _wcsdup(commandUtf16);
 
     if (!wcsncmp(separator, L"nogui:", 6))
     {
         separator = wcschr(separator, L':');
-        if (!separator)
-        {
-            free(*commandUtf16);
-            LogWarning("Command line is supposed to be in user:[nogui:]command form\n");
-            return ERROR_INVALID_PARAMETER;
-        }
-
         *separator = L'\0';
         separator++;
 
@@ -337,11 +324,13 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf
 
     if (!wcscmp(*userName, L"SYSTEM") || !wcscmp(*userName, L"root"))
     {
+        free(*userName);
         *userName = NULL;
     }
 
-    *commandLine = separator;
+    *commandLine = _wcsdup(separator);
 
+    free(commandUtf16);
     LogVerbose("success");
 
     return ERROR_SUCCESS;
@@ -350,9 +339,10 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **commandUtf
 /**
  * @brief Recognize magic RPC request command ("QUBESRPC") and replace it with real
  *        command to be executed, after reading RPC service configuration.
+ *        If no RPC request is present, do nothing and set output params to NULL.
  * @param commandLine Command line received from vchan, may be modified.
  * @param serviceCommandLine Parsed service handler command if successful. Must be freed by the caller.
- * @param sourceDomainName Source domain (if available) to be set in environment, must be freed by caller.
+ * @param sourceDomainName Source domain (if available) to be set in environment. Must be freed by caller.
  * @return Error code.
  */
 static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceCommandLine, OUT WCHAR **sourceDomainName)
@@ -379,6 +369,12 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
     if (wcsncmp(commandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND)) == 0)
     {
         separator = wcschr(commandLine, L' ');
+        if (!separator)
+        {
+            LogError("malformed RPC request");
+            return ERROR_INVALID_OPERATION;
+        }
+
         separator++;
         serviceName = separator;
         separator = wcschr(serviceName, L' ');
@@ -389,13 +385,13 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             *sourceDomainName = _wcsdup(separator);
             if (*sourceDomainName == NULL)
             {
-                return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "_wcsdup");
+                return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "allocating memory for domain name");
             }
             LogDebug("source domain: '%s'", *sourceDomainName);
         }
         else
         {
-            LogInfo("No source domain given");
+            LogDebug("No source domain given");
             // Most qrexec services do not use source domain at all, so do not
             // abort if missing. This can be the case when RPC was triggered
             // manualy using qvm-run (qvm-run -p vmname "QUBESRPC service_name").
@@ -554,8 +550,6 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             StringCchCat(serviceFilePath, MAX_PATH + 1, serviceArgs);
         }
 
-        //free(rawServiceFilePath);
-
         // replace "%1" with an argument, if there was any, otherwise remove it
         if (!serviceCallArg)
             serviceCallArg = L"";
@@ -565,7 +559,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         {
             free(*sourceDomainName);
             *sourceDomainName = NULL;
-            return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "malloc");
+            return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "StrReplace");
         }
         LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);
     }
@@ -597,6 +591,7 @@ struct exec_params *ReceiveExecParams(IN int bufferSize)
         return NULL;
     }
 
+    LogDebug("domain %d, port %d, cmd: '%S'", params->connect_domain, params->connect_port, params->cmdline);
     return params;
 }
 
@@ -649,7 +644,7 @@ static DWORD StartChild(int domain, int port, PWSTR userName, PWSTR commandLine,
     *             command_line: local program to execute
     */
     if (!command)
-        return ERROR_NOT_ENOUGH_MEMORY;
+        return ERROR_OUTOFMEMORY;
 
     if (isServer)    flags |= 0x01;
     if (piped)       flags |= 0x02;
@@ -662,6 +657,8 @@ static DWORD StartChild(int domain, int port, PWSTR userName, PWSTR commandLine,
                     flags, QUBES_ARGUMENT_SEPARATOR,
                     commandLine);
 
+    LogDebug("domain %d, port %d, user '%s', isServer %d, piped %d, interactive %d, cmd '%s', final command '%s'",
+        domain, port, userName, isServer, piped, interactive, commandLine, command);
     // wrapper will run as current user (SYSTEM, we're a service)
     status = CreateNormalProcessAsCurrentUser(command, &wrapper);
     if (status == ERROR_SUCCESS)
@@ -801,8 +798,8 @@ DWORD HandleServiceRefused(IN const struct msg_header *header)
 /**
  * @brief Handle common prologue for exec messages. Header is already processed.
  * @param bufferSize Size of the exec_params buffer.
- * @param userName Requested user name.
- * @param commandLine Actual command line to execute locally. Set to NULL if command line parsing fails.
+ * @param userName Requested user name. Must be freed by the caller.
+ * @param commandLine Actual command line to execute locally. Set to NULL if command line parsing fails. Must be freed by the caller.
  * @param runInteractively Determines whether the local command should be run in the interactive session.
  * @return Exec params on success (even if parsing command line fails). Must be freed by the caller.
  */
@@ -810,7 +807,6 @@ struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OU
 {
     struct exec_params *exec = NULL;
     DWORD status;
-    WCHAR *command = NULL;
     WCHAR *remoteDomainName = NULL;
     WCHAR *serviceCommandLine = NULL;
 
@@ -823,24 +819,21 @@ struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OU
 
     *runInteractively = TRUE;
 
-    LogDebug("cmdline: '%S', domain %d, port %d", exec->cmdline, exec->connect_domain, exec->connect_port);
-
-    // command is allocated in the call, userName and commandLine are pointers to inside command
-    status = ParseUtf8Command(exec->cmdline, &command, userName, commandLine, runInteractively);
+    status = ParseUtf8Command(exec->cmdline, userName, commandLine, runInteractively);
     if (ERROR_SUCCESS != status)
     {
         LogError("ParseUtf8Command failed");
         return exec;
     }
 
-    LogDebug("command: '%s', user: '%s', parsed: '%s'", command, *userName, *commandLine);
+    LogDebug("user: '%s', interactive: %d, parsed: '%s'", *userName, *runInteractively, *commandLine);
 
     // serviceCommandLine and remoteDomainName are allocated in the call
     status = InterceptRPCRequest(*commandLine, &serviceCommandLine, &remoteDomainName);
     if (ERROR_SUCCESS != status)
     {
         LogWarning("InterceptRPCRequest failed");
-        free(command);
+        free(*commandLine);
         *commandLine = NULL;
         return exec;
     }
@@ -856,16 +849,14 @@ struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OU
     if (serviceCommandLine)
     {
         LogDebug("service command: '%s'", serviceCommandLine);
+        free(*commandLine);
         *commandLine = serviceCommandLine;
     }
     else
     {
-        // so caller can always free this
-        *commandLine = _wcsdup(*commandLine); // FIXME: memory leak
+        LogDebug("no service");
     }
 
-    *userName = _wcsdup(*userName);
-    free(command);
     LogDebug("success: cmd '%s', user '%s'", *commandLine, *userName);
 
     return exec;
@@ -897,17 +888,17 @@ static DWORD HandleExec(IN const struct msg_header *header, BOOL piped)
         status = StartChild(exec->connect_domain, exec->connect_port, userName, commandLine, FALSE, piped, interactive);
         if (ERROR_SUCCESS != status)
             LogError("StartChild(%s) failed", commandLine);
-
-        free(commandLine);
-        free(userName);
     }
     else
     {
+        LogDebug("Parsing the command line failed");
         // parsing failed, most likely unknown service - start the wrapper with dummy command line to send non-zero exit code through data vchan
         StartChild(exec->connect_domain, exec->connect_port, userName, L"dummy", FALSE, piped, interactive);
         status = ERROR_SUCCESS;
     }
 
+    free(commandLine);
+    free(userName);
     free(exec);
     return status;
 }
@@ -1001,8 +992,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
     // Don't do anything before qdb is available, otherwise advertise-tools may fail.
     if (!WaitForQdb())
     {
-        LogDebug("WaitForQdb failed");
-        return GetLastError();
+        return win_perror("WaitForQdb");
     }
 
     // We give a 5 minute timeout here because xeniface can take some time
@@ -1013,7 +1003,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
         return win_perror2(ERROR_INVALID_FUNCTION, "VchanInitServer");
 
     LogDebug("port %d: daemon vchan = %p", VCHAN_BASE_PORT, g_DaemonVchan);
-    LogInfo("Waiting for qrexec daemon connection, write buffer size: %d", VchanGetWriteBufferSize(g_DaemonVchan));
+    LogDebug("Waiting for qrexec daemon connection, write buffer size: %d", VchanGetWriteBufferSize(g_DaemonVchan));
 
     waitObjects[0] = stopEvent;
     waitObjects[1] = libvchan_fd_for_select(g_DaemonVchan);
@@ -1054,11 +1044,10 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
         if (1 == signaledEvent) // control vchan event
         {
-            // control vchan event
             EnterCriticalSection(&g_DaemonCriticalSection);
             if (!daemonConnected)
             {
-                LogInfo("qrexec-daemon has connected (event %d)");
+                LogDebug("qrexec-daemon has connected");
 
                 if (!VchanSendHello(g_DaemonVchan))
                 {
@@ -1086,7 +1075,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
 
             if (!libvchan_is_open(g_DaemonVchan)) // vchan broken
             {
-                LogWarning("vchan broken");
+                LogWarning("daemon disconnected");
                 LeaveCriticalSection(&g_DaemonCriticalSection);
                 break;
             }
