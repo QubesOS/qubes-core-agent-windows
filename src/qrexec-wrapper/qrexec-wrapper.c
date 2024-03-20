@@ -978,7 +978,6 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
 cleanup:
     LogVerbose("exiting");
-    DeleteCriticalSection(&g_VchanCs);
 
     if (child)
     {
