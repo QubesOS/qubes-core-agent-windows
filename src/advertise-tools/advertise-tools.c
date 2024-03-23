@@ -21,12 +21,15 @@
 
 #include <windows.h>
 #include <shlwapi.h>
+#include <strsafe.h>
 #include <wtsapi32.h>
 
+#include <exec.h>
 #include <qubesdb-client.h>
 #include <log.h>
 #include <config.h>
 
+// FIXME this should be in qubesdb
 #define QDB_PATH_PREFIX "/qubes-tools/"
 
 // userName needs to be freed with WtsFreeMemory
@@ -129,9 +132,19 @@ BOOL NotifyDom0(void)
     si.wShowWindow = SW_HIDE;
     si.dwFlags = STARTF_USESHOWWINDOW;
 
+    WCHAR cmdline[MAX_PATH];
+    DWORD status = StringCchPrintf(cmdline, ARRAYSIZE(cmdline), L"qrexec-client-vm.exe dom0%cqubes.NotifyTools%c(null)%c(null)",
+        QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR);
+    if (FAILED(status))
+    {
+        win_perror2(status, "formatting qrexec-client-vm command line");
+        return FALSE;
+    }
+
+    LogDebug("Child command: %s", cmdline);
     if (!CreateProcess(
         qrexecClientVmPath,
-        L"qrexec-client-vm.exe dom0|qubes.NotifyTools|(null)",
+        cmdline,
         NULL,
         NULL,
         FALSE,
@@ -169,7 +182,7 @@ int wmain(int argc, WCHAR *argv[])
 
     if (argc < 2)
     {
-        LogError("Usage: %s 0|1", argv[0]);
+        LogError("Usage: %s {0|1}", argv[0]);
         LogError("0 means tools are not installed");
         LogError("1 means tools are installed");
         return ERROR_BAD_ARGUMENTS;

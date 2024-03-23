@@ -824,7 +824,8 @@ void Usage(
     _In_ const PWSTR name
     )
 {
-    wprintf(L"Usage: %s domain|port|user_name|flags|command_line\n", name);
+    wprintf(L"Usage: %s domain%cport%cuser_name%cflags%ccommand_line\n", name, QUBES_ARGUMENT_SEPARATOR,
+        QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR);
     wprintf(L"domain:       remote domain for data vchan\n");
     wprintf(L"port:         remote port for data vchan\n");
     wprintf(L"user_name:    user name to use for the child process or (null) for current user\n");

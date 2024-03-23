@@ -63,8 +63,9 @@ void DumpRequestList(void)
     while (entry != &g_RequestList)
     {
         PSERVICE_REQUEST context = (PSERVICE_REQUEST)CONTAINING_RECORD(entry, SERVICE_REQUEST, ListEntry);
-        LogDebug("request %S, service %S, domain %S, cmd %s",
-                 context->ServiceParams.request_id, context->ServiceParams.service_name, context->ServiceParams.target_domain, context->CommandLine);
+        LogDebug("request %S, service %S, domain %S, user %s, cmd %s",
+                 context->ServiceParams.request_id, context->ServiceParams.service_name,
+            context->ServiceParams.target_domain, context->UserName, context->CommandLine);
         entry = entry->Flink;
     }
     LeaveCriticalSection(&g_RequestCriticalSection);
@@ -699,8 +700,9 @@ static PSERVICE_REQUEST FindServiceRequest(
 
     if (returnContext)
     {
-        LogDebug("found request: domain '%S', service '%S', command '%s'",
-                 returnContext->ServiceParams.target_domain, returnContext->ServiceParams.service_name, returnContext->CommandLine);
+        LogDebug("found request: domain '%S', service '%S', user '%s', command '%s'",
+                 returnContext->ServiceParams.target_domain, returnContext->ServiceParams.service_name,
+            returnContext->UserName, returnContext->CommandLine);
     }
     else
         LogDebug("request for '%S' not found", requestId);
@@ -719,12 +721,12 @@ DWORD HandleServiceConnect(IN const struct msg_header *header)
     struct exec_params *params = NULL;
     PSERVICE_REQUEST context = NULL;
 
-    LogDebug("msg 0x%x, len %d", header->type, header->len);
+    LogVerbose("msg 0x%x, len %d", header->type, header->len);
 
     params = ReceiveExecParams(header->len);
     if (!params)
     {
-        LogError("ReceiveCmdline failed");
+        LogError("ReceiveExecParams failed");
         return ERROR_INVALID_FUNCTION;
     }
 
@@ -739,8 +741,7 @@ DWORD HandleServiceConnect(IN const struct msg_header *header)
         goto cleanup;
     }
 
-    // TODO: should all service handlers run as current user (SYSTEM)?
-    status = StartChild(params->connect_domain, params->connect_port, NULL, context->CommandLine, TRUE, TRUE, TRUE);
+    status = StartChild(params->connect_domain, params->connect_port, context->UserName, context->CommandLine, TRUE, TRUE, TRUE);
     if (ERROR_SUCCESS != status)
         win_perror("StartChild");
 
@@ -750,7 +751,10 @@ DWORD HandleServiceConnect(IN const struct msg_header *header)
 
 cleanup:
     if (context)
+    {
+        free(context->UserName);
         free(context->CommandLine);
+    }
     free(context);
     free(params);
     return status;
@@ -780,8 +784,8 @@ DWORD HandleServiceRefused(IN const struct msg_header *header)
         return ERROR_INVALID_PARAMETER;
     }
 
-    LogInfo("Qrexec service refused by daemon: domain '%S', service '%S', local command '%s'",
-            context->ServiceParams.target_domain, context->ServiceParams.service_name, context->CommandLine);
+    LogInfo("Qrexec service refused by daemon: domain '%S', service '%S', user '%s, local command '%s'",
+            context->ServiceParams.target_domain, context->ServiceParams.service_name, context->UserName, context->CommandLine);
 
     // TODO: notify user?
 
@@ -789,6 +793,7 @@ DWORD HandleServiceRefused(IN const struct msg_header *header)
     RemoveEntryList(&context->ListEntry);
     LeaveCriticalSection(&g_RequestCriticalSection);
 
+    free(context->UserName);
     free(context->CommandLine);
     free(context);
 
@@ -813,7 +818,7 @@ struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OU
     exec = ReceiveExecParams(bufferSize);
     if (!exec)
     {
-        LogError("ReceiveCmdline failed");
+        LogError("ReceiveExecParams failed");
         return NULL;
     }
 
@@ -925,7 +930,7 @@ static DWORD HandleDaemonHello(struct msg_header *header)
     if (info.version < QREXEC_PROTOCOL_VERSION)
     {
         LogWarning("incompatible protocol version (%d instead of %d)",
-                 info.version, QREXEC_PROTOCOL_VERSION);
+                   info.version, QREXEC_PROTOCOL_VERSION);
         return ERROR_INVALID_FUNCTION;
     }
 
@@ -1146,15 +1151,17 @@ static void XifLogger(int level, const char *function, const WCHAR *format, va_l
 DWORD WINAPI PipeClientThread(PVOID param)
 {
     LONGLONG clientId = (LONGLONG)param;
-    DWORD status = ERROR_NOT_ENOUGH_MEMORY;
+    DWORD status = ERROR_OUTOFMEMORY;
     PSERVICE_REQUEST context;
-    size_t commandSize;
+    size_t stringSize;
 
     context = malloc(sizeof(SERVICE_REQUEST));
     if (!context)
         goto cleanup;
 
     context->CommandLine = NULL;
+    context->UserName = NULL;
+
     status = QpsRead(g_PipeServer, clientId, &context->ServiceParams, sizeof(context->ServiceParams));
     if (ERROR_SUCCESS != status)
     {
@@ -1162,30 +1169,51 @@ DWORD WINAPI PipeClientThread(PVOID param)
         goto cleanup;
     }
 
+    // user size, including null terminator
+    status = QpsRead(g_PipeServer, clientId, &stringSize, sizeof(stringSize));
+    if (ERROR_SUCCESS != status)
+    {
+        win_perror2(status, "QpsRead(user size)");
+        goto cleanup;
+    }
+
+    context->UserName = malloc(stringSize);
+    if (!context->UserName)
+    {
+        goto cleanup;
+    }
+
+    status = QpsRead(g_PipeServer, clientId, context->UserName, (DWORD)stringSize);
+    if (ERROR_SUCCESS != status)
+    {
+        win_perror2(status, "QpsRead(user)");
+        goto cleanup;
+    }
+
     // command line size, including null terminator
-    status = QpsRead(g_PipeServer, clientId, &commandSize, sizeof(commandSize));
+    status = QpsRead(g_PipeServer, clientId, &stringSize, sizeof(stringSize));
     if (ERROR_SUCCESS != status)
     {
         win_perror2(status, "QpsRead(cmd size)");
         goto cleanup;
     }
 
-    context->CommandLine = malloc(commandSize);
+    context->CommandLine = malloc(stringSize);
     if (!context->CommandLine)
     {
-        return ERROR_NOT_ENOUGH_MEMORY;
         goto cleanup;
     }
 
-    status = QpsRead(g_PipeServer, clientId, context->CommandLine, (DWORD)commandSize);
+    status = QpsRead(g_PipeServer, clientId, context->CommandLine, (DWORD)stringSize);
     if (ERROR_SUCCESS != status)
     {
-        return win_perror2(status, "QpsRead(cmd)");
+        win_perror2(status, "QpsRead(cmd)");
         goto cleanup;
     }
 
-    LogInfo("Received request from client %lu: domain '%S', service '%S', local command '%s', request id %lu",
-            clientId, context->ServiceParams.target_domain, context->ServiceParams.service_name, context->CommandLine, g_RequestId);
+    LogInfo("Received request from client %lu: domain '%S', service '%S', user '%s', local command '%s', request id %lu",
+            clientId, context->ServiceParams.target_domain, context->ServiceParams.service_name,
+            context->UserName, context->CommandLine, g_RequestId);
 
     QpsDisconnectClient(g_PipeServer, clientId);
 
@@ -1203,13 +1231,16 @@ DWORD WINAPI PipeClientThread(PVOID param)
     LeaveCriticalSection(&g_RequestCriticalSection);
 
     status = ERROR_SUCCESS;
-    // context and command line will be freed in HandleService*
+    // context and user/command line will be freed in HandleService*
 
 cleanup:
     if (status != ERROR_SUCCESS)
     {
         if (context)
+        {
+            free(context->UserName);
             free(context->CommandLine);
+        }
         free(context);
     }
     return status;

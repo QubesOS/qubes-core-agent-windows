@@ -36,5 +36,6 @@ typedef struct _SERVICE_REQUEST
 {
     LIST_ENTRY ListEntry;
     struct trigger_service_params ServiceParams;
+    PWSTR UserName; // user name for the service handler
     PWSTR CommandLine; // executable that will be the local service endpoint
 } SERVICE_REQUEST, *PSERVICE_REQUEST;

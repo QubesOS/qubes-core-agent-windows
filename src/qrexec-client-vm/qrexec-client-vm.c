@@ -44,19 +44,22 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     UCHAR *argumentUtf8;
     HRESULT hresult;
     size_t size;
-    PWSTR domainName, serviceName, commandLine;
+    PWSTR domainName, serviceName, userName, commandLine;
 
     domainName = GetArgument();
     serviceName = GetArgument();
+    userName = GetArgument();
     commandLine = GetArgument();
 
-    if (!domainName || !serviceName || !commandLine)
+    if (!domainName || !serviceName || !userName || !commandLine)
     {
-        LogError("Usage: %s domain name|qrexec service name|local program [local program arguments]\n", argv[0]);
+        LogError("Usage: %s domain name%cqrexec service name%clocal user name%clocal program [local program arguments]\n",
+            argv[0], QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR);
         return ERROR_INVALID_PARAMETER;
     }
 
-    LogDebug("domain '%s', service '%s', local command '%s'", domainName, serviceName, commandLine);
+    LogDebug("domain '%s', service '%s', user '%s', local command '%s'",
+        domainName, serviceName, userName, commandLine);
 
     // Prepare the parameter structure containing the first two arguments.
     argumentUtf8 = NULL;
@@ -83,13 +86,20 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     LogDebug("Connecting to qrexec-agent");
 
     if (ERROR_SUCCESS != QpsConnect(pipeName, &readPipe, &writePipe))
-        return (int)GetLastError(); // win_perror("open agent pipe");
+        return (int)win_perror("open agent pipe");
 
     CloseHandle(readPipe);
     LogDebug("Sending the parameters to qrexec-agent");
 
     if (!QioWriteBuffer(writePipe, &triggerParams, sizeof(triggerParams)))
         return win_perror("write trigger params to agent");
+
+    size = (wcslen(userName) + 1) * sizeof(WCHAR);
+    if (!QioWriteBuffer(writePipe, &size, sizeof(size)))
+        return win_perror("write user name size to agent");
+
+    if (!QioWriteBuffer(writePipe, userName, (DWORD)size))
+        return win_perror("write user name to agent");
 
     size = (wcslen(commandLine) + 1) * sizeof(WCHAR);
     if (!QioWriteBuffer(writePipe, &size, sizeof(size)))
