@@ -189,18 +189,6 @@ DWORD StartChild(
                 child->Stdout.WriteEndpoint,
                 child->Stderr.WriteEndpoint,
                 &child->Process);
-
-            if (ERROR_SUCCESS != status)
-            {
-                win_perror2(status, "CreatePipedProcessAsUser");
-                status = CreatePipedProcessAsCurrentUser(
-                    commandLine,
-                    interactive,
-                    child->Stdin.ReadEndpoint,
-                    child->Stdout.WriteEndpoint,
-                    child->Stderr.WriteEndpoint,
-                    &child->Process);
-            }
         }
         else // piped
         {

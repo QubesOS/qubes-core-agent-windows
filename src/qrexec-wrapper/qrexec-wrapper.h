@@ -24,6 +24,7 @@
 #include <libvchan.h>
 #include <qrexec.h>
 
+// TODO: make configurable
 #define DEFAULT_USER_PASSWORD_UNICODE   L"userpass"
 
 #define VCHAN_BUFFER_SIZE 65536
