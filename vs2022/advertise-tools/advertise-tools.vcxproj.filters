@@ -5,5 +5,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\advertise-tools\version.rc" />
+    <ResourceCompile Include="..\..\src\advertise-tools\advertise-tools.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\src\advertise-tools\advertise-tools.manifest" />
   </ItemGroup>
 </Project>

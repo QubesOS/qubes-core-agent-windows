@@ -20,7 +20,8 @@
  */
 
 #include <windows.h>
-#include <shlwapi.h>
+#include <PathCch.h>
+#include <Shlwapi.h>
 #include <strsafe.h>
 #include <wtsapi32.h>
 
@@ -28,6 +29,7 @@
 #include <qubesdb-client.h>
 #include <log.h>
 #include <config.h>
+#include <qubes-io.h>
 
 // FIXME this should be in qubesdb
 #define QDB_PATH_PREFIX "/qubes-tools/"
@@ -77,25 +79,26 @@ cleanup:
     return found;
 }
 
-// append a binary exe name to the tools installation directory, buffer size must be >= MAX_PATH
-BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
+// append a binary exe name to the tools installation directory
+BOOL PrepareExePath(OUT WCHAR *fullPath, DWORD pathSize, IN const WCHAR *exeName)
 {
-    if (ERROR_SUCCESS != CfgReadString(NULL, L"InstallDir", fullPath, MAX_PATH, NULL))
+    DWORD status = CfgReadString(NULL, L"InstallDir", fullPath, pathSize, NULL);
+    if (status != ERROR_SUCCESS)
     {
-        win_perror("CfgReadString(InstallDir)");
+        win_perror2(status, "CfgReadString(InstallDir)");
         return FALSE;
     }
 
     LogVerbose("exe: '%s', install dir: '%s'", exeName, fullPath);
 
-    if (!PathAppend(fullPath, L"bin"))
+    if (FAILED(status = PathCchAppendEx(fullPath, pathSize, L"bin", PATHCCH_ALLOW_LONG_PATHS)))
     {
-        win_perror("PathAppend(bin)");
+        win_perror2(status, "appending bin to path");
         return FALSE;
     }
-    if (!PathAppend(fullPath, exeName))
+    if (FAILED(status = PathCchAppendEx(fullPath, pathSize, exeName, PATHCCH_ALLOW_LONG_PATHS)))
     {
-        win_perror("PathAppend(exe)");
+        win_perror2(status, "appending exe name to path");
         return FALSE;
     }
 
@@ -107,11 +110,15 @@ BOOL PrepareExePath(OUT WCHAR *fullPath, IN const WCHAR *exeName)
 /* TODO - make this configurable? */
 BOOL CheckGuiAgentPresence(void)
 {
-    WCHAR serviceFilePath[MAX_PATH];
+    // this is a one-shot program, no need to cleanup allocations
+    WCHAR* serviceFilePath = malloc(MAX_PATH_LONG_WSIZE);
+    if (!serviceFilePath)
+        return FALSE;
 
     LogVerbose("start");
 
-    if (!PrepareExePath(serviceFilePath, L"gui-agent.exe"))
+    // FIXME hardcoded path
+    if (!PrepareExePath(serviceFilePath, MAX_PATH_LONG_WSIZE, L"gui-agent.exe"))
         return FALSE;
 
     return PathFileExists(serviceFilePath);
@@ -119,21 +126,28 @@ BOOL CheckGuiAgentPresence(void)
 
 BOOL NotifyDom0(void)
 {
-    WCHAR qrexecClientVmPath[MAX_PATH];
     STARTUPINFO si = { 0 };
     PROCESS_INFORMATION pi;
+    WCHAR* qrexecClientVmPath = malloc(MAX_PATH_LONG_WSIZE);
+    if (!qrexecClientVmPath)
+        return FALSE;
 
     LogVerbose("start");
 
-    if (!PrepareExePath(qrexecClientVmPath, L"qrexec-client-vm.exe"))
+    // FIXME hardcoded path
+    if (!PrepareExePath(qrexecClientVmPath, MAX_PATH_LONG_WSIZE, L"qrexec-client-vm.exe"))
         return FALSE;
 
     si.cb = sizeof(si);
     si.wShowWindow = SW_HIDE;
     si.dwFlags = STARTF_USESHOWWINDOW;
 
-    WCHAR cmdline[MAX_PATH];
-    DWORD status = StringCchPrintf(cmdline, ARRAYSIZE(cmdline), L"qrexec-client-vm.exe dom0%cqubes.NotifyTools%c(null)%c(null)",
+    WCHAR* cmdline = malloc(MAX_PATH_LONG_WSIZE);
+    if (!cmdline)
+        return FALSE;
+
+    // FIXME hardcoded path
+    DWORD status = StringCchPrintf(cmdline, MAX_PATH_LONG, L"qrexec-client-vm.exe dom0%cqubes.NotifyTools%c(null)%c(null)",
         QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR, QUBES_ARGUMENT_SEPARATOR);
     if (FAILED(status))
     {
