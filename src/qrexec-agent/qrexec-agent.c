@@ -631,8 +631,6 @@ BOOL VchanSendHello(
     return VchanSendMessage(vchan, MSG_HELLO, &info, sizeof(info), L"hello");
 }
 
-#define MAX_PATH_LONG 32768
-
 /**
  * @brief Start qrexec-wrapper process that will handle data vchan and child process I/O.
  * @param domain Data vchan domain.
