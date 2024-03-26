@@ -25,6 +25,7 @@
 #include <shlwapi.h>
 #include <assert.h>
 #include <crtdbg.h>
+#include <PathCch.h>
 #include <strsafe.h>
 
 #include "qrexec-agent.h"
@@ -40,6 +41,7 @@
 #include <exec.h>
 #include <utf8-conv.h>
 #include <pipe-server.h>
+#include <qubes-io.h>
 #include <list.h>
 
 libvchan_t *g_DaemonVchan;
@@ -317,6 +319,7 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
     if (!wcsncmp(separator, L"nogui:", 6))
     {
         separator = wcschr(separator, L':');
+#pragma warning (suppress:28182) // separator can't be NULL here
         *separator = L'\0';
         separator++;
 
@@ -348,226 +351,240 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
  */
 static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceCommandLine, OUT WCHAR **sourceDomainName)
 {
-    WCHAR *serviceName = NULL;
-    WCHAR *separator = NULL;
-    char serviceConfigContents[sizeof(WCHAR) * (MAX_PATH + 1)];
-    WCHAR serviceFilePath[MAX_PATH + 1];
-    WCHAR *rawServiceFilePath = NULL;
-    WCHAR *serviceArgs = NULL;
-    WCHAR *serviceCallArg = NULL;
-    HANDLE serviceConfigFile;
-    DWORD status;
-    DWORD cbRead;
-    DWORD pathLength;
+    DWORD status = ERROR_INVALID_PARAMETER;
+    HANDLE serviceConfigFile = INVALID_HANDLE_VALUE;
+    WCHAR* serviceFilePath = NULL;
+    char* serviceConfigContents = NULL;
 
     LogVerbose("cmd '%s'", commandLine);
 
     if (!commandLine || !serviceCommandLine || !sourceDomainName)
-        return ERROR_INVALID_PARAMETER;
+        goto end;
 
     *serviceCommandLine = *sourceDomainName = NULL;
 
-    if (wcsncmp(commandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND)) == 0)
+    status = ERROR_SUCCESS;
+    if (wcsncmp(commandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND)) != 0)
+        goto end;
+
+    serviceFilePath = calloc(sizeof(WCHAR), MAX_PATH_LONG);
+    if (!serviceFilePath)
+        goto end;
+
+    WCHAR* serviceName = NULL;
+    WCHAR* separator = wcschr(commandLine, L' ');
+    if (!separator)
     {
-        separator = wcschr(commandLine, L' ');
-        if (!separator)
-        {
-            LogError("malformed RPC request");
-            return ERROR_INVALID_OPERATION;
-        }
-
-        separator++;
-        serviceName = separator;
-        separator = wcschr(serviceName, L' ');
-        if (separator)
-        {
-            *separator = L'\0';
-            separator++;
-            *sourceDomainName = _wcsdup(separator);
-            if (*sourceDomainName == NULL)
-            {
-                return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "allocating memory for domain name");
-            }
-            LogDebug("source domain: '%s'", *sourceDomainName);
-        }
-        else
-        {
-            LogDebug("No source domain given");
-            // Most qrexec services do not use source domain at all, so do not
-            // abort if missing. This can be the case when RPC was triggered
-            // manualy using qvm-run (qvm-run -p vmname "QUBESRPC service_name").
-        }
-
-        // build RPC service config file path
-        // FIXME: use shell path APIs
-        ZeroMemory(serviceFilePath, sizeof(serviceFilePath));
-        if (!GetModuleFileName(NULL, serviceFilePath, MAX_PATH))
-        {
-            status = GetLastError();
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            return win_perror2(status, "GetModuleFileName");
-        }
-        // cut off file name (qrexec_agent.exe)
-        separator = wcsrchr(serviceFilePath, L'\\');
-        if (!separator)
-        {
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            LogError("Cannot find dir containing qrexec-agent.exe");
-            return ERROR_PATH_NOT_FOUND;
-        }
-        *separator = L'\0';
-        // cut off one dir (bin)
-        separator = wcsrchr(serviceFilePath, L'\\');
-        if (!separator)
-        {
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            LogError("Cannot find dir containing bin\\qrexec-agent.exe");
-            return ERROR_PATH_NOT_FOUND;
-        }
-        // Leave trailing backslash
-        separator++;
-        *separator = L'\0';
-        // FIXME hardcoded path
-        if (wcslen(serviceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(serviceName) > MAX_PATH)
-        {
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            LogError("RPC service config file path too long");
-            return ERROR_PATH_NOT_FOUND;
-        }
-
-        PathAppendW(serviceFilePath, L"qubes-rpc"); // FIXME hardcoded path
-        PathAppendW(serviceFilePath, serviceName);
-
-        serviceConfigFile = CreateFile(
-            serviceFilePath,    // file to open
-            GENERIC_READ,          // open for reading
-            FILE_SHARE_READ,       // share for reading
-            NULL,                  // default security
-            OPEN_EXISTING,         // existing file only
-            FILE_ATTRIBUTE_NORMAL, // normal file
-            NULL);                 // no attr. template
-
-        if (serviceConfigFile == INVALID_HANDLE_VALUE)
-        {
-            // maybe there is an argument appended? look for a file with
-            // +argument stripped
-            WCHAR *newsep = NULL;
-            newsep = wcschr(serviceName, L'+');
-            if (newsep)
-            {
-                *newsep = L'\0';
-                serviceCallArg = newsep+1;
-                // strip service+arg
-                newsep = wcsrchr(serviceFilePath, L'\\');
-                if (!newsep)
-                {
-                    // should never happen!
-                    free(*sourceDomainName);
-                    *sourceDomainName = NULL;
-                    LogError("Fail to construct a path for service+arg call");
-                    return ERROR_PATH_NOT_FOUND;
-                }
-                newsep++;
-                *newsep = L'\0';
-                PathAppendW(serviceFilePath, serviceName);
-
-                serviceConfigFile = CreateFile(
-                    serviceFilePath,    // file to open
-                    GENERIC_READ,          // open for reading
-                    FILE_SHARE_READ,       // share for reading
-                    NULL,                  // default security
-                    OPEN_EXISTING,         // existing file only
-                    FILE_ATTRIBUTE_NORMAL, // normal file
-                    NULL);                 // no attr. template
-            }
-        }
-
-        if (serviceConfigFile == INVALID_HANDLE_VALUE)
-        {
-            status = GetLastError(); // win_perror("CreateFile");
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            LogError("Failed to open service '%s' configuration file (%s)", serviceName, serviceFilePath);
-            return status;
-        }
-
-        cbRead = 0;
-        ZeroMemory(serviceConfigContents, sizeof(serviceConfigContents));
-
-        if (!ReadFile(serviceConfigFile, serviceConfigContents, sizeof(serviceConfigContents) - sizeof(WCHAR), &cbRead, NULL))
-        {
-            status = GetLastError(); // win_perror("ReadFile");
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            LogError("Failed to read RPC %s configuration file (%s)", serviceName, serviceFilePath);
-            CloseHandle(serviceConfigFile);
-            return status;
-        }
-        CloseHandle(serviceConfigFile);
-
-        size_t cfg_size;
-        status = ConvertUTF8ToUTF16Static(serviceConfigContents, &rawServiceFilePath, &cfg_size);
-        if (status != ERROR_SUCCESS)
-        {
-            win_perror2(status, "ConvertUTF8ToUTF16Static(serviceConfigContents)");
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            LogError("Failed to parse the encoding in RPC '%s' configuration file (%s)", serviceName, serviceFilePath);
-            return status;
-        }
-
-        // strip white chars (especially end-of-line) from string
-        pathLength = (ULONG)wcslen(rawServiceFilePath);
-        while (iswspace(rawServiceFilePath[pathLength - 1]))
-        {
-            pathLength--;
-            rawServiceFilePath[pathLength] = L'\0';
-        }
-
-        serviceArgs = PathGetArgs(rawServiceFilePath);
-        PathRemoveArgs(rawServiceFilePath);
-        PathUnquoteSpaces(rawServiceFilePath);
-        if (PathIsRelative(rawServiceFilePath))
-        {
-            // relative path are based in qubes-rpc-services
-            // reuse separator found when preparing previous file path
-            *separator = L'\0';
-            PathAppend(serviceFilePath, L"qubes-rpc-services"); // FIXME hardcoded path
-            PathAppend(serviceFilePath, rawServiceFilePath);
-        }
-        else
-        {
-            StringCchCopy(serviceFilePath, MAX_PATH + 1, rawServiceFilePath);
-        }
-
-        PathQuoteSpaces(serviceFilePath);
-        if (serviceArgs && serviceArgs[0] != L'\0')
-        {
-            StringCchCat(serviceFilePath, MAX_PATH + 1, L" ");
-            StringCchCat(serviceFilePath, MAX_PATH + 1, serviceArgs);
-        }
-
-        // replace "%1" with an argument, if there was any, otherwise remove it
-        if (!serviceCallArg)
-            serviceCallArg = L"";
-
-        *serviceCommandLine = StrReplace(serviceFilePath, L"%1", serviceCallArg);
-        if (*serviceCommandLine == NULL)
-        {
-            free(*sourceDomainName);
-            *sourceDomainName = NULL;
-            return win_perror2(ERROR_NOT_ENOUGH_MEMORY, "StrReplace");
-        }
-        LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);
+        LogError("malformed RPC request");
+        status =  ERROR_INVALID_OPERATION;
+        goto end;
     }
 
+    separator++;
+    serviceName = separator;
+    separator = wcschr(serviceName, L' ');
+    if (separator)
+    {
+        *separator = L'\0';
+        separator++;
+        status = ERROR_OUTOFMEMORY;
+        *sourceDomainName = _wcsdup(separator);
+        if (*sourceDomainName == NULL)
+            goto end;
+
+        LogDebug("source domain: '%s'", *sourceDomainName);
+    }
+    else
+    {
+        LogDebug("No source domain given");
+        // Most qrexec services do not use source domain at all, so do not
+        // abort if missing. This can be the case when RPC was triggered
+        // manualy using qvm-run (qvm-run -p vmname "QUBESRPC service_name").
+    }
+
+    // build RPC service config file path
+    // FIXME: use shell path APIs
+    if (!GetModuleFileName(NULL, serviceFilePath, MAX_PATH_LONG))
+    {
+        status = win_perror("GetModuleFileName");
+        goto end;
+    }
+
+    status = ERROR_PATH_NOT_FOUND;
+    // FIXME hardcoded path
+    // cut off file name (qrexec_agent.exe)
+    separator = wcsrchr(serviceFilePath, L'\\');
+    if (!separator)
+    {
+        LogError("Cannot find dir containing qrexec-agent.exe");
+        goto end;
+    }
+
+    *separator = L'\0';
+    // cut off one dir (bin)
+    separator = wcsrchr(serviceFilePath, L'\\');
+    if (!separator)
+    {
+        LogError("Cannot find dir containing bin\\qrexec-agent.exe");
+        goto end;
+    }
+
+    // Leave trailing backslash
+    separator++;
+    *separator = L'\0';
+    // FIXME hardcoded path
+    if (wcslen(serviceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(serviceName) > MAX_PATH_LONG - 1)
+    {
+        LogError("RPC service config file path too long");
+        goto end;
+    }
+
+    // FIXME hardcoded path
+    if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, L"qubes-rpc", PATHCCH_ALLOW_LONG_PATHS)))
+        goto end;
+
+    if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, serviceName, PATHCCH_ALLOW_LONG_PATHS)))
+        goto end;
+
+    LogDebug("service config file: %s", serviceFilePath);
+
+    serviceConfigFile = CreateFile(
+        serviceFilePath,       // file to open
+        GENERIC_READ,          // open for reading
+        FILE_SHARE_READ,       // share for reading
+        NULL,                  // default security
+        OPEN_EXISTING,         // existing file only
+        FILE_ATTRIBUTE_NORMAL, // normal file
+        NULL);                 // no attr. template
+
+    WCHAR* serviceCallArg = NULL;
+    if (serviceConfigFile == INVALID_HANDLE_VALUE)
+    {
+        // maybe there is an argument appended? look for a file with
+        // +argument stripped
+        WCHAR *newsep = NULL;
+        newsep = wcschr(serviceName, L'+');
+        if (newsep)
+        {
+            *newsep = L'\0';
+            serviceCallArg = newsep+1;
+            // strip service+arg
+            newsep = wcsrchr(serviceFilePath, L'\\');
+            assert(newsep != NULL);
+
+            newsep++;
+            *newsep = L'\0';
+            if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, serviceName, PATHCCH_ALLOW_LONG_PATHS)))
+                goto end;
+
+            LogDebug("service config file (with args): %s", serviceFilePath);
+
+            serviceConfigFile = CreateFile(
+                serviceFilePath,       // file to open
+                GENERIC_READ,          // open for reading
+                FILE_SHARE_READ,       // share for reading
+                NULL,                  // default security
+                OPEN_EXISTING,         // existing file only
+                FILE_ATTRIBUTE_NORMAL, // normal file
+                NULL);                 // no attr. template
+        }
+    }
+
+    if (serviceConfigFile == INVALID_HANDLE_VALUE)
+    {
+        status = win_perror("opening service config file");
+        goto end;
+    }
+
+    status = ERROR_OUTOFMEMORY;
+    serviceConfigContents = calloc(1, MAX_PATH_LONG);
+    if (!serviceConfigContents)
+        goto end;
+
+    DWORD cbRead = QioReadUntilEof(serviceConfigFile, serviceConfigContents, MAX_PATH_LONG - 1);
+    if (cbRead == 0)
+    {
+        status = win_perror("reading service config");
+        goto end;
+    }
+
+    WCHAR* rawServiceFilePath = NULL;
+    size_t cfg_size;
+    status = ConvertUTF8ToUTF16Static(serviceConfigContents, &rawServiceFilePath, &cfg_size);
+    if (status != ERROR_SUCCESS)
+    {
+        win_perror2(status, "ConvertUTF8ToUTF16Static(serviceConfigContents)");
+        goto end;
+    }
+
+    // strip white chars (especially end-of-line) from string
+    DWORD pathLength = (ULONG)wcslen(rawServiceFilePath);
+    while (iswspace(rawServiceFilePath[pathLength - 1]))
+    {
+        pathLength--;
+        rawServiceFilePath[pathLength] = L'\0';
+    }
+
+    WCHAR* serviceArgs = PathGetArgs(rawServiceFilePath);
+    PathRemoveArgs(rawServiceFilePath);
+    PathUnquoteSpaces(rawServiceFilePath);
+
+    if (PathIsRelative(rawServiceFilePath))
+    {
+        // relative path are based in qubes-rpc-services
+        // reuse separator found when preparing previous file path
+        *separator = L'\0';
+        if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, L"qubes-rpc-services", PATHCCH_ALLOW_LONG_PATHS))) // FIXME hardcoded path
+            goto end;
+        if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, rawServiceFilePath, PATHCCH_ALLOW_LONG_PATHS)))
+            goto end;
+    }
+    else
+    {
+        if (FAILED(status = StringCchCopy(serviceFilePath, MAX_PATH_LONG, rawServiceFilePath)))
+            goto end;
+    }
+
+    PathQuoteSpaces(serviceFilePath);
+    if (serviceArgs && serviceArgs[0] != L'\0')
+    {
+        if (FAILED(status = StringCchCat(serviceFilePath, MAX_PATH_LONG, L" ")))
+            goto end;
+        if (FAILED(status = StringCchCat(serviceFilePath, MAX_PATH_LONG, serviceArgs)))
+            goto end;
+    }
+
+    // replace "%1" with an argument, if there was any, otherwise remove it
+    if (!serviceCallArg)
+        serviceCallArg = L"";
+
+    *serviceCommandLine = StrReplace(serviceFilePath, L"%1", serviceCallArg);
+    if (*serviceCommandLine == NULL)
+    {
+        LogError("Failed to format service call with arguments");
+        status = ERROR_INVALID_DATA;
+        goto end;
+    }
+    LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);
+
+    status = ERROR_SUCCESS;
     LogVerbose("success");
 
-    return ERROR_SUCCESS;
+end:
+    if (status != ERROR_SUCCESS)
+    {
+        win_perror2(status, "");
+        if (sourceDomainName)
+        {
+            free(*sourceDomainName);
+            *sourceDomainName = NULL;
+        }
+    }
+    free(serviceFilePath);
+    free(serviceConfigContents);
+    if (serviceConfigFile != INVALID_HANDLE_VALUE)
+        CloseHandle(serviceConfigFile);
+    return status;
 }
 
 /**

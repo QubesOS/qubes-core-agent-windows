@@ -17,7 +17,11 @@
     <ClInclude Include="..\..\src\qrexec-agent\qrexec-agent.h" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="..\..\src\qrexec-agent\qrexec-agent.rc" />
     <ResourceCompile Include="..\..\src\qrexec-agent\version.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\src\qrexec-agent\qrexec-agent.manifest" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -61,6 +65,7 @@
     <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDE)</IncludePath>
@@ -68,6 +73,7 @@
     <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <GenerateManifest>false</GenerateManifest>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -80,7 +86,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;libvchan.lib;qubesdb-client.lib;windows-utils.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;pathcch.lib;libvchan.lib;qubesdb-client.lib;windows-utils.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>powershell $(ProjectDir)\..\..\set_version.ps1 $(ProjectDir)\..\..\version $(ProjectDir)\..\..\qwt_version.h</Command>
@@ -109,7 +115,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;libvchan.lib;qubesdb-client.lib;windows-utils.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);shlwapi.lib;pathcch.lib;libvchan.lib;qubesdb-client.lib;windows-utils.lib</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>powershell $(ProjectDir)\..\..\set_version.ps1 $(ProjectDir)\..\..\version $(ProjectDir)\..\..\qwt_version.h</Command>

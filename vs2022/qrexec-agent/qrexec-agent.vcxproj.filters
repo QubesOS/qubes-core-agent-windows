@@ -8,5 +8,9 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\src\qrexec-agent\version.rc" />
+    <ResourceCompile Include="..\..\src\qrexec-agent\qrexec-agent.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\src\qrexec-agent\qrexec-agent.manifest" />
   </ItemGroup>
 </Project>
