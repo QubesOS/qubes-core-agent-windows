@@ -118,7 +118,7 @@ BOOL CheckGuiAgentPresence(void)
     LogVerbose("start");
 
     // FIXME hardcoded path
-    if (!PrepareExePath(serviceFilePath, MAX_PATH_LONG_WSIZE, L"gui-agent.exe"))
+    if (!PrepareExePath(serviceFilePath, MAX_PATH_LONG, L"gui-agent.exe"))
         return FALSE;
 
     return PathFileExists(serviceFilePath);
@@ -135,7 +135,7 @@ BOOL NotifyDom0(void)
     LogVerbose("start");
 
     // FIXME hardcoded path
-    if (!PrepareExePath(qrexecClientVmPath, MAX_PATH_LONG_WSIZE, L"qrexec-client-vm.exe"))
+    if (!PrepareExePath(qrexecClientVmPath, MAX_PATH_LONG, L"qrexec-client-vm.exe"))
         return FALSE;
 
     si.cb = sizeof(si);
