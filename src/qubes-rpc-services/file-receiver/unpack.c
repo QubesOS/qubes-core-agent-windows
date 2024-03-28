@@ -20,11 +20,13 @@
  */
 
 #include <windows.h>
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <shlwapi.h>
 #include <strsafe.h>
+#include <PathCch.h>
 
 #include <utf8-conv.h>
 #include <qubes-io.h>
@@ -34,7 +36,9 @@
 #include "linux.h"
 #include "filecopy.h"
 
-char g_untrustedName[MAX_PATH_LENGTH];
+static_assert(FC_MAX_PATH < MAX_PATH_LONG, "FC_MAX_PATH must be lesser than MAX_PATH_LONG");
+
+char g_untrustedName[FC_MAX_PATH];
 INT64 g_bytesLimit = 0;
 INT64 g_filesLimit = 0;
 INT64 g_totalBytesReceived = 0;
@@ -43,7 +47,6 @@ ULONG g_crc32 = 0;
 
 extern HANDLE g_stdin;
 extern HANDLE g_stdout;
-extern WCHAR g_mappedDriveLetter;
 
 // FIXME: see how this differs from ConvertUTF8ToUTF16 and possibly update the latter
 static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
@@ -72,9 +75,12 @@ static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
 
         if (c < 0x80) {
             /* ASCII */
-            // check colon symbol ':'
-            if (c == 0x3a) {
+            if (c == ':') {
                 c = '_';
+            } else if (c == '/') {
+                // CanonicalizePath... APIs don't change slashes to backslashes
+                // this is needed to properly compare normalized path prefixes
+                c = '\\';
             }
             wcs[wpos++] = c;
         } else if (c >= 0xc2 && c < 0xe0 && upos < utflen &&
@@ -131,9 +137,10 @@ static inline int xutftowcs_path_ex(wchar_t *wcs, const char *utf,
     return result;
 }
 
+// wcs must have space for MAX_PATH_LONG WCHARs
 static inline int xutftowcs_path(wchar_t *wcs, const char *utf)
 {
-    return xutftowcs_path_ex(wcs, utf, MAX_PATH, -1);
+    return xutftowcs_path_ex(wcs, utf, MAX_PATH_LONG, -1);
 }
 
 void SetSizeLimit(IN INT64 bytesLimit, IN INT64 filesLimit)
@@ -163,18 +170,19 @@ void SendStatusAndCrc(IN UINT32 statusCode, IN const char *lastFileName OPTIONAL
     header.error_code = statusCode;
     header.crc32 = g_crc32;
     if (!QioWriteBuffer(g_stdout, &header, sizeof(header)))
-    {
-
-    }
+        exit((int)win_perror("sending status"));
 
     if (lastFileName)
     {
         headerExt.last_namelen = (UINT32)strlen(lastFileName);
-        QioWriteBuffer(g_stdout, &headerExt, sizeof(headerExt));
-        QioWriteBuffer(g_stdout, lastFileName, headerExt.last_namelen);
+        if (!QioWriteBuffer(g_stdout, &headerExt, sizeof(headerExt)))
+            exit((int)win_perror("sending last filename len"));
+        if (!QioWriteBuffer(g_stdout, lastFileName, headerExt.last_namelen))
+            exit((int)win_perror("sending last filename"));
     }
 }
 
+DECLSPEC_NORETURN
 void SendStatusAndExit(IN UINT32 statusCode, IN const char *lastFileName)
 {
     if (statusCode == LEGAL_EOF)
@@ -186,35 +194,102 @@ void SendStatusAndExit(IN UINT32 statusCode, IN const char *lastFileName)
     exit(statusCode);
 }
 
-void ProcessRegularFile(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
+// if untrustedPathUtf8 is a link target, linkPath needs to be a sanitized path of the link file
+// returns buffer that needs to be freed by the caller
+// sends status and exits on any failure
+WCHAR* SanitizePath(IN const WCHAR* incomingDir, IN const char* untrustedPathUtf8, IN const WCHAR* linkPath OPTIONAL)
 {
-    FC_COPY_STATUS copyStatus;
-    HANDLE outputFile;
-    WCHAR *untrustedFileName = NULL;
-    WCHAR trustedFilePath[MAX_PATH + 1];
+    LogVerbose("start");
+    WCHAR* untrustedPath = (WCHAR*)malloc(MAX_PATH_LONG_WSIZE);
+    if (!untrustedPath)
+        SendStatusAndExit(ENOMEM, untrustedPathUtf8);
+
+    int result = xutftowcs_path(untrustedPath, untrustedPathUtf8);
+    if (result <= 0)
+    {
+        LogError("Failed to convert untrusted path to UTF16");
+        SendStatusAndExit(EINVAL, untrustedPathUtf8);
+    }
+
+    LogDebug("untrusted path: '%s'", untrustedPath);
+
+    if (linkPath && !PathIsRelative(untrustedPath))
+    {
+        LogError("link target is not relative, link path: %s", linkPath);
+        SendStatusAndExit(EPERM, untrustedPathUtf8);
+    }
+
+    WCHAR* localPath = (WCHAR*)malloc(MAX_PATH_LONG_WSIZE);
+    if (!localPath)
+        SendStatusAndExit(ENOMEM, untrustedPathUtf8);
+
     HRESULT hresult;
 
-    untrustedFileName = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
-    if (!untrustedFileName)
-        SendStatusAndExit(EINVAL, NULL);
-    int result = xutftowcs_path(untrustedFileName, untrustedNameUtf8);
-    if (result <= 0)
-        SendStatusAndExit(EINVAL, NULL);
+    if (linkPath) // link targets are relative to the link itself
+    {
+        WCHAR* linkBase = wcsdup(linkPath);
+        hresult = PathCchRemoveFileSpec(linkBase, MAX_PATH_LONG);
+        if (FAILED(hresult))
+        {
+            win_perror2(hresult, "removing file name from link path");
+            SendStatusAndExit(EINVAL, untrustedPathUtf8);
+        }
 
-    LogDebug("file '%s'", untrustedFileName);
-    hresult = StringCchPrintf(
-        trustedFilePath,
-        RTL_NUMBER_OF(trustedFilePath),
-        L"%c:\\%s",
-        g_mappedDriveLetter,
-        untrustedFileName);
+        LogDebug("link base: %s", linkBase);
+        hresult = PathCchCombineEx(localPath, MAX_PATH_LONG, linkBase, untrustedPath, PATHCCH_ALLOW_LONG_PATHS);
+        if (FAILED(hresult))
+        {
+            win_perror2(hresult, "combining link target path");
+            SendStatusAndExit(EINVAL, untrustedPathUtf8);
+        }
+        free(linkBase);
+    }
+    else
+    {
+        hresult = PathCchCombineEx(localPath, MAX_PATH_LONG, incomingDir, untrustedPath, PATHCCH_ALLOW_LONG_PATHS);
+        if (FAILED(hresult))
+        {
+            win_perror2(hresult, "combining full path");
+            SendStatusAndExit(EINVAL, untrustedPathUtf8);
+        }
+    }
 
-    free(untrustedFileName);
+    free(untrustedPath);
 
+    LogDebug("combined path: '%s'", localPath);
+
+    WCHAR* trustedPath = (WCHAR*)malloc(MAX_PATH_LONG_WSIZE);
+    if (!trustedPath)
+        SendStatusAndExit(ENOMEM, untrustedPathUtf8);
+
+    // slashes must be converted to backslashes already
+    hresult = PathCchCanonicalizeEx(trustedPath, MAX_PATH_LONG, localPath, PATHCCH_ALLOW_LONG_PATHS);
     if (FAILED(hresult))
-        SendStatusAndExit(EINVAL, untrustedNameUtf8);
+    {
+        win_perror2(hresult, "canonicalizing trusted path");
+        SendStatusAndExit(EINVAL, untrustedPathUtf8);
+    }
 
-    outputFile = CreateFile(trustedFilePath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, 0, NULL);	/* safe because of chroot */
+    free(localPath);
+    // we know canonicalFilePath is absolute, check if it really starts with incomingDir
+    if (!PathIsPrefix(incomingDir, trustedPath))
+    {
+        LogError("canonical path '%s' is not within incoming dir '%s'", trustedPath, incomingDir);
+        SendStatusAndExit(EINVAL, untrustedPathUtf8);
+    }
+
+    LogDebug("trusted path: '%s'", trustedPath);
+    LogVerbose("end");
+    return trustedPath;
+}
+
+void ProcessRegularFile(IN const WCHAR* incomingDir, IN const struct file_header *untrustedHeader,
+    IN const char *untrustedNameUtf8)
+{
+    LogVerbose("start");
+    WCHAR* trustedPath = SanitizePath(incomingDir, untrustedNameUtf8, NULL);
+
+    HANDLE outputFile = CreateFile(trustedPath, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, 0, NULL);
     if (INVALID_HANDLE_VALUE == outputFile)
     {
         // maybe some more complete error code translation needed here, but
@@ -232,139 +307,70 @@ void ProcessRegularFile(IN const struct file_header *untrustedHeader, IN const c
         SendStatusAndExit(EDQUOT, untrustedNameUtf8);
 
     // receive file data from stdin
-    copyStatus = FcCopyFile(outputFile, g_stdin, untrustedHeader->filelen, &g_crc32, NULL);
+    LogInfo("receiving file: '%s'", trustedPath);
+    free(trustedPath);
+
+    FC_COPY_STATUS copyStatus = FcCopyFile(outputFile, g_stdin, untrustedHeader->filelen, &g_crc32, NULL);
     if (copyStatus != COPY_FILE_OK)
-    {
         SendStatusAndExit(EIO, untrustedNameUtf8);
-    }
 
     CloseHandle(outputFile);
+    LogVerbose("end");
 }
 
-void ProcessDirectory(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
+void ProcessDirectory(IN const WCHAR* incomingDir, IN const struct file_header *untrustedHeader,
+    IN const char *untrustedNameUtf8)
 {
-    ULONG errorCode;
-    WCHAR *untrustedDirectoryName = NULL;
-    WCHAR trustedDirectoryPath[MAX_PATH + 1];
-    HRESULT hresult;
+    LogVerbose("start");
+    WCHAR* trustedPath = SanitizePath(incomingDir, untrustedNameUtf8, NULL);
 
-    untrustedDirectoryName = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
-    if (!untrustedDirectoryName)
-        SendStatusAndExit(EINVAL, NULL);
-    int result = xutftowcs_path(untrustedDirectoryName, untrustedNameUtf8);
-    if (result <= 0)
-        SendStatusAndExit(EINVAL, NULL);
-
-    LogDebug("dir '%s'", untrustedDirectoryName);
-    hresult = StringCchPrintf(
-        trustedDirectoryPath,
-        RTL_NUMBER_OF(trustedDirectoryPath),
-        L"%c:\\%s",
-        g_mappedDriveLetter,
-        untrustedDirectoryName);
-    free(untrustedDirectoryName);
-
-    if (FAILED(hresult))
-        SendStatusAndExit(EINVAL, untrustedNameUtf8);
-
-    if (!CreateDirectory(trustedDirectoryPath, NULL))
-    {	/* safe because of chroot */
-        errorCode = GetLastError();
+    LogInfo("creating directory: '%s'", trustedPath);
+    if (!CreateDirectory(trustedPath, NULL))
+    {
+        DWORD errorCode = GetLastError();
         if (ERROR_ALREADY_EXISTS != errorCode)
             SendStatusAndExit(ENOTDIR, untrustedNameUtf8);
     }
+
+    free(trustedPath);
+    LogVerbose("end");
 }
 
-void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *untrustedNameUtf8)
+void ProcessLink(IN const WCHAR* incomingDir, IN const struct file_header *untrustedHeader,
+    IN const char *untrustedNameUtf8)
 {
-    char untrustedLinkTargetPathUtf8[MAX_PATH_LENGTH];
-    DWORD linkTargetSize;
-    WCHAR *untrustedName = NULL;
-    WCHAR trustedFilePath[MAX_PATH + 1];
-    WCHAR *untrustedLinkTargetPath = NULL;
-    WCHAR untrustedLinkTargetAbsolutePath[MAX_PATH + 1];
-    BOOL success;
-    HRESULT hresult;
-    BOOL targetIsFile = FALSE; /* default to directory links */
+    LogVerbose("start");
+    WCHAR* trustedLinkPath = SanitizePath(incomingDir, untrustedNameUtf8, NULL);
 
-    untrustedName = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
-    if (!untrustedName)
-        SendStatusAndExit(EINVAL, NULL);
-    int result = xutftowcs_path(untrustedName, untrustedNameUtf8);
-    if (result <= 0)
-        SendStatusAndExit(EINVAL, NULL);
-
-    LogDebug("link '%s'", untrustedName);
-    hresult = StringCchPrintf(
-        trustedFilePath,
-        RTL_NUMBER_OF(trustedFilePath),
-        L"%c:\\%s",
-        g_mappedDriveLetter,
-        untrustedName);
-
-    free(untrustedName);
-
-    if (FAILED(hresult))
-        SendStatusAndExit(EINVAL, untrustedNameUtf8);
-
-    if (untrustedHeader->filelen > MAX_PATH - 1)
+    if (untrustedHeader->filelen > FC_MAX_PATH - 1)
         SendStatusAndExit(ENAMETOOLONG, untrustedNameUtf8);
 
-    linkTargetSize = (DWORD) untrustedHeader->filelen; // sanitized above
+    DWORD linkTargetSize = (DWORD) untrustedHeader->filelen; // sanitized above
+
+    char* untrustedLinkTargetPathUtf8 = (char*)malloc(FC_MAX_PATH);
+    if (!untrustedLinkTargetPathUtf8)
+        SendStatusAndExit(ENOMEM, untrustedNameUtf8);
+
     if (!ReadWithCrc(g_stdin, untrustedLinkTargetPathUtf8, linkTargetSize))
         SendStatusAndExit(EIO, untrustedNameUtf8);
 
     untrustedLinkTargetPathUtf8[linkTargetSize] = 0;
 
-    untrustedLinkTargetPath = (WCHAR*)calloc((MAX_PATH + 1) * sizeof(WCHAR), 1);
-    if (!untrustedLinkTargetPath)
-        SendStatusAndExit(EINVAL, NULL);
-    result = xutftowcs_path(untrustedLinkTargetPath, untrustedLinkTargetPathUtf8);
-    if (result <= 0)
-        SendStatusAndExit(EINVAL, untrustedNameUtf8);
+    WCHAR* trustedLinkTargetPath = SanitizePath(incomingDir, untrustedLinkTargetPathUtf8, trustedLinkPath);
 
-    LogDebug("target '%s'", untrustedLinkTargetPath);
-    /* TODO? sanitize link target path in any way? we don't allow to override
-     * existing files, so this shouldn't be a problem to leave it alone */
+    free(untrustedLinkTargetPathUtf8);
+    LogInfo("target: '%s'", trustedLinkTargetPath);
 
-    /* try to determine if link target is a file or directory */
-    if (PathIsRelative(untrustedLinkTargetPath))
-    {
-        WCHAR tempPath[MAX_PATH + 1];
+    DWORD linkFlags = SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE;
+    if (PathIsDirectory(trustedLinkTargetPath))
+        linkFlags |= SYMBOLIC_LINK_FLAG_DIRECTORY;
 
-        hresult = StringCchPrintfW(
-            tempPath,
-            RTL_NUMBER_OF(tempPath),
-            L"%c:\\%s",
-            g_mappedDriveLetter,
-            untrustedLinkTargetPath);
-
-        *(PathFindFileName(tempPath)) = L'\0';
-        if (!PathCombine(untrustedLinkTargetAbsolutePath, tempPath, untrustedLinkTargetPath))
-        {
-            free(untrustedLinkTargetPath);
-            SendStatusAndExit(EINVAL, untrustedNameUtf8);
-        }
-
-        if (PathFileExists(untrustedLinkTargetAbsolutePath) && !PathIsDirectory(untrustedLinkTargetAbsolutePath))
-        {
-            targetIsFile = TRUE;
-        }
-    }
-    else
-    {
-        free(untrustedLinkTargetPath);
-        /* deny absolute links */
-        SendStatusAndExit(EPERM, untrustedNameUtf8);
-    }
-
-    success = CreateSymbolicLink(trustedFilePath, untrustedLinkTargetPath,
-        targetIsFile ? 0 : SYMBOLIC_LINK_FLAG_DIRECTORY);
-
-    free(untrustedLinkTargetPath);
+    LogInfo("creating link: '%s' -> '%s'", trustedLinkPath, trustedLinkTargetPath);
+    BOOL success = CreateSymbolicLink(trustedLinkPath, trustedLinkTargetPath, linkFlags);
 
     if (!success)
     {
+        win_perror("CreateSymbolicLink");
         if (GetLastError() == ERROR_FILE_EXISTS)
             SendStatusAndExit(EEXIST, untrustedNameUtf8);
         else if (GetLastError() == ERROR_ACCESS_DENIED)
@@ -374,33 +380,42 @@ void ProcessLink(IN const struct file_header *untrustedHeader, IN const char *un
         else
             SendStatusAndExit(EIO, untrustedNameUtf8);
     }
+
+    free(trustedLinkPath);
+    free(trustedLinkTargetPath);
+    LogVerbose("end");
 }
 
-void ProcessEntry(IN const struct file_header *untrustedHeader)
+void ProcessEntry(IN const WCHAR* incomingDir, IN const struct file_header *untrustedHeader)
 {
     UINT32 nameSize;
 
-    if (untrustedHeader->namelen > MAX_PATH_LENGTH - 1)
+    LogVerbose("start");
+    if (untrustedHeader->namelen > FC_MAX_PATH - 1)
         SendStatusAndExit(ENAMETOOLONG, NULL);
 
     nameSize = untrustedHeader->namelen;	/* sanitized above */
     if (!ReadWithCrc(g_stdin, g_untrustedName, nameSize))
         SendStatusAndExit(LEGAL_EOF, NULL);	// hopefully remote has produced error message
 
+    LogDebug("mode 0x%x", untrustedHeader->mode);
+
     g_untrustedName[nameSize] = 0;
     if (S_ISREG(untrustedHeader->mode))
-        ProcessRegularFile(untrustedHeader, g_untrustedName);
+        ProcessRegularFile(incomingDir, untrustedHeader, g_untrustedName);
     else if (S_ISLNK(untrustedHeader->mode))
-        ProcessLink(untrustedHeader, g_untrustedName);
+        ProcessLink(incomingDir, untrustedHeader, g_untrustedName);
     else if (S_ISDIR(untrustedHeader->mode))
-        ProcessDirectory(untrustedHeader, g_untrustedName);
+        ProcessDirectory(incomingDir, untrustedHeader, g_untrustedName);
     else
         SendStatusAndExit(EINVAL, g_untrustedName);
+    LogVerbose("end");
 }
 
-int ReceiveFiles(void)
+int ReceiveFiles(IN const WCHAR* incomingDir)
 {
     struct file_header untrustedHeader;
+    LogDebug("incoming dir: %s", incomingDir);
 
     /* initialize checksum */
     g_crc32 = 0;
@@ -413,7 +428,7 @@ int ReceiveFiles(void)
             break;
         }
 
-        ProcessEntry(&untrustedHeader);
+        ProcessEntry(incomingDir, &untrustedHeader);
         g_totalFilesReceived++;
 
         if (g_filesLimit && g_totalFilesReceived > g_filesLimit)

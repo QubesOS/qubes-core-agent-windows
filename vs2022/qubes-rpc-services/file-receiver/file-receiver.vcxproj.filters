@@ -7,9 +7,12 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-receiver\version.rc" />
+    <ResourceCompile Include="..\..\..\src\qubes-rpc-services\file-receiver\file-receiver.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\src\qubes-rpc-services\file-receiver\wdk.h" />
     <ClInclude Include="..\..\..\src\qubes-rpc-services\common\filecopy.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Manifest Include="..\..\..\src\qubes-rpc-services\file-receiver\file-receiver.manifest" />
   </ItemGroup>
 </Project>

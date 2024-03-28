@@ -377,7 +377,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 {
     int i;
     WCHAR *directory, *baseName;
-    WCHAR currentDirectory[MAX_PATH_LENGTH];
+    WCHAR currentDirectory[FC_MAX_PATH];
 
     LogVerbose("start");
     g_stderr = GetStdHandle(STD_ERROR_HANDLE);
