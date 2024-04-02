@@ -244,7 +244,7 @@ static INT64 GetFileSizeByPath(IN const WCHAR *filePath)
 
     file = CreateFile(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
     if (file == INVALID_HANDLE_VALUE)
-        FcReportError(GetLastError(), TRUE, L"Cannot open file '%s'L 0x%x", filePath, GetLastError());
+        FcReportError(GetLastError(), TRUE, L"Cannot open file '%s': 0x%x", filePath, GetLastError());
 
     if (!GetFileSizeEx(file, &fileSize))
     {
