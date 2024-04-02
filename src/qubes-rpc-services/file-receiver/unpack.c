@@ -227,7 +227,7 @@ WCHAR* SanitizePath(IN const WCHAR* incomingDir, IN const char* untrustedPathUtf
 
     if (linkPath) // link targets are relative to the link itself
     {
-        WCHAR* linkBase = wcsdup(linkPath);
+        WCHAR* linkBase = _wcsdup(linkPath);
         hresult = PathCchRemoveFileSpec(linkBase, MAX_PATH_LONG);
         if (FAILED(hresult))
         {
