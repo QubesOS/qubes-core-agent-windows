@@ -10,11 +10,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "advertise-tools", "advertis
 		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ask-vm-and-run", "ask-vm-and-run\ask-vm-and-run.vcxproj", "{7A56571F-5D48-4A43-AB74-1B5187D1296A}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
-	EndProjectSection
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "network-setup", "network-setup\network-setup.vcxproj", "{5D0859E7-D37C-4A31-B671-75093351474D}"
 	ProjectSection(ProjectDependencies) = postProject
 		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
@@ -111,10 +106,6 @@ Global
 		{2370A07A-AEEB-4375-9E61-A986607D986A}.Debug|x64.Build.0 = Debug|x64
 		{2370A07A-AEEB-4375-9E61-A986607D986A}.Release|x64.ActiveCfg = Release|x64
 		{2370A07A-AEEB-4375-9E61-A986607D986A}.Release|x64.Build.0 = Release|x64
-		{7A56571F-5D48-4A43-AB74-1B5187D1296A}.Debug|x64.ActiveCfg = Debug|x64
-		{7A56571F-5D48-4A43-AB74-1B5187D1296A}.Debug|x64.Build.0 = Debug|x64
-		{7A56571F-5D48-4A43-AB74-1B5187D1296A}.Release|x64.ActiveCfg = Release|x64
-		{7A56571F-5D48-4A43-AB74-1B5187D1296A}.Release|x64.Build.0 = Release|x64
 		{5D0859E7-D37C-4A31-B671-75093351474D}.Debug|x64.ActiveCfg = Debug|x64
 		{5D0859E7-D37C-4A31-B671-75093351474D}.Debug|x64.Build.0 = Debug|x64
 		{5D0859E7-D37C-4A31-B671-75093351474D}.Release|x64.ActiveCfg = Release|x64

@@ -1,3 +1,0 @@
-#define QWT_FILEDESCRIPTION_STR "Qubes VM selector"
-
-#include "..\version_common.rc"
