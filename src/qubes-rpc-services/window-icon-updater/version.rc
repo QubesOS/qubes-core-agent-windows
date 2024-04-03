@@ -1,3 +1,0 @@
-#define QWT_FILEDESCRIPTION_STR "Qubes window icon updater service"
-
-#include "..\..\version_common.rc"

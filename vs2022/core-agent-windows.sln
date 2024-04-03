@@ -87,11 +87,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "wait-for-logon", "qubes-rpc
 		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "window-icon-updater", "qubes-rpc-services\window-icon-updater\window-icon-updater.vcxproj", "{F7A9C9CD-BCD2-45F7-A241-414429B81A9D}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
-	EndProjectSection
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -166,10 +161,6 @@ Global
 		{AF84F8F2-E5B4-41DD-BED5-5B19D96F0A02}.Debug|x64.Build.0 = Debug|x64
 		{AF84F8F2-E5B4-41DD-BED5-5B19D96F0A02}.Release|x64.ActiveCfg = Release|x64
 		{AF84F8F2-E5B4-41DD-BED5-5B19D96F0A02}.Release|x64.Build.0 = Release|x64
-		{F7A9C9CD-BCD2-45F7-A241-414429B81A9D}.Debug|x64.ActiveCfg = Debug|x64
-		{F7A9C9CD-BCD2-45F7-A241-414429B81A9D}.Debug|x64.Build.0 = Debug|x64
-		{F7A9C9CD-BCD2-45F7-A241-414429B81A9D}.Release|x64.ActiveCfg = Release|x64
-		{F7A9C9CD-BCD2-45F7-A241-414429B81A9D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -185,7 +176,6 @@ Global
 		{9556A5D1-B82A-47BC-8050-A116EE418530} = {1F556433-3D35-4D84-8967-13A5D0D6D852}
 		{4A83998D-0C62-4A6E-98AC-7C7E009A6693} = {1F556433-3D35-4D84-8967-13A5D0D6D852}
 		{AF84F8F2-E5B4-41DD-BED5-5B19D96F0A02} = {1F556433-3D35-4D84-8967-13A5D0D6D852}
-		{F7A9C9CD-BCD2-45F7-A241-414429B81A9D} = {1F556433-3D35-4D84-8967-13A5D0D6D852}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {8B8C68D4-53CD-4B0C-9D38-5B25C44763B5}
