@@ -286,8 +286,10 @@ BOOL VchanSendMessage(
 
     if (!libvchan_is_open(vchan))
     {
+        LogError("vchan is closed");
         goto cleanup;
     }
+
     if (!VchanSendBuffer(vchan, &header, sizeof(header), L"header"))
     {
         LogError("VchanSendBuffer(header for %s) failed", what);
@@ -604,16 +606,15 @@ static DWORD handle_child_output(
         goto cleanup;
     }
 
-    LogVerbose("start");
+    LogVerbose("start (type %d)", pipe_type);
 
     eof = FALSE;
     while (!eof)
     {
-        DWORD nread, ok;
+        DWORD nread;
 
         LogVerbose("reading...");
-        ok = ReadFile(pipe->ReadEndpoint, buffer, MAX_DATA_CHUNK,
-                      &nread, NULL); // this can block
+        BOOL ok = ReadFile(pipe->ReadEndpoint, buffer, MAX_DATA_CHUNK, &nread, NULL); // this can block
         //
         // EOF is signaled by either:
         // - ok and nread == 0
@@ -631,16 +632,23 @@ static DWORD handle_child_output(
         eof = nread == 0;
         // EOF is signaled to the remote via zero count
         LogVerbose("read %lu 0x%lx", nread, nread);
-        if (!VchanSendData(child, buffer, nread, pipe_type))
+        //hex_dump("child data", buffer, nread);
+
+        // don't send EOF here, this will disconnect us before we potentially send everything
+        // EOF is sent on child process exit
+        if (nread > 0)
         {
-            LogError("VchanSendData failed");
-            goto cleanup;
+            if (!VchanSendData(child, buffer, nread, pipe_type))
+            {
+                LogError("VchanSendData failed");
+                goto cleanup;
+            }
         }
     }
 
 cleanup:
     ClosePipe(pipe);
-    LogVerbose("exiting");
+    LogVerbose("exiting (type %d)", pipe_type);
     free(buffer);
     return 1;
 }
@@ -778,6 +786,15 @@ DWORD EventLoop(
             }
 
             LogDebug("child process exited with code %d", exitCode);
+
+            // wait for the threads to finish before sending exit code
+            waitObjects[0] = child->StdoutThread;
+            waitObjects[1] = child->StderrThread;
+
+            status = WaitForMultipleObjects(2, waitObjects, TRUE, 1000);
+            if (status == WAIT_FAILED || status == WAIT_TIMEOUT)
+                win_perror2(status, "wait for i/o threads");
+
             if (!VchanSendExitCode(child, exitCode))
                 LogError("sending exit code failed");
 
@@ -789,12 +806,6 @@ DWORD EventLoop(
         }
         }
     }
-
-    // wait for the threads to finish
-    waitObjects[0] = child->StdoutThread;
-    waitObjects[1] = child->StderrThread;
-
-    WaitForMultipleObjects(2, waitObjects, TRUE, 100);
 
     CloseHandle(child->StdoutThread);
     child->StdoutThread = NULL;
