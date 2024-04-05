@@ -20,7 +20,7 @@
  #>
 
 # Registry location for path hash -> full path mapping for GetImageRGBA
-$RegistryMapPath = 'HKLM:\Software\Invisible Things Lab\Qubes Tools'
+$RegistryMapPath = 'HKCU:\Software\Invisible Things Lab\Qubes Tools'
 $RegistryMapKey = 'AppMap'
 
 New-Item -Path $RegistryMapPath -Name $RegistryMapKey -Force | Out-Null
@@ -76,6 +76,7 @@ $shortcuts = get-childitem -path $p -filter "*.lnk" -rec
 $shortcuts | foreach-object {ProcessLink $_  $p }
 
 # Pinned Start Menu items
-$p = Join-Path $WshShell.SpecialFolders.item("AppData") "Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"
-$shortcuts = get-childitem -path $p -filter "*.lnk" -rec
-$shortcuts | foreach-object {ProcessLink $_  $p }
+# FIXME: this doesn't work in win10 and there seems to be no official way of getting pinned tiles
+#$p = Join-Path $WshShell.SpecialFolders.item("AppData") "Microsoft\Internet Explorer\Quick Launch\User Pinned\StartMenu"
+#$shortcuts = get-childitem -path $p -filter "*.lnk" -rec
+#$shortcuts | foreach-object {ProcessLink $_  $p }

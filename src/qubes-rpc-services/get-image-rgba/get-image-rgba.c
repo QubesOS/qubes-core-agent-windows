@@ -22,6 +22,7 @@
 #include <windows.h>
 #include <shlwapi.h>
 #include <shellapi.h>
+#include <strsafe.h>
 #include <commctrl.h>
 
 #include <stdio.h>
@@ -32,24 +33,24 @@
 #include <utf8-conv.h>
 #include <log.h>
 
+//#define WRITE_PPM
+
 // FIXME hardcoded reg path, use config library
 #define APP_MAP_KEY L"Software\\Invisible Things Lab\\Qubes Tools\\AppMap"
-#define MAX_PATH_LONG 32768
 #define INPUT_PREFIX "xdgicon:"
 
-DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
+// returns appmap hash
+WCHAR* GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
 {
-    char param[64] = { 0 };
-    DWORD status;
+    DWORD status = ERROR_SUCCESS;
     HKEY key = NULL;
-    WCHAR *valueName = NULL;
-    DWORD valueType;
-    DWORD size, i;
+    WCHAR* valueName = NULL;
 
     // Input is in the form of: xdgicon:name
     // Name is a sha1 hash of the file in this case, we'll look it up in the registry.
     // It's set by GetAppMenus Qubes service.
-    size = QioReadUntilEof(GetStdHandle(STD_INPUT_HANDLE), param, sizeof(param) - 1);
+    char param[64] = { 0 };
+    DWORD size = QioReadUntilEof(GetStdHandle(STD_INPUT_HANDLE), param, sizeof(param) - 1);
     if (size == 0)
     {
         status = win_perror("QioReadUntilEof(stdin)");
@@ -59,7 +60,7 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
     LogDebug("input: '%S'", param);
 
     // Strip whitespaces at the end.
-    for (i = RTL_NUMBER_OF(param) - 1; i > 0; i--)
+    for (size_t i = ARRAYSIZE(param) - 1; i > 0; i--)
     {
         if (param[i] == 0)
             continue;
@@ -74,86 +75,79 @@ DWORD GetShortcutPath(OUT WCHAR *linkPath, IN DWORD linkPathLength)
         }
     }
 
-    // convert ascii to wchar
-    if (ERROR_SUCCESS != ConvertUTF8ToUTF16Static(param, &valueName, NULL))
+    status = ConvertUTF8ToUTF16Static(param, &valueName, NULL);
+    if (status != ERROR_SUCCESS)
     {
-        status = win_perror("ConvertUTF8ToUTF16Static");
+        win_perror2(status, "ConvertUTF8ToUTF16Static");
         goto cleanup;
     }
 
     LogDebug("input converted: '%s'", valueName);
 
-    SetLastError(status = RegOpenKeyEx(HKEY_LOCAL_MACHINE, APP_MAP_KEY, 0, KEY_READ, &key));
+    status = RegOpenKeyEx(HKEY_CURRENT_USER, APP_MAP_KEY, 0, KEY_READ, &key);
     if (status != ERROR_SUCCESS)
     {
-        status = win_perror("RegOpenKeyEx(AppMap key)");
+        win_perror2(status, "RegOpenKeyEx(AppMap key)");
         goto cleanup;
     }
 
     size = linkPathLength * sizeof(WCHAR); // buffer size
-    SetLastError(status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (BYTE *) linkPath, &size));
+    DWORD valueType;
+    status = RegQueryValueEx(key, valueName + strlen(INPUT_PREFIX), NULL, &valueType, (BYTE *) linkPath, &size);
     if (status != ERROR_SUCCESS)
     {
-        status = win_perror("RegQueryValueEx");
+        win_perror2(status, "RegQueryValueEx");
         goto cleanup;
     }
 
     if (valueType != REG_SZ)
     {
-        SetLastError(status = ERROR_DATATYPE_MISMATCH);
-        win_perror("RegQueryValueEx");
+        status = ERROR_DATATYPE_MISMATCH;
+        LogError("AppMap(%s) registry value has incorrect format (0x%x)", valueName + strlen(INPUT_PREFIX), valueType);
         goto cleanup;
     }
+
+    status = ERROR_SUCCESS;
 
 cleanup:
     if (key)
         RegCloseKey(key);
-    return status;
+    SetLastError(status);
+    if (status == ERROR_SUCCESS)
+        valueName += strlen(INPUT_PREFIX);
+    else
+        valueName = NULL;
+    return valueName; // this value is a static buffer in ConvertUTF* library functions
 }
 
 int wmain(int argc, WCHAR *argv[])
 {
-    WCHAR *linkPath = NULL;
-    WORD pi = -1;
-    ICONINFO ii;
-    SHFILEINFO shfi = { 0 };
-    HICON ico = NULL;
-    HDC dc;
-    BITMAP bm;
-    DWORD size;
-    BYTE *buffer;
-    BITMAPINFO bmi;
-    int x, y;
-    HIMAGELIST imgList;
-    DWORD status;
-#ifdef WRITE_PPM
-    FILE *f1;
-#endif
-
-    status = ERROR_NOT_ENOUGH_MEMORY;
-    linkPath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
+    DWORD status = ERROR_OUTOFMEMORY;
+    WCHAR* linkPath = malloc(MAX_PATH_LONG_WSIZE);
     if (!linkPath)
         goto cleanup;
 
     // Set stdout to binary mode to prevent newline conversions.
-    _setmode(_fileno(stdout), _O_BINARY);
+    (void)_setmode(_fileno(stdout), _O_BINARY);
 
     // Read input and convert it to the shortcut path.
-    if (ERROR_SUCCESS != GetShortcutPath(linkPath, MAX_PATH_LONG))
+    WCHAR* hash = GetShortcutPath(linkPath, MAX_PATH_LONG);
+    if (!hash)
     {
-        status = win_perror("GetShortcutPath");
+        win_perror("GetShortcutPath");
         goto cleanup;
     }
 
     LogDebug("LinkPath: %s", linkPath);
 
-    CoInitialize(NULL);
+    (void)CoInitialize(NULL);
     // We use SHGFI_SYSICONINDEX and load the icon manually later, because icons retrieved by
     // SHGFI_ICON always have the shortcut arrow overlay even if the overlay is not visible
     // normally (eg. for start menu shortcuts).
     // https://devblogs.microsoft.com/oldnewthing/?p=11653
-    imgList = (HIMAGELIST)SHGetFileInfo(linkPath, 0, &shfi, sizeof(shfi), SHGFI_SYSICONINDEX);
-    LogDebug("SHGetFileInfo(%s) returned 0x%x, shfi.iIcon=%d", linkPath, imgList, shfi.iIcon);
+    SHFILEINFO shfi = { 0 };
+    HIMAGELIST imgList = (HIMAGELIST)SHGetFileInfo(linkPath, 0, &shfi, sizeof(shfi), SHGFI_SYSICONINDEX);
+    LogDebug("shfi.iIcon=%d", shfi.iIcon);
     if (!imgList)
     {
         status = win_perror("SHGetFileInfo(SHGFI_SYSICONINDEX)");
@@ -161,7 +155,7 @@ int wmain(int argc, WCHAR *argv[])
     }
 
     // Retrieve the icon directly from the system image list
-    ico = ImageList_GetIcon(imgList, shfi.iIcon, ILD_TRANSPARENT);
+    HICON ico = ImageList_GetIcon(imgList, shfi.iIcon, ILD_TRANSPARENT);
     if (!ico)
     {
         status = win_perror("ImageList_GetIcon(ILD_TRANSPARENT)");
@@ -169,21 +163,27 @@ int wmain(int argc, WCHAR *argv[])
     }
 
     // Create bitmap for the icon.
+    ICONINFO ii;
     if (!GetIconInfo(ico, &ii))
     {
         status = win_perror("GetIconInfo");
         goto cleanup;
     }
 
-    dc = CreateCompatibleDC(NULL);
+    HDC dc = CreateCompatibleDC(NULL);
     SelectObject(dc, ii.hbmColor);
 
     // Retrieve the color bitmap of the icon.
+    BITMAP bm;
     GetObject(ii.hbmColor, sizeof(bm), &bm);
 
-    size = bm.bmBitsPixel / 8 * bm.bmHeight * bm.bmWidth; // pixel buffer size
-    buffer = (BYTE *) malloc(size); // pixel buffer
-    ZeroMemory(&bmi, sizeof(BITMAPINFO));
+    size_t size = bm.bmBitsPixel / 8 * bm.bmHeight * bm.bmWidth; // pixel buffer size
+    BYTE* buffer = (BYTE *) malloc(size); // pixel buffer
+    if (!buffer)
+        exit(ERROR_OUTOFMEMORY);
+
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(bmi));
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     bmi.bmiHeader.biWidth = bm.bmWidth;
     bmi.bmiHeader.biHeight = bm.bmHeight;
@@ -193,21 +193,31 @@ int wmain(int argc, WCHAR *argv[])
     // Copy pixel buffer.
     GetDIBits(dc, ii.hbmColor, 0, bm.bmHeight, buffer, &bmi, DIB_RGB_COLORS);
 
-    LogDebug("Size: %dx%d", bm.bmWidth, bm.bmHeight);
+    LogDebug("Size: %dx%d, %d bpp", bm.bmWidth, bm.bmHeight, bm.bmBitsPixel);
     printf("%d %d\n", bm.bmWidth, bm.bmHeight);
 
 #ifdef WRITE_PPM
     // Create a PPM bitmap file.
-    f1 = fopen("icon.ppm", "w");
-    fprintf(f1, "P3\n");
-    fprintf(f1, "%d %d\n", bm.bmWidth, bm.bmHeight);
-    fprintf(f1, "255\n");
+    char path[256];
+    StringCchPrintfA(path, ARRAYSIZE(path), "icon-%S.ppm", hash);
+    FILE* ppm = NULL;
+    if (fopen_s(&ppm, path, "w") != 0)
+    {
+        LogWarning("Failed to open PPM file %S", path);
+    }
+
+    if (ppm)
+    {
+        fprintf(ppm, "P3\n");
+        fprintf(ppm, "%d %d\n", bm.bmWidth, bm.bmHeight);
+        fprintf(ppm, "255\n");
+    }
 #endif
 
     // Output bitmap.
-    for (y = 0; y < bm.bmHeight; y++)
+    for (int y = 0; y < bm.bmHeight; y++)
     {
-        for (x = 0; x < bm.bmWidth; x++)
+        for (int x = 0; x < bm.bmWidth; x++)
         {
             DWORD offset = (bm.bmHeight - y - 1) * 4 * bm.bmWidth + x * 4;
             BYTE b = *(buffer + offset + 0);
@@ -217,25 +227,28 @@ int wmain(int argc, WCHAR *argv[])
 
             fwrite(buffer + offset, 4, 1, stdout);
 #ifdef WRITE_PPM
-            fprintf(f1, "%d %d %d ", r, g, b);
+            if (ppm)
+                fprintf(ppm, "%d %d %d ", r, g, b);
 #endif
         }
 #ifdef WRITE_PPM
-        fprintf(f1, "\n");
+        if (ppm)
+            fprintf(ppm, "\n");
 #endif
     }
 
-    printf("\n");
-
 #ifdef WRITE_PPM
-    fclose(f1);
+    if (ppm)
+        fclose(ppm);
 #endif
 
+    // apparently stdout is not flushed automatically on process exit if in binary mode...
+    fflush(stdout);
     status = ERROR_SUCCESS;
 
 cleanup:
     if (status == ERROR_SUCCESS && linkPath)
-        LogError("LinkPath: %s", linkPath);
+        LogInfo("LinkPath: %s", linkPath);
     // Everything will be cleaned up upon process exit.
     LogDebug("returning %lu", status);
     return status;
