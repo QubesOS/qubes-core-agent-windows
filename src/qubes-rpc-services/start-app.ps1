@@ -19,8 +19,8 @@
  *
  #>
 
-# Registry location for path hash -> full path mapping for GetImageRGBA
-$RegistryMapPath = 'HKLM:\Software\Invisible Things Lab\Qubes Tools'
+# Registry location for path hash -> full path mapping
+$RegistryMapPath = 'HKCU:\Software\Invisible Things Lab\Qubes Tools'
 $RegistryMapKey = 'AppMap'
 
 $desktopBaseName = $args[0]
