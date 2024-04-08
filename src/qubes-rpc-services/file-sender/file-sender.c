@@ -70,8 +70,10 @@ static void WaitForResult(void)
 {
     struct result_header hdr;
     struct result_header_ext hdr_ext;
-    char lastFilename[MAX_PATH + 1];
     char lastFilenamePrefix[] = "; Last file: ";
+    char* lastFilename = malloc(MAX_PATH_LONG);
+    if (!lastFilename)
+        exit(ERROR_OUTOFMEMORY);
 
     LogVerbose("start");
     if (!QioReadBuffer(g_stdin, &hdr, sizeof(hdr)))
@@ -86,10 +88,10 @@ static void WaitForResult(void)
         hdr_ext.last_namelen = 0;
     }
 
-    if (hdr_ext.last_namelen > MAX_PATH)
+    if (hdr_ext.last_namelen > MAX_PATH_LONG - 1)
     {
         // read only at most MAX_PATH chars
-        hdr_ext.last_namelen = MAX_PATH;
+        hdr_ext.last_namelen = MAX_PATH_LONG - 1;
     }
 
     if (!QioReadBuffer(g_stdin, lastFilename, hdr_ext.last_namelen))
@@ -121,6 +123,8 @@ static void WaitForResult(void)
             FcReportError(ERROR_UNIDENTIFIED_ERROR, TRUE, L"File copy: %hs%hs%hs", strerror(hdr.error_code), lastFilenamePrefix, lastFilename);
         }
     }
+
+    free(lastFilename);
 
     if (hdr.crc32 != g_crc32)
     {
