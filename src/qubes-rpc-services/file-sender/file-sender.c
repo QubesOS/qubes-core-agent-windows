@@ -187,6 +187,7 @@ static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
 
     WindowTimeToUnix(&accessTime, &hdr.atime, &hdr.atime_nsec);
     WindowTimeToUnix(&modificationTime, &hdr.mtime, &hdr.mtime_nsec);
+    SetProgressText(NULL, fileName);
 
     if ((fileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
     { /* FIXME: symlink */
@@ -199,6 +200,7 @@ static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
             CloseHandle(input);
         }
 
+        SetProgressText(NULL, fileName);
         hdr.filelen = size.QuadPart;
         WriteHeaders(&hdr, fileName);
         copyResult = FcCopyFile(g_stdout, input, hdr.filelen, &g_crc32, NotifyProgress);
@@ -272,6 +274,7 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
     INT64 size = 0;
 
     LogDebug("%s", directoryPath);
+    SetProgressText(NULL, directoryPath);
     if ((attributes = GetFileAttributes(directoryPath)) == INVALID_FILE_ATTRIBUTES)
         FcReportError(GetLastError(), TRUE, L"Cannot get attributes of '%s'", directoryPath);
 
@@ -419,7 +422,9 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     LogDebug("Current directory: %s", currentDirectory);
     // calculate total size for progressbar purpose
+    // TODO: this alone can take a long time and may be not worth it
     g_totalSize = 0;
+    SetProgressText(L"Calculating total size...", NULL);
 
     for (i = 1; i < argc; i++)
     {
@@ -428,6 +433,8 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         // do not change dir, as don't care about form of the path here
         g_totalSize += ProcessDirectory(argv[i], TRUE);
     }
+
+    SetProgressText(L"Sending files...", NULL);
 
     for (i = 1; i < argc; i++)
     {

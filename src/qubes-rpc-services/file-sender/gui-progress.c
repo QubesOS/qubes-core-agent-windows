@@ -69,8 +69,8 @@ static DWORD TaskDialogThread(IN void *param)
     config.dwCommonButtons = TDCBF_CANCEL_BUTTON;
     config.dwFlags = TDF_SHOW_PROGRESS_BAR;
     config.pszMainIcon = NULL;
-    config.pszMainInstruction = L"Sending files";
-    config.pszContent = L"Sending files, please wait";
+    config.pszMainInstruction = NULL;
+    config.pszContent = NULL;
     config.pButtons = NULL;
     config.cButtons = 0;
     config.pfCallback = TaskDialogCallbackProc;
@@ -88,7 +88,10 @@ static DWORD TaskDialogThread(IN void *param)
 static void SetProgressbarColor(IN BOOL errorOccured)
 {
     if (errorOccured)
+    {
+        SetProgressText(L"Error sending files", NULL);
         UpdateProgress(0, PROGRESS_TYPE_ERROR);
+    }
     else
         UpdateProgress(0, PROGRESS_TYPE_NORMAL);
 }
@@ -103,21 +106,34 @@ static void CreateProgressWindow(void)
         return;
     }
 
+    while (!g_progressDialog)
+        Sleep(10);
+
     FcSetErrorCallback(g_progressDialog, SetProgressbarColor);
 }
 
 void UpdateProgress(IN UINT64 written, IN FC_PROGRESS_TYPE progressType)
 {
+    static BOOL firstUpdate = TRUE;
     LogVerbose("written %I64u, type %d", written, progressType);
     switch (progressType)
     {
     case PROGRESS_TYPE_INIT:
         CreateProgressWindow();
+        // marquee bar animates without showing progress, for when we calculate total size
+        SendNotifyMessage(g_progressDialog, TDM_SET_MARQUEE_PROGRESS_BAR, TRUE, 0); // enable marquee mode
+        SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_MARQUEE, TRUE, 0); // start animating
         break;
 
     case PROGRESS_TYPE_NORMAL:
         if (g_progressDialog)
         {
+            if (firstUpdate)
+            {
+                firstUpdate = FALSE;
+                // set progress bar to normal mode
+                SendNotifyMessage(g_progressDialog, TDM_SET_MARQUEE_PROGRESS_BAR, FALSE, 0);
+            }
             if (written)
                 SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_POS, (WPARAM) (100ULL * written / g_totalSize), 0);
             else
@@ -138,7 +154,20 @@ void UpdateProgress(IN UINT64 written, IN FC_PROGRESS_TYPE progressType)
 
     case PROGRESS_TYPE_ERROR:
         if (g_progressDialog)
-            SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM) PBST_ERROR, 0);
+            SendNotifyMessage(g_progressDialog, TDM_SET_PROGRESS_BAR_STATE, (WPARAM)PBST_ERROR, 0);
+
         break;
     }
+}
+
+void SetProgressText(IN const WCHAR* mainText, IN const WCHAR* subText)
+{
+    if (!g_progressDialog)
+        return;
+
+    if (mainText)
+        SendNotifyMessage(g_progressDialog, TDM_SET_ELEMENT_TEXT, TDE_MAIN_INSTRUCTION, (LPARAM)mainText);
+
+    if (subText)
+        SendNotifyMessage(g_progressDialog, TDM_SET_ELEMENT_TEXT, TDE_CONTENT, (LPARAM)subText);
 }
