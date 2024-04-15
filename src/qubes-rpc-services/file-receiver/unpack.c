@@ -309,7 +309,7 @@ void ProcessRegularFile(IN const WCHAR* incomingDir, IN const struct file_header
     // receive file data from stdin
     LogInfo("receiving file: '%s'", trustedPath);
 
-    FC_COPY_STATUS copyStatus = FcCopyFile(trustedPath, outputFile, g_stdin, untrustedHeader->filelen, &g_crc32, NULL);
+    FC_COPY_STATUS copyStatus = FcCopyFile(outputFile, g_stdin, untrustedHeader->filelen, &g_crc32, NULL);
     if (copyStatus != COPY_FILE_OK)
         SendStatusAndExit(EIO, untrustedNameUtf8);
 
