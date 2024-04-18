@@ -1067,6 +1067,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
             EnterCriticalSection(&g_DaemonCriticalSection);
             if (!daemonConnected)
             {
+                libvchan_cleanup(g_DaemonVchan); // needed to cleanup xenstore entry
                 LogDebug("qrexec-daemon has connected");
 
                 if (!VchanSendHello(g_DaemonVchan))
