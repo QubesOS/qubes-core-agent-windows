@@ -25,11 +25,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "qrexec-wrapper", "qrexec-wr
 		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "prepare-volume", "prepare-volume\prepare-volume.vcxproj", "{2D0C1455-C66A-4FFB-8584-67A9265FFE9A}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
-	EndProjectSection
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "relocate-dir", "relocate-dir\relocate-dir.vcxproj", "{FA1DE025-C52D-4088-A52C-4E298B445256}"
 	ProjectSection(ProjectDependencies) = postProject
 		{C5293A35-58E1-4BCB-8BC7-8D0BE9503D97} = {C5293A35-58E1-4BCB-8BC7-8D0BE9503D97}
@@ -113,10 +108,6 @@ Global
 		{AC3F4370-1B6A-4F11-8860-D932ECBDEED9}.Debug|x64.Build.0 = Debug|x64
 		{AC3F4370-1B6A-4F11-8860-D932ECBDEED9}.Release|x64.ActiveCfg = Release|x64
 		{AC3F4370-1B6A-4F11-8860-D932ECBDEED9}.Release|x64.Build.0 = Release|x64
-		{2D0C1455-C66A-4FFB-8584-67A9265FFE9A}.Debug|x64.ActiveCfg = Debug|x64
-		{2D0C1455-C66A-4FFB-8584-67A9265FFE9A}.Debug|x64.Build.0 = Debug|x64
-		{2D0C1455-C66A-4FFB-8584-67A9265FFE9A}.Release|x64.ActiveCfg = Release|x64
-		{2D0C1455-C66A-4FFB-8584-67A9265FFE9A}.Release|x64.Build.0 = Release|x64
 		{FA1DE025-C52D-4088-A52C-4E298B445256}.Debug|x64.ActiveCfg = Debug|x64
 		{FA1DE025-C52D-4088-A52C-4E298B445256}.Debug|x64.Build.0 = Debug|x64
 		{FA1DE025-C52D-4088-A52C-4E298B445256}.Release|x64.ActiveCfg = Release|x64

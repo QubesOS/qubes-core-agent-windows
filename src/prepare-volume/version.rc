@@ -1,3 +1,0 @@
-#define QWT_FILEDESCRIPTION_STR "Qubes volume initializer"
-
-#include "..\version_common.rc"
