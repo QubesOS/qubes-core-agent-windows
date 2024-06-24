@@ -35,7 +35,7 @@
 #define SERVICE_NAME L"QubesNetworkSetup"
 
 // TODO: make this configurable
-const PSTR g_VmAdapterDescriptions[] = { "Xen PV Network Device #0", "Realtek RTL8139C+ Fast Ethernet NIC" };
+const PSTR g_VmAdapterDescriptions[] = { "Xen PV Network Device #0", "Realtek RTL8139C+ Fast Ethernet NIC", "Intel(R) PRO/1000 MT Network Connection"};
 
 BOOL AdapterNameMatch(IN PSTR adapterName)
 {
@@ -90,7 +90,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
         if (adapterInfoCurrent->Type == MIB_IF_TYPE_ETHERNET)
         {
             LogInfo("Adapter %d: %S %S", adapterInfoCurrent->Index, adapterInfoCurrent->AdapterName, adapterInfoCurrent->Description);
-            
+
             if (AdapterNameMatch(adapterInfoCurrent->Description))
             {
                 LogDebug("setting interface info");
