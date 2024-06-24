@@ -23,8 +23,13 @@
 #include <qubes-io.h>
 #include <log.h>
 
-int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *commandLine, int showState)
+int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE previousInstance, _In_ WCHAR *commandLine, _In_ int showState)
 {
+    UNREFERENCED_PARAMETER(instance);
+    UNREFERENCED_PARAMETER(previousInstance);
+    UNREFERENCED_PARAMETER(commandLine);
+    UNREFERENCED_PARAMETER(showState);
+
     char *Url;
     const DWORD BufferSize = 4096;
     DWORD ReadSize;

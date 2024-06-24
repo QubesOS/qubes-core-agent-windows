@@ -122,6 +122,9 @@ cleanup:
 
 int wmain(int argc, WCHAR *argv[])
 {
+    UNREFERENCED_PARAMETER(argc);
+    UNREFERENCED_PARAMETER(argv);
+
     DWORD status = ERROR_OUTOFMEMORY;
     WCHAR* linkPath = malloc(MAX_PATH_LONG_WSIZE);
     if (!linkPath)
@@ -220,13 +223,13 @@ int wmain(int argc, WCHAR *argv[])
         for (int x = 0; x < bm.bmWidth; x++)
         {
             DWORD offset = (bm.bmHeight - y - 1) * 4 * bm.bmWidth + x * 4;
-            BYTE b = *(buffer + offset + 0);
-            BYTE g = *(buffer + offset + 1);
-            BYTE r = *(buffer + offset + 2);
-            BYTE a = *(buffer + offset + 3);
 
             fwrite(buffer + offset, 4, 1, stdout);
 #ifdef WRITE_PPM
+            BYTE b = *(buffer + offset + 0);
+            BYTE g = *(buffer + offset + 1);
+            BYTE r = *(buffer + offset + 2);
+            //BYTE a = *(buffer + offset + 3);
             if (ppm)
                 fprintf(ppm, "%d %d %d ", r, g, b);
 #endif

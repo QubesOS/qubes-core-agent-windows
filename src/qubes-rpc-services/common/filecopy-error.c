@@ -96,21 +96,15 @@ static void ProduceMessage(IN DWORD errorCode, IN DWORD icon, IN const WCHAR *fo
     LocalFree(message);
 }
 
-void FcReportError(IN DWORD errorCode, IN BOOL fatal, IN const WCHAR *format, ...)
+__declspec(noreturn)
+void FcReportError(IN DWORD errorCode, IN const WCHAR* format, ...)
 {
     va_list args;
 
     g_ErrorCallback(TRUE);
     va_start(args, format);
-    ProduceMessage(errorCode, fatal ? MB_ICONERROR : MB_ICONWARNING, format, args);
+    ProduceMessage(errorCode, MB_ICONERROR, format, args);
     va_end(args);
 
-    if (fatal)
-    {
-        exit(1);
-    }
-    else
-    {
-        g_ErrorCallback(FALSE);
-    }
+    exit(1);
 }

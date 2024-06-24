@@ -50,7 +50,6 @@ CRITICAL_SECTION g_DaemonCriticalSection;
 CRITICAL_SECTION g_RequestCriticalSection;
 SRWLOCK g_ConnectionsHandlesLock;
 
-PIPE_SERVER g_PipeServer = NULL; // for handling qrexec-client-vm requests
 LIST_ENTRY g_RequestList; // pending service requests (local)
 ULONG g_RequestId = 0;
 
@@ -79,6 +78,13 @@ struct _connection_info
     HANDLE handle;
     int connect_domain;
     int connect_port;
+};
+
+// args for pipe client threads
+struct CLIENT_CONTEXT
+{
+    PIPE_SERVER server;
+    LONGLONG id;
 };
 
 #define MAX_FDS 128
@@ -227,7 +233,7 @@ WCHAR* StrReplace(WCHAR const * const original,
     size_t retlen;
 
     // find how many times the pattern occurs in the original string
-    for (oriptr = original; patloc = wcsstr(oriptr, pattern); oriptr = patloc + patlen)
+    for (oriptr = original; (patloc = wcsstr(oriptr, pattern)) != NULL; oriptr = patloc + patlen)
     {
         patcnt++;
     }
@@ -242,7 +248,7 @@ WCHAR* StrReplace(WCHAR const * const original,
     // copy the original string,
     // replacing all the instances of the pattern
     retptr = returned;
-    for (oriptr = original; patloc = wcsstr(oriptr, pattern); oriptr = patloc + patlen)
+    for (oriptr = original; (patloc = wcsstr(oriptr, pattern)) != NULL; oriptr = patloc + patlen)
     {
         size_t const skplen = patloc - oriptr;
         // copy the section until the occurence of the pattern
@@ -1162,11 +1168,11 @@ static void XifLogger(int level, const char *function, const WCHAR *format, va_l
 
 /**
  * @brief Thread servicing a single qrexec-client-vm
- * @param param Pipe server client id.
+ * @param param CLIENT_CONTEXT*.
  */
 DWORD WINAPI PipeClientThread(PVOID param)
 {
-    LONGLONG clientId = (LONGLONG)param;
+    struct CLIENT_CONTEXT* ctx = (struct CLIENT_CONTEXT*)param;
     DWORD status = ERROR_OUTOFMEMORY;
     PSERVICE_REQUEST context;
     size_t stringSize;
@@ -1178,7 +1184,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
     context->CommandLine = NULL;
     context->UserName = NULL;
 
-    status = QpsRead(g_PipeServer, clientId, &context->ServiceParams, sizeof(context->ServiceParams));
+    status = QpsRead(ctx->server, ctx->id, &context->ServiceParams, sizeof(context->ServiceParams));
     if (ERROR_SUCCESS != status)
     {
         win_perror2(status, "QpsRead(params)");
@@ -1186,7 +1192,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
     }
 
     // user size, including null terminator
-    status = QpsRead(g_PipeServer, clientId, &stringSize, sizeof(stringSize));
+    status = QpsRead(ctx->server, ctx->id, &stringSize, sizeof(stringSize));
     if (ERROR_SUCCESS != status)
     {
         win_perror2(status, "QpsRead(user size)");
@@ -1199,7 +1205,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
         goto cleanup;
     }
 
-    status = QpsRead(g_PipeServer, clientId, context->UserName, (DWORD)stringSize);
+    status = QpsRead(ctx->server, ctx->id, context->UserName, (DWORD)stringSize);
     if (ERROR_SUCCESS != status)
     {
         win_perror2(status, "QpsRead(user)");
@@ -1207,7 +1213,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
     }
 
     // command line size, including null terminator
-    status = QpsRead(g_PipeServer, clientId, &stringSize, sizeof(stringSize));
+    status = QpsRead(ctx->server, ctx->id, &stringSize, sizeof(stringSize));
     if (ERROR_SUCCESS != status)
     {
         win_perror2(status, "QpsRead(cmd size)");
@@ -1220,7 +1226,7 @@ DWORD WINAPI PipeClientThread(PVOID param)
         goto cleanup;
     }
 
-    status = QpsRead(g_PipeServer, clientId, context->CommandLine, (DWORD)stringSize);
+    status = QpsRead(ctx->server, ctx->id, context->CommandLine, (DWORD)stringSize);
     if (ERROR_SUCCESS != status)
     {
         win_perror2(status, "QpsRead(cmd)");
@@ -1228,10 +1234,10 @@ DWORD WINAPI PipeClientThread(PVOID param)
     }
 
     LogInfo("Received request from client %lu: domain '%S', service '%S', user '%s', local command '%s', request id %lu",
-            clientId, context->ServiceParams.target_domain, context->ServiceParams.service_name,
+            ctx->id, context->ServiceParams.target_domain, context->ServiceParams.service_name,
             context->UserName, context->CommandLine, g_RequestId);
 
-    QpsDisconnectClient(g_PipeServer, clientId);
+    QpsDisconnectClient(ctx->server, ctx->id);
 
     StringCbPrintfA(context->ServiceParams.request_id.ident, sizeof(context->ServiceParams.request_id.ident), "%lu", g_RequestId++);
     if (!VchanSendMessage(g_DaemonVchan, MSG_TRIGGER_SERVICE, &context->ServiceParams, sizeof(context->ServiceParams), L"trigger_service_params"))
@@ -1258,7 +1264,10 @@ cleanup:
             free(context->CommandLine);
         }
         free(context);
+
     }
+
+    free(ctx);
     return status;
 }
 
@@ -1270,9 +1279,18 @@ cleanup:
  */
 void ClientConnectedCallback(PIPE_SERVER server, LONGLONG id, PVOID context)
 {
+    UNREFERENCED_PARAMETER(context);
+
     HANDLE clientThread;
 
-    clientThread = CreateThread(NULL, 0, PipeClientThread, (PVOID)id, 0, NULL);
+    struct CLIENT_CONTEXT* ctx = malloc(sizeof(struct CLIENT_CONTEXT));
+    if (!ctx)
+        exit(ERROR_OUTOFMEMORY);
+
+    ctx->server = server;
+    ctx->id = id;
+
+    clientThread = CreateThread(NULL, 0, PipeClientThread, ctx, 0, NULL);
     if (!clientThread)
     {
         win_perror("create client thread");
@@ -1284,13 +1302,13 @@ void ClientConnectedCallback(PIPE_SERVER server, LONGLONG id, PVOID context)
 
 /**
  * @brief Main pipe server processing loop.
- * @param param Unused.
+ * @param param PIPE_SERVER.
  */
 DWORD WINAPI PipeServerThread(PVOID param)
 {
     // only returns on error
     LogVerbose("start");
-    return QpsMainLoop(g_PipeServer);
+    return QpsMainLoop((PIPE_SERVER)param);
 }
 
 /**
@@ -1318,7 +1336,9 @@ DWORD WINAPI ServiceExecutionThread(void *param)
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = FALSE;
     sa.lpSecurityDescriptor = sd;
+
     // initialize pipe server for local clients
+    PIPE_SERVER pipeServer = NULL;
     status = QpsCreate(TRIGGER_PIPE_NAME,
                        4096, // pipe buffers
                        4096, // read buffer
@@ -1328,14 +1348,14 @@ DWORD WINAPI ServiceExecutionThread(void *param)
                        NULL,
                        NULL,
                        &sa,
-                       &g_PipeServer);
+                       &pipeServer);
 
     if (ERROR_SUCCESS != status)
         win_perror2(status, "create pipe server");
 
-    LogVerbose("pipe server: %p", g_PipeServer);
+    LogVerbose("pipe server: %p", pipeServer);
 
-    pipeServerThread = CreateThread(NULL, 0, PipeServerThread, NULL, 0, NULL);
+    pipeServerThread = CreateThread(NULL, 0, PipeServerThread, pipeServer, 0, NULL);
     if (!pipeServerThread)
     {
         status = GetLastError();
@@ -1374,8 +1394,11 @@ static DWORD WINAPI ServiceCleanup(void)
     return ERROR_SUCCESS;
 }
 
-int __cdecl wmain(int argc, WCHAR *argv[])
+int wmain(int argc, WCHAR *argv[])
 {
+    UNREFERENCED_PARAMETER(argc);
+    UNREFERENCED_PARAMETER(argv);
+
     DWORD status;
 
 #ifdef _DEBUG

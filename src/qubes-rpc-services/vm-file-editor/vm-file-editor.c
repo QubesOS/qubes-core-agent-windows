@@ -84,6 +84,7 @@ cleanup:
     if (!retval)
     {
         free(subdirPath);
+        subdirPath = NULL;
         RpcStringFree(&subdirName);
     }
 
@@ -96,10 +97,6 @@ cleanup:
 WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
 {
     char fileNameUtf8[DVM_FILENAME_SIZE + 1];
-    WCHAR *fileName;
-    WCHAR *fullPath;
-    size_t cchFileName, cchFullPath, cchTempDirPath;
-    int i;
     DWORD read = 0;
 
     // read file name from stdin
@@ -122,13 +119,15 @@ WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
         return NULL;
     }
 
-    for (i = 0; i < DVM_FILENAME_SIZE && fileNameUtf8[i] != 0; i++)
+    for (int i = 0; i < DVM_FILENAME_SIZE && fileNameUtf8[i] != 0; i++)
     {
         // replace some characters with _ (eg mimeopen have problems with some of them)
         if (strchr(" !?\"#$%^&*()[]<>;`~", fileNameUtf8[i]))
             fileNameUtf8[i] = '_';
     }
 
+    WCHAR* fileName;
+    size_t cchFileName;
     // convert to utf16
     if (ERROR_SUCCESS != ConvertUTF8ToUTF16Static(fileNameUtf8, &fileName, &cchFileName))
     {
@@ -136,14 +135,17 @@ WCHAR *GetTempFilePath(OUT WCHAR **tempDirPath)
         return NULL;
     }
 
+    size_t cchTempDirPath;
     if (!GetTempDirectory(tempDirPath, &cchTempDirPath))
     {
         fprintf(stderr, "Failed to get tmpdir\n");
         return NULL;
     }
 
-    cchFullPath = cchTempDirPath + cchFileName + 1;
-    fullPath = malloc(sizeof(WCHAR) * cchFullPath);
+    size_t cchFullPath = cchTempDirPath + cchFileName + 1;
+    WCHAR* fullPath = malloc(sizeof(WCHAR) * cchFullPath);
+    if (!fullPath)
+        exit(ERROR_OUTOFMEMORY);
 
     StringCchPrintf(fullPath, cchFullPath, L"%s%s", *tempDirPath, fileName);
     return fullPath;
@@ -204,16 +206,18 @@ BOOL SendFile(IN const WCHAR *localFilePath)
 
 cleanup:
     CloseHandle(localFile);
-    CloseHandle(g_stdOut);
+    if (g_stdOut != INVALID_HANDLE_VALUE)
+        CloseHandle(g_stdOut);
     return retval;
 }
 
-int __cdecl wmain(int argc, WCHAR *argv[])
+int wmain(int argc, WCHAR *argv[])
 {
-    WIN32_FILE_ATTRIBUTE_DATA attributesPre, attributesPost;
+    UNREFERENCED_PARAMETER(argc);
+    UNREFERENCED_PARAMETER(argv);
+
     WCHAR *filePath = NULL;
-    int	exitCode = 1, childExitCode;
-    SHELLEXECUTEINFO sei;
+    int	exitCode = 1;
     WCHAR *tempDir = NULL;
 
     g_stdIn = GetStdHandle(STD_INPUT_HANDLE);
@@ -233,9 +237,12 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     }
 
     filePath = GetTempFilePath(&tempDir);
+    if (!filePath)
+        goto cleanup;
     if (!ReceiveFile(filePath))
         goto cleanup;
 
+    WIN32_FILE_ATTRIBUTE_DATA attributesPre;
     if (!GetFileAttributesEx(filePath, GetFileExInfoStandard, &attributesPre))
     {
         exitCode = win_perror("GetFileAttributesEx pre");
@@ -243,6 +250,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         goto cleanup;
     }
 
+    SHELLEXECUTEINFO sei;
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC | SEE_MASK_UNICODE;
     sei.hwnd = NULL;
@@ -272,6 +280,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     // Wait until child process exits.
     WaitForSingleObject(sei.hProcess, INFINITE);
 
+    DWORD childExitCode;
     if (!GetExitCodeProcess(sei.hProcess, &childExitCode))
     {
         exitCode = win_perror("GetExitCodeProcess");
@@ -282,7 +291,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     // Close child process handle.
     CloseHandle(sei.hProcess);
 
-    if (childExitCode != 0)
+    if (childExitCode != ERROR_SUCCESS)
     {
         LogError("Process exit code: 0x%x", childExitCode);
         fprintf(stderr, "Editor failed: 0x%x\n", childExitCode);
@@ -290,6 +299,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         goto cleanup;
     }
 
+    WIN32_FILE_ATTRIBUTE_DATA attributesPost;
     if (!GetFileAttributesEx(filePath, GetFileExInfoStandard, &attributesPost))
     {
         exitCode = win_perror("GetFileAttributesEx post");
@@ -307,7 +317,9 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     exitCode = ERROR_SUCCESS;
 
 cleanup:
-    DeleteFile(filePath);
-    RemoveDirectory(tempDir);
+    if (filePath)
+        DeleteFile(filePath);
+    if (tempDir)
+        RemoveDirectory(tempDir);
     return exitCode;
 }

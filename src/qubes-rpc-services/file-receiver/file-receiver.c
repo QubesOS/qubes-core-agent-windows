@@ -41,6 +41,10 @@ int ReceiveFiles(IN const WCHAR* incomingDir);
 
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
+    // we don't use crt's args, our convention uses different argument separator
+    UNREFERENCED_PARAMETER(argc);
+    UNREFERENCED_PARAMETER(argv);
+
     g_stderr = GetStdHandle(STD_ERROR_HANDLE);
     if (g_stderr == NULL || g_stderr == INVALID_HANDLE_VALUE)
     {

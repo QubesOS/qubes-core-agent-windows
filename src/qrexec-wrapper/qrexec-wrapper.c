@@ -780,7 +780,7 @@ DWORD EventLoop(
 
         case 1: // child process terminated
         {
-            int exitCode;
+            DWORD exitCode;
 
             if (!GetExitCodeProcess(child->Process, &exitCode))
             {
@@ -852,11 +852,13 @@ void Usage(
  *             command_line: local program to execute and connect to data vchan
  * @return Error code.
  */
-int __cdecl wmain(int argc, WCHAR *argv[])
+int wmain(int argc, WCHAR *argv[])
 {
+    UNREFERENCED_PARAMETER(argc);
+
     PCHILD_STATE child = NULL;
     int domain, port, flags;
-    BOOL piped, interactive;
+    BOOL piped = FALSE, interactive;
     PWSTR domainName, portStr, flagsStr, userName, commandLine;
     DWORD status = ERROR_NOT_ENOUGH_MEMORY;
     BOOL startLocalProcess = TRUE;

@@ -114,13 +114,13 @@ static void WaitForResult(void)
         switch (hdr.error_code)
         {
         case EEXIST:
-            FcReportError(ERROR_ALREADY_EXISTS, TRUE, L"File copy: not overwriting existing file. Clean incoming dir, and retry copy%hs%hs", lastFilenamePrefix, lastFilename);
+            FcReportError(ERROR_ALREADY_EXISTS, L"File copy: not overwriting existing file. Clean incoming dir, and retry copy%hs%hs", lastFilenamePrefix, lastFilename);
             break;
         case EINVAL:
-            FcReportError(ERROR_INVALID_DATA, TRUE, L"File copy: Corrupted data from packer%hs%hs", lastFilenamePrefix, lastFilename);
+            FcReportError(ERROR_INVALID_DATA, L"File copy: Corrupted data from packer%hs%hs", lastFilenamePrefix, lastFilename);
             break;
         default:
-            FcReportError(ERROR_UNIDENTIFIED_ERROR, TRUE, L"File copy: %hs%hs%hs", strerror(hdr.error_code), lastFilenamePrefix, lastFilename);
+            FcReportError(ERROR_UNIDENTIFIED_ERROR, L"File copy: %hs%hs%hs", strerror(hdr.error_code), lastFilenamePrefix, lastFilename);
         }
     }
 
@@ -128,7 +128,7 @@ static void WaitForResult(void)
 
     if (hdr.crc32 != g_crc32)
     {
-        FcReportError(ERROR_INVALID_DATA, TRUE, L"File transfer failed: checksum mismatch");
+        FcReportError(ERROR_INVALID_DATA, L"File transfer failed: checksum mismatch");
     }
 }
 
@@ -150,7 +150,7 @@ static void WriteHeaders(IN struct file_header *hdr, IN const WCHAR *fileName)
 
     LogVerbose("start");
     if (ERROR_SUCCESS != ConvertUTF16ToUTF8Static(fileName, &fileNameUtf8, &cbFileNameUtf8))
-        FcReportError(GetLastError(), TRUE, L"Cannot convert path '%s' to UTF-8", fileName);
+        FcReportError(GetLastError(), L"Cannot convert path '%s' to UTF-8", fileName);
 
     hdr->namelen = (UINT32)cbFileNameUtf8;
 
@@ -176,14 +176,11 @@ static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
     // FILE_FLAG_BACKUP_SEMANTICS required to access directories
     input = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
     if (input == INVALID_HANDLE_VALUE)
-        FcReportError(GetLastError(), TRUE, L"Cannot open file '%s'", fileName);
+        FcReportError(GetLastError(), L"Cannot open file '%s'", fileName);
 
     /* FIXME: times are already retrieved by FindFirst/NextFile */
     if (!GetFileTime(input, NULL, &accessTime, &modificationTime))
-    {
-        FcReportError(GetLastError(), TRUE, L"Cannot get time of file '%s'", fileName);
-        CloseHandle(input);
-    }
+        FcReportError(GetLastError(), L"Cannot get time of file '%s'", fileName);
 
     WindowTimeToUnix(&accessTime, &hdr.atime, &hdr.atime_nsec);
     WindowTimeToUnix(&modificationTime, &hdr.mtime, &hdr.mtime_nsec);
@@ -195,10 +192,7 @@ static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
         LARGE_INTEGER size;
 
         if (!GetFileSizeEx(input, &size))
-        {
-            FcReportError(GetLastError(), TRUE, L"Cannot get size of file '%s'", fileName);
-            CloseHandle(input);
-        }
+            FcReportError(GetLastError(), L"Cannot get size of file '%s'", fileName);
 
         SetProgressText(NULL, fileName);
         hdr.filelen = size.QuadPart;
@@ -210,8 +204,7 @@ static void ProcessSingleFile(IN const WCHAR *fileName, IN DWORD fileAttributes)
         {
             if (copyResult != COPY_FILE_WRITE_ERROR)
             {
-                FcReportError(GetLastError(), TRUE, L"Error copying file '%s': %hs", fileName, FcStatusToString(copyResult));
-                CloseHandle(input);
+                FcReportError(GetLastError(), L"Error copying file '%s': %hs", fileName, FcStatusToString(copyResult));
             }
             else
             {
@@ -250,12 +243,12 @@ static INT64 GetFileSizeByPath(IN const WCHAR *filePath)
 
     file = CreateFile(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, NULL);
     if (file == INVALID_HANDLE_VALUE)
-        FcReportError(GetLastError(), TRUE, L"Cannot open file '%s': 0x%x", filePath, GetLastError());
+        FcReportError(GetLastError(), L"Cannot open file '%s': 0x%x", filePath, GetLastError());
 
     if (!GetFileSizeEx(file, &fileSize))
     {
         CloseHandle(file);
-        FcReportError(GetLastError(), TRUE, L"Cannot get file size of '%s'", filePath);
+        FcReportError(GetLastError(), L"Cannot get file size of '%s'", filePath);
     }
 
     CloseHandle(file);
@@ -276,7 +269,7 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
     LogDebug("%s", directoryPath);
     SetProgressText(NULL, directoryPath);
     if ((attributes = GetFileAttributes(directoryPath)) == INVALID_FILE_ATTRIBUTES)
-        FcReportError(GetLastError(), TRUE, L"Cannot get attributes of '%s'", directoryPath);
+        FcReportError(GetLastError(), L"Cannot get attributes of '%s'", directoryPath);
 
     if (!calculateSize)
         ProcessSingleFile(directoryPath, attributes);
@@ -294,11 +287,11 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
 
     if (!searchPath)
     {
-        FcReportError(ERROR_OUTOFMEMORY, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
+        FcReportError(ERROR_OUTOFMEMORY, L"ProcessDirectory(%s) failed", directoryPath);
     }
 
     if (FAILED(StringCchPrintf(searchPath, cchSearchPath, L"%s\\*", directoryPath)))
-        FcReportError(ERROR_BAD_PATHNAME, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
+        FcReportError(ERROR_BAD_PATHNAME, L"ProcessDirectory(%s) failed", directoryPath);
 
     searchHandle = FindFirstFile(searchPath, &findData);
 
@@ -307,7 +300,7 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
         DWORD status = GetLastError();
         if (status == ERROR_FILE_NOT_FOUND) // empty directory
             return 0;
-        FcReportError(status, TRUE, L"Cannot list directory '%s'", directoryPath);
+        FcReportError(status, L"Cannot list directory '%s'", directoryPath);
     }
 
     do
@@ -319,11 +312,11 @@ static INT64 ProcessDirectory(IN const WCHAR *directoryPath, IN BOOL calculateSi
         currentPath = malloc(sizeof(WCHAR)*cchCurrentPath);
 
         if (!currentPath)
-            FcReportError(ERROR_OUTOFMEMORY, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
+            FcReportError(ERROR_OUTOFMEMORY, L"ProcessDirectory(%s) failed", directoryPath);
 
         // use forward slash here to send it also to the other end
         if (FAILED(StringCchPrintf(currentPath, cchCurrentPath, L"%s/%s", directoryPath, findData.cFileName)))
-            FcReportError(ERROR_BAD_PATHNAME, TRUE, L"ProcessDirectory(%s) failed", directoryPath);
+            FcReportError(ERROR_BAD_PATHNAME, L"ProcessDirectory(%s) failed", directoryPath);
 
         size += ProcessDirectory(currentPath, calculateSize);
         free(currentPath);
@@ -356,14 +349,11 @@ static void NotifyEndAndWaitForResult(void)
 
 static WCHAR *GetAbsolutePath(IN const WCHAR *currentDirectory, IN const WCHAR *path)
 {
-    WCHAR *absolutePath;
-    size_t cchAbsolutePath;
-
     if (!PathIsRelative(path))
         return _wcsdup(path);
 
-    cchAbsolutePath = wcslen(currentDirectory) + wcslen(path) + 2;
-    absolutePath = malloc(sizeof(WCHAR)*cchAbsolutePath);
+    size_t cchAbsolutePath = wcslen(currentDirectory) + wcslen(path) + 2;
+    WCHAR* absolutePath = malloc(sizeof(WCHAR)*cchAbsolutePath);
 
     if (!absolutePath)
     {
@@ -380,45 +370,31 @@ static WCHAR *GetAbsolutePath(IN const WCHAR *currentDirectory, IN const WCHAR *
     return absolutePath;
 }
 
-int __cdecl wmain(int argc, WCHAR *argv[])
+int wmain(int argc, WCHAR *argv[])
 {
-    int i;
-    WCHAR *directory, *baseName;
-    WCHAR currentDirectory[FC_MAX_PATH];
+    WCHAR* currentDirectory = (WCHAR*)malloc(FC_MAX_PATH*sizeof(WCHAR));
 
     LogVerbose("start");
     g_stderr = GetStdHandle(STD_ERROR_HANDLE);
 
     if (g_stderr == NULL || g_stderr == INVALID_HANDLE_VALUE)
-    {
-        FcReportError(GetLastError(), TRUE, L"Failed to get STDERR handle");
-        exit(1);
-    }
+        FcReportError(GetLastError(), L"Failed to get STDERR handle");
 
     g_stdin = GetStdHandle(STD_INPUT_HANDLE);
 
     if (g_stdin == NULL || g_stdin == INVALID_HANDLE_VALUE)
-    {
-        FcReportError(GetLastError(), TRUE, L"Failed to get STDIN handle");
-        exit(1);
-    }
+        FcReportError(GetLastError(), L"Failed to get STDIN handle");
 
     g_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
 
     if (g_stdout == NULL || g_stdout == INVALID_HANDLE_VALUE)
-    {
-        FcReportError(GetLastError(), TRUE, L"Failed to get STDOUT handle");
-        exit(1);
-    }
+        FcReportError(GetLastError(), L"Failed to get STDOUT handle");
 
     NotifyProgress(0, PROGRESS_TYPE_INIT);
     g_crc32 = 0;
 
-    if (!GetCurrentDirectory(RTL_NUMBER_OF(currentDirectory), currentDirectory))
-    {
-        FcReportError(GetLastError(), TRUE, L"Failed to get current directory");
-        exit(1);
-    }
+    if (!GetCurrentDirectoryW(FC_MAX_PATH, currentDirectory))
+        FcReportError(GetLastError(), L"Failed to get current directory");
 
     LogDebug("Current directory: %s", currentDirectory);
     // calculate total size for progressbar purpose
@@ -426,7 +402,7 @@ int __cdecl wmain(int argc, WCHAR *argv[])
     g_totalSize = 0;
     SetProgressText(L"Calculating total size...", NULL);
 
-    for (i = 1; i < argc; i++)
+    for (int i = 1; i < argc; i++)
     {
         if (g_cancelOperation)
             break;
@@ -436,28 +412,28 @@ int __cdecl wmain(int argc, WCHAR *argv[])
 
     SetProgressText(L"Sending files...", NULL);
 
-    for (i = 1; i < argc; i++)
+    for (int i = 1; i < argc; i++)
     {
         if (g_cancelOperation)
             break;
 
-        directory = GetAbsolutePath(currentDirectory, argv[i]);
+        WCHAR* directory = GetAbsolutePath(currentDirectory, argv[i]);
 
         if (!directory)
         {
-            FcReportError(ERROR_BAD_PATHNAME, TRUE, L"GetAbsolutePath '%s'", argv[i]); // exits
+            FcReportError(ERROR_BAD_PATHNAME, L"GetAbsolutePath '%s'", argv[i]); // exits
         }
 
         // absolute path has at least one character
         if (PathGetCharType(directory[wcslen(directory) - 1]) & GCT_SEPARATOR)
             directory[wcslen(directory) - 1] = L'\0';
 
-        baseName = _wcsdup(directory);
+        WCHAR* baseName = _wcsdup(directory);
         PathStripPath(baseName);
         PathRemoveFileSpec(directory);
 
         if (!SetCurrentDirectory(directory))
-            FcReportError(GetLastError(), TRUE, L"SetCurrentDirectory(%s)", directory);
+            FcReportError(GetLastError(), L"SetCurrentDirectory(%s)", directory);
 
         ProcessDirectory(baseName, FALSE);
         free(directory);

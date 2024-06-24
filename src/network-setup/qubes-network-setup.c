@@ -195,10 +195,8 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
     status = ERROR_SUCCESS;
 
 cleanup:
-    if (ipForwardTable)
-        free(ipForwardTable);
-    if (adapterInfo)
-        free(adapterInfo);
+    free(ipForwardTable);
+    free(adapterInfo);
 
     return status;
 }
@@ -231,8 +229,9 @@ BOOL WaitForQdb(void)
 
 DWORD WINAPI SetupNetwork(PVOID param)
 {
+    UNREFERENCED_PARAMETER(param);
+
     qdb_handle_t qdb = NULL;
-    int interfaceIndex;
     char *qubesIp = NULL;
     char *qubesNetmask = NULL;
     char *qubesGateway = NULL;
@@ -289,6 +288,7 @@ DWORD WINAPI SetupNetwork(PVOID param)
 
     LogInfo("ip: %S, netmask: %S, gateway: %S", qubesIp, qubesNetmask, qubesGateway);
 
+    DWORD interfaceIndex;
     if (SetNetworkParameters(
         inet_addr(qubesIp),
         inet_addr(qubesNetmask),
@@ -301,7 +301,7 @@ DWORD WINAPI SetupNetwork(PVOID param)
 
     /* don't know how to programatically (and easily) set DNS address, so stay
      * with netsh... */
-    _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%d\" static %s register=none validate=no",
+    _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 set dnsservers \"%u\" static %s register=none validate=no",
         interfaceIndex, qubesPrimaryDNS);
 
     if (system(cmdline) != 0)
@@ -310,7 +310,7 @@ DWORD WINAPI SetupNetwork(PVOID param)
         goto cleanup;
     }
 
-    _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 add dnsservers \"%d\" %s validate=no",
+    _snprintf(cmdline, RTL_NUMBER_OF(cmdline), "netsh interface ipv4 add dnsservers \"%u\" %s validate=no",
         interfaceIndex, qubesSecondaryDNS);
 
     if (system(cmdline) != 0)

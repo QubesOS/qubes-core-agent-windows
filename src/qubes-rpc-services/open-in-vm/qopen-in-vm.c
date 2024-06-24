@@ -24,7 +24,9 @@
 #include <strsafe.h>
 #include <string.h>
 #include <stdlib.h>
+#include <Shlwapi.h>
 
+#include <log.h>
 #include <utf8-conv.h>
 #include <qubes-io.h>
 
@@ -33,86 +35,69 @@
 
 void SendFile(IN const WCHAR *filePath)
 {
-    const WCHAR *base, *base1, *base2;
-    char *baseUtf8;
-    char basePadded[DVM_FILENAME_SIZE];
+    LogDebug("processing local file: %s", filePath);
     HANDLE stdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     HANDLE file = CreateFile(filePath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (file == INVALID_HANDLE_VALUE)
-        FcReportError(GetLastError(), TRUE, L"open '%s'", filePath);
+        FcReportError(GetLastError(), L"open '%s'", filePath);
 
-    base1 = wcsrchr(filePath, L'\\');
-    base2 = wcsrchr(filePath, L'/');
+    const WCHAR* fileName = PathFindFileNameW(filePath);
 
-    if (base2 > base1)
-    {
-        base = base2;
-        base++;
-    }
-    else if (base1)
-    {
-        base = base1;
-        base++;
-    }
-    else
-        base = filePath;
+    char* fileNameUtf8;
+    size_t lenUtf8;
+    if (ERROR_SUCCESS != ConvertUTF16ToUTF8Static(fileName, &fileNameUtf8, &lenUtf8))
+        FcReportError(GetLastError(), L"Failed to convert filename '%s' to UTF8", fileName);
 
-    if (ERROR_SUCCESS != ConvertUTF16ToUTF8Static(base, &baseUtf8, NULL))
-        FcReportError(GetLastError(), TRUE, L"Failed to convert filename '%s' to UTF8", base);
+    if (lenUtf8 >= DVM_FILENAME_SIZE)
+        FcReportError(ERROR_FILENAME_EXCED_RANGE, L"converted file name is too long (%zu)", lenUtf8);
 
-    if (strlen(baseUtf8) >= DVM_FILENAME_SIZE)
-        baseUtf8 += strlen(baseUtf8) - DVM_FILENAME_SIZE + 1;
+    char zero[DVM_FILENAME_SIZE] = { 0 };
 
-    ZeroMemory(basePadded, sizeof(basePadded));
-    StringCbCopyA(basePadded, sizeof(basePadded), baseUtf8);
+    if (!QioWriteBuffer(stdOut, fileNameUtf8, (DWORD)lenUtf8))
+        FcReportError(GetLastError(), L"send filename");
 
-    if (!QioWriteBuffer(stdOut, basePadded, DVM_FILENAME_SIZE))
-        FcReportError(GetLastError(), TRUE, L"send filename to dispVM");
+    if (!QioWriteBuffer(stdOut, zero, (DWORD)(DVM_FILENAME_SIZE - lenUtf8)))
+        FcReportError(GetLastError(), L"send filename padding");
 
     if (!QioCopyUntilEof(stdOut, file))
-        FcReportError(GetLastError(), TRUE, L"send file to dispVM");
+        FcReportError(GetLastError(), L"send file");
 
     CloseHandle(file);
-    fprintf(stderr, "File sent\n");
+    LogDebug("File sent");
     CloseHandle(stdOut);
 }
 
-#define MAX_PATH_LONG 32768
 void ReceiveFile(IN const WCHAR *fileName)
 {
-    HANDLE tempFile;
-    WCHAR *tempDirPath = NULL;
-    WCHAR *tempFilePath = NULL;
-    LARGE_INTEGER fileSize;
     HANDLE stdIn = GetStdHandle(STD_INPUT_HANDLE);
 
-    tempDirPath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
-    tempFilePath = malloc(MAX_PATH_LONG*sizeof(WCHAR));
+    LogDebug("file: %s", fileName);
+    WCHAR* tempDirPath = malloc(MAX_PATH_LONG_WSIZE);
+    WCHAR* tempFilePath = malloc(MAX_PATH_LONG_WSIZE);
     if (!tempDirPath || !tempFilePath)
-        FcReportError(GetLastError(), TRUE, L"allocate memory");
+        FcReportError(ERROR_OUTOFMEMORY, L"allocate memory");
 
     // prepare temporary path
-    if (!GetTempPath(MAX_PATH_LONG, tempDirPath))
-    {
-        FcReportError(GetLastError(), TRUE, L"Failed to get temp dir");
-    }
+    if (!GetTempPathW(MAX_PATH_LONG, tempDirPath))
+        FcReportError(GetLastError(), L"Failed to get temp dir");
 
-    if (!GetTempFileName(tempDirPath, L"qvm", 0, tempFilePath))
-    {
-        FcReportError(GetLastError(), TRUE, L"Failed to get temp file");
-    }
+    if (!GetTempFileNameW(tempDirPath, L"qvm", 0, tempFilePath))
+        FcReportError(GetLastError(), L"Failed to get temp file");
 
+    LogDebug("temp path: %s\\%s", tempDirPath, tempFilePath);
     // create temp file
-    tempFile = CreateFile(tempFilePath, GENERIC_WRITE, 0, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE tempFile = CreateFile(tempFilePath, GENERIC_WRITE, 0, NULL, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (tempFile == INVALID_HANDLE_VALUE)
-        FcReportError(GetLastError(), TRUE, L"Failed to open temp file");
+        FcReportError(GetLastError(), L"Failed to open temp file");
 
+    LogDebug("receiving file");
     if (!QioCopyUntilEof(tempFile, stdIn))
-        FcReportError(GetLastError(), TRUE, L"receiving file from dispVM");
+        FcReportError(GetLastError(), L"receiving file from dispVM");
 
+    LARGE_INTEGER fileSize;
     if (!GetFileSizeEx(tempFile, &fileSize))
-        FcReportError(GetLastError(), TRUE, L"GetFileSizeEx");
+        FcReportError(GetLastError(), L"GetFileSizeEx");
 
     CloseHandle(tempFile);
 
@@ -122,23 +107,26 @@ void ReceiveFile(IN const WCHAR *fileName)
         goto cleanup;
     }
 
+    LogDebug("replacing local file");
     if (!MoveFileEx(tempFilePath, fileName, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
-        FcReportError(GetLastError(), TRUE, L"rename");
+        FcReportError(GetLastError(), L"rename");
 
 cleanup:
     free(tempDirPath);
     free(tempFilePath);
+    LogDebug("end");
 }
 
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
     if (argc != 2)
-        FcReportError(ERROR_BAD_ARGUMENTS, TRUE, L"OpenInVM - no file given?");
+        FcReportError(ERROR_BAD_ARGUMENTS, L"OpenInVM - no file given?");
 
-    fprintf(stderr, "OpenInVM starting\n");
+    LogDebug("start");
 
     SendFile(argv[1]);
     ReceiveFile(argv[1]);
 
+    LogDebug("end");
     return 0;
 }

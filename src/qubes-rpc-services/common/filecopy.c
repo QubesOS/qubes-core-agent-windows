@@ -74,7 +74,7 @@ char *FcStatusToString(IN FC_COPY_STATUS status)
     case COPY_FILE_READ_EOF: return "Unexpected end of data while reading";
     case COPY_FILE_READ_ERROR: return "Error reading";
     case COPY_FILE_WRITE_ERROR: return "Error writing";
-    default: 
+    default:
         LogWarning("Unknown status: %d", status);
         return "Unknown error";
     }

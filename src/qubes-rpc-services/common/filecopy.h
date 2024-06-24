@@ -44,6 +44,7 @@ struct file_header
     */
 };
 
+#pragma pack(push)
 #pragma pack(1)
 struct result_header
 {
@@ -53,12 +54,14 @@ struct result_header
 };
 
 /* optional info about last processed file */
-#pragma pack(1)
 struct result_header_ext
 {
     UINT32 last_namelen;
+#pragma warning(suppress:4200) // zero-length array
     char last_name[0];
 };
+
+#pragma pack(pop)
 
 typedef enum _FC_COPY_STATUS
 {

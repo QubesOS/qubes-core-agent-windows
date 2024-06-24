@@ -35,6 +35,9 @@ HANDLE g_progressWindowThread = NULL;
 
 static HRESULT CALLBACK TaskDialogCallbackProc(IN HWND window, IN UINT notification, IN WPARAM wParam, IN LPARAM lParam, IN LONG_PTR context)
 {
+    UNREFERENCED_PARAMETER(lParam);
+    UNREFERENCED_PARAMETER(context);
+
     LogVerbose("hwnd 0x%x, code %lu", window, notification);
     switch (notification)
     {
@@ -59,6 +62,8 @@ static HRESULT CALLBACK TaskDialogCallbackProc(IN HWND window, IN UINT notificat
 
 static DWORD TaskDialogThread(IN void *param)
 {
+    UNREFERENCED_PARAMETER(param);
+
     int buttonPressed = 0;
     TASKDIALOGCONFIG config = { 0 };
     HRESULT status;

@@ -34,14 +34,15 @@
 #include <pipe-server.h>
 #include <exec.h>
 
-int __cdecl wmain(int argc, WCHAR *argv[])
+int wmain(int argc, WCHAR *argv[])
 {
+    UNREFERENCED_PARAMETER(argc);
+
     HANDLE readPipe, writePipe;
-    BOOL success = FALSE;
     PWSTR pipeName = L"\\\\.\\pipe\\qrexec_trigger"; // FIXME hardcoded path
     struct trigger_service_params triggerParams = { 0 };
     ULONG status;
-    UCHAR *argumentUtf8;
+    char* argumentUtf8;
     HRESULT hresult;
     size_t size;
     PWSTR domainName, serviceName, userName, commandLine;

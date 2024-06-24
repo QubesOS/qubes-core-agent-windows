@@ -101,8 +101,6 @@ LRESULT CALLBACK WindowProc(
     default:
         return DefWindowProc(window, message, wParam, lParam);
     }
-
-    return FALSE;
 }
 
 HWND CreateMainWindow(HINSTANCE instance)
@@ -142,12 +140,15 @@ HWND CreateMainWindow(HINSTANCE instance)
         NULL);
 }
 
-int APIENTRY wWinMain(HINSTANCE hInst, HINSTANCE hPrevInst, WCHAR *pszCommandLine, int nCmdShow)
+int APIENTRY wWinMain(_In_ HINSTANCE hInst, _In_opt_ HINSTANCE hPrevInst, _In_ WCHAR *pszCommandLine, _In_ int nCmdShow)
 {
+    UNREFERENCED_PARAMETER(hPrevInst);
+    UNREFERENCED_PARAMETER(nCmdShow);
+
     HWND hMainWindow;
     size_t cbExpectedUserUtf8;
     size_t cchExpectedUser = 0;
-    UCHAR pszExpectedUserUtf8[USERNAME_LENGTH + 1];
+    char pszExpectedUserUtf8[USERNAME_LENGTH + 1];
     HANDLE hStdIn;
 
     LogVerbose("start");

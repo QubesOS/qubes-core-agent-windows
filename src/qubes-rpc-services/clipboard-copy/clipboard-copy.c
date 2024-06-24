@@ -115,8 +115,16 @@ static BOOL WriteClipboardText(IN HWND window, OUT HANDLE outputFile)
     return TRUE;
 }
 
-int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *commandLine, int showFlags)
+int APIENTRY wWinMain(    _In_ HINSTANCE instance,
+                      _In_opt_ HINSTANCE previousInstance,
+                          _In_ WCHAR *commandLine,
+                          _In_ int showFlags)
 {
+    UNREFERENCED_PARAMETER(instance);
+    UNREFERENCED_PARAMETER(previousInstance);
+    UNREFERENCED_PARAMETER(commandLine);
+    UNREFERENCED_PARAMETER(showFlags);
+
     HANDLE stdOut;
 
     stdOut = GetStdHandle(STD_OUTPUT_HANDLE);

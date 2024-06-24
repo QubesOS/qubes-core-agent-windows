@@ -27,6 +27,7 @@
 #include <shlwapi.h>
 #include <strsafe.h>
 #include <PathCch.h>
+#include <wchar.h>
 
 #include <utf8-conv.h>
 #include <qubes-io.h>
@@ -43,7 +44,7 @@ INT64 g_bytesLimit = 0;
 INT64 g_filesLimit = 0;
 INT64 g_totalBytesReceived = 0;
 INT64 g_totalFilesReceived = 0;
-ULONG g_crc32 = 0;
+UINT32 g_crc32 = 0;
 
 extern HANDLE g_stdin;
 extern HANDLE g_stdout;
@@ -82,13 +83,15 @@ static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
                 // this is needed to properly compare normalized path prefixes
                 c = '\\';
             }
-            wcs[wpos++] = c;
+            assert(c <= WCHAR_MAX);
+            wcs[wpos++] = (wchar_t)c;
         } else if (c >= 0xc2 && c < 0xe0 && upos < utflen &&
                    (utf[upos] & 0xc0) == 0x80) {
             /* 2-byte utf-8 */
             c = ((c & 0x1f) << 6);
             c |= (utf[upos++] & 0x3f);
-            wcs[wpos++] = c;
+            assert(c <= WCHAR_MAX);
+            wcs[wpos++] = (wchar_t)c;
         } else if (c >= 0xe0 && c < 0xf0 && upos + 1 < utflen &&
                    !(c == 0xe0 && utf[upos] < 0xa0) && /* over-long encoding */
                    (utf[upos] & 0xc0) == 0x80 &&
@@ -97,7 +100,8 @@ static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
             c = ((c & 0x0f) << 12);
             c |= ((utf[upos++] & 0x3f) << 6);
             c |= (utf[upos++] & 0x3f);
-            wcs[wpos++] = c;
+            assert(c <= WCHAR_MAX);
+            wcs[wpos++] = (wchar_t)c;
         } else if (c >= 0xf0 && c < 0xf5 && upos + 2 < utflen &&
                    wpos + 1 < wcslen &&
                    !(c == 0xf0 && utf[upos] < 0x90) && /* over-long encoding */
@@ -111,11 +115,14 @@ static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
             c |= ((utf[upos++] & 0x3f) << 6);
             c |= (utf[upos++] & 0x3f);
             c -= 0x10000;
-            wcs[wpos++] = 0xd800 | (c >> 10);
-            wcs[wpos++] = 0xdc00 | (c & 0x3ff);
+            assert(0xd800 | (c >> 10) <= WCHAR_MAX);
+            wcs[wpos++] = (wchar_t)(0xd800 | (c >> 10));
+            assert(0xdc00 | (c & 0x3ff) <= WCHAR_MAX);
+            wcs[wpos++] = (wchar_t)(0xdc00 | (c & 0x3ff));
         } else if (c >= 0xa0) {
             /* invalid utf-8 byte, printable unicode char: convert 1:1 */
-            wcs[wpos++] = c;
+            assert(c <= WCHAR_MAX);
+            wcs[wpos++] = (wchar_t)c;
         } else {
             /* invalid utf-8 byte, non-printable unicode: convert to hex */
             static const char *hex = "0123456789abcdef";
@@ -321,6 +328,7 @@ void ProcessRegularFile(IN const WCHAR* incomingDir, IN const struct file_header
 void ProcessDirectory(IN const WCHAR* incomingDir, IN const struct file_header *untrustedHeader,
     IN const char *untrustedNameUtf8)
 {
+    UNREFERENCED_PARAMETER(untrustedHeader);
     LogVerbose("start");
     WCHAR* trustedPath = SanitizePath(incomingDir, untrustedNameUtf8, NULL);
 

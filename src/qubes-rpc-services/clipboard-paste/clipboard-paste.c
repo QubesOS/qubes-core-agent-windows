@@ -148,8 +148,15 @@ HWND CreateMainWindow(IN HINSTANCE instance)
         NULL);
 }
 
-int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE previousInstance, WCHAR *commandLine, int showFlags)
+int APIENTRY wWinMain(    _In_ HINSTANCE instance,
+                      _In_opt_ HINSTANCE previousInstance,
+                          _In_ WCHAR* commandLine,
+                          _In_ int showFlags)
 {
+    UNREFERENCED_PARAMETER(previousInstance);
+    UNREFERENCED_PARAMETER(commandLine);
+    UNREFERENCED_PARAMETER(showFlags);
+
     HANDLE stdIn;
     HWND window;
 
