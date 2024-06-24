@@ -621,7 +621,7 @@ static DWORD handle_child_output(
         // - !ok and GetLastError() == ERROR_BROKEN_PIPE.
         //
         // ReadFile of an anonymous pipe returns FALSE and GetLastError
-        // returns ERROR_BROKE_PIPE when the corresponding write handle 
+        // returns ERROR_BROKEN_PIPE when the corresponding write handle
         // has been closed.
         if (!ok && GetLastError() != ERROR_BROKEN_PIPE)
         {
@@ -630,12 +630,9 @@ static DWORD handle_child_output(
             win_perror("ReadFile");
         }
         eof = nread == 0;
-        // EOF is signaled to the remote via zero count
         LogVerbose("read %lu 0x%lx", nread, nread);
         //hex_dump("child data", buffer, nread);
 
-        // don't send EOF here, this will disconnect us before we potentially send everything
-        // EOF is sent on child process exit
         if (nread > 0)
         {
             if (!VchanSendData(child, buffer, nread, pipe_type))
@@ -659,7 +656,10 @@ DWORD WINAPI StdoutThread(
 {
     PCHILD_STATE child = param;
 
-    return handle_child_output(child, PTYPE_STDOUT);
+    DWORD ret = handle_child_output(child, PTYPE_STDOUT);
+    LogDebug("sending stdout EOF");
+    VchanSendData(child, NULL, 0, PTYPE_STDOUT);
+    return ret;
 }
 
 DWORD WINAPI StderrThread(
@@ -668,7 +668,10 @@ DWORD WINAPI StderrThread(
 {
     PCHILD_STATE child = param;
 
-    return handle_child_output(child, PTYPE_STDERR);
+    DWORD ret = handle_child_output(child, PTYPE_STDERR);
+    LogDebug("sending stderr EOF");
+    VchanSendData(child, NULL, 0, PTYPE_STDERR);
+    return ret;
 }
 
 static void XifLogger(int level, const char *function, const WCHAR *format, va_list args)
