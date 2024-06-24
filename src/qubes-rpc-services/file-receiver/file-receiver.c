@@ -26,6 +26,7 @@
 #include <shlobj.h>
 #include <strsafe.h>
 
+#include <exec.h>
 #include <log.h>
 #include <qubes-io.h>
 
@@ -64,26 +65,36 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         return win_perror("GetEnvironmentVariable(QREXEC_REMOTE_DOMAIN)");
     }
 
-    WCHAR* documentsPath = NULL;
-    DWORD status = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &documentsPath);
-    if (FAILED(status))
-    {
-        return win_perror2(status, "getting Documents path");
-    }
-
-    LogDebug("Documents: %s", documentsPath);
     WCHAR* incomingDir = malloc(MAX_PATH_LONG_WSIZE);
     if (!incomingDir)
         return ERROR_OUTOFMEMORY;
 
-    if (FAILED(status = StringCchCopy(incomingDir, MAX_PATH_LONG, documentsPath)))
-        return win_perror2(status, "formatting incoming dir path");
+    DWORD status;
+    WCHAR* arg = GetArgument();
+    if (arg)
+    {
+        if (FAILED(status = StringCchPrintf(incomingDir, MAX_PATH_LONG, L"%s", arg)))
+            return win_perror2(status, "formatting incoming dir path");
+    }
+    else
+    {
+        WCHAR* documentsPath = NULL;
+        status = SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_CREATE, NULL, &documentsPath);
+        if (FAILED(status))
+            return win_perror2(status, "getting Documents path");
 
-    CoTaskMemFree(documentsPath);
+        LogDebug("Documents: %s", documentsPath);
 
-    if (FAILED(status = PathCchAppendEx(incomingDir, MAX_PATH_LONG, INCOMING_DIR_ROOT, PATHCCH_ALLOW_LONG_PATHS)))
-        return win_perror2(status, "formatting incoming dir path");
+        if (FAILED(status = StringCchCopy(incomingDir, MAX_PATH_LONG, documentsPath)))
+            return win_perror2(status, "formatting incoming dir path");
 
+        CoTaskMemFree(documentsPath);
+
+        if (FAILED(status = PathCchAppendEx(incomingDir, MAX_PATH_LONG, INCOMING_DIR_ROOT, PATHCCH_ALLOW_LONG_PATHS)))
+            return win_perror2(status, "formatting incoming dir path");
+    }
+
+    LogDebug("Incoming dir: %s", incomingDir);
     BOOL success = CreateDirectory(incomingDir, NULL);
     if (!success && (status = GetLastError()) != ERROR_ALREADY_EXISTS)
         return win_perror2(status, "creating incoming directory");
