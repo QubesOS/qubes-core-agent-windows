@@ -31,6 +31,15 @@
 
 #define VCHAN_BUFFER_SIZE 65536
 
+// Make sure this matches the installer. TODO: remove hardcoded value from the installer and here
+#define PRIVATE_VOLUME_ROOT  L"Q:\\"
+
+// Directories to be searched for RPC service definitions and handlers.
+// Global configuration is under QWT installation dir.
+// Overrides can be placed under the root directory of the private volume.
+#define QREXEC_RPC_DEFINITION_DIR  L"qubes-rpc"
+#define QREXEC_RPC_HANDLER_DIR     L"qubes-rpc-services"
+
 // received from qrexec-client-vm
 typedef struct _SERVICE_REQUEST
 {

@@ -34,6 +34,7 @@
 #include <libvchan.h>
 #include <qubesdb-client.h>
 
+#include <config.h>
 #include <log.h>
 #include <service.h>
 #include <vchan-common.h>
@@ -346,6 +347,112 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
     return ERROR_SUCCESS;
 }
 
+static BOOL DirExists(IN const WCHAR* dir)
+{
+    DWORD attrs = GetFileAttributes(dir);
+    if (attrs != INVALID_FILE_ATTRIBUTES)
+    {
+        if (attrs & FILE_ATTRIBUTE_DIRECTORY)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+/**
+ * @brief Check if a subdirectory exists.
+ * @param directory Output buffer for full path to the subdirectory (minimum MAX_PATH_LONG WCHARs).
+ * @param parent Parent path of the directory being queried.
+ * @param subdir Subdirectory being queried.
+ * @returns Error code.
+ */
+static BOOL SubdirExists(OUT WCHAR* directory, IN const WCHAR* parent, IN const WCHAR* subdir)
+{
+    DWORD status = StringCchCopy(directory, MAX_PATH_LONG, parent);
+    if (FAILED(status))
+    {
+        win_perror2(status, "Formatting RPC service directory");
+        return FALSE;
+    }
+
+    status = PathCchAppendEx(directory, MAX_PATH_LONG, subdir, PATHCCH_ALLOW_LONG_PATHS);
+    if (FAILED(status))
+    {
+        win_perror2(status, "Formatting RPC service directory");
+        return FALSE;
+    }
+
+    if (DirExists(directory))
+        return TRUE;
+
+    return FALSE;
+}
+
+/**
+ * @brief Get the full path to an RPC service definition or handler.
+ *        Checks the private volume overrides first, then files under QWT install dir.
+ * @param directory Output buffer (minimum MAX_PATH_LONG WCHARs).
+ * @param rpcSubdir QREXEC_RPC_DEFINITION_DIR or QREXEC_RPC_HANDLER_DIR
+ * @param serviceFile Service name (for QREXEC_RPC_DEFINITION_DIR) or handler file name (for QREXEC_RPC_HANDLER_DIR).
+ * @returns Error code.
+ */
+static DWORD GetRpcFile(OUT WCHAR* path, IN const WCHAR* rpcSubdir, IN const WCHAR* serviceFile)
+{
+    // try private volume first
+    if (SubdirExists(path, PRIVATE_VOLUME_ROOT, rpcSubdir))
+    {
+        DWORD status = PathCchAppendEx(path, MAX_PATH_LONG, serviceFile, PATHCCH_ALLOW_LONG_PATHS);
+        if (FAILED(status))
+        {
+            win_perror2(status, "Formatting RPC service path");
+            return status; // abort, this shouldn't happen
+        }
+
+        if (PathFileExists(path))
+            return ERROR_SUCCESS;
+    }
+
+    // try install dir
+    const WCHAR* tools_dir = CfgGetToolsDir();
+    if (!tools_dir)
+    {
+        win_perror("reading QWT install dir");
+        return GetLastError();
+    }
+
+    if (SubdirExists(path, tools_dir, rpcSubdir))
+    {
+        DWORD status = PathCchAppendEx(path, MAX_PATH_LONG, serviceFile, PATHCCH_ALLOW_LONG_PATHS);
+        if (FAILED(status))
+        {
+            win_perror2(status, "Formatting RPC service path");
+            return status; // abort, this shouldn't happen
+        }
+
+        if (PathFileExists(path))
+            return ERROR_SUCCESS;
+    }
+
+    return ERROR_FILE_NOT_FOUND;
+}
+
+/**
+ * @brief Find the optional RPC service argument in service name (denoted by '+').
+ * @param serviceName Service name with the optional argument.
+ *                    If argument is present, plus sign is replaced by the NULL character.
+ * @returns Pointer to the service argument or NULL if absent.
+ */
+static const WCHAR* ExtractRpcArgument(IN OUT WCHAR* serviceName)
+{
+    WCHAR* plus = wcschr(serviceName, L'+');
+    if (plus)
+    {
+        *plus = L'\0';
+        return plus + 1;
+    }
+    return NULL;
+}
+
 /**
  * @brief Recognize magic RPC request command ("QUBESRPC") and replace it with real
  *        command to be executed, after reading RPC service configuration.
@@ -373,6 +480,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
     if (wcsncmp(commandLine, RPC_REQUEST_COMMAND, wcslen(RPC_REQUEST_COMMAND)) != 0)
         goto end;
 
+    status = ERROR_OUTOFMEMORY;
     serviceFilePath = calloc(sizeof(WCHAR), MAX_PATH_LONG);
     if (!serviceFilePath)
         goto end;
@@ -382,7 +490,7 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
     if (!separator)
     {
         LogError("malformed RPC request");
-        status =  ERROR_INVALID_OPERATION;
+        status = ERROR_INVALID_OPERATION;
         goto end;
     }
 
@@ -408,48 +516,18 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         // manualy using qvm-run (qvm-run -p vmname "QUBESRPC service_name").
     }
 
-    // build RPC service config file path
-    // FIXME: use shell path APIs
-    if (!GetModuleFileName(NULL, serviceFilePath, MAX_PATH_LONG))
+    const WCHAR* rpcArgument = ExtractRpcArgument(serviceName);
+    if (rpcArgument)
     {
-        status = win_perror("GetModuleFileName");
-        goto end;
+        LogDebug("RPC argument: %s", rpcArgument);
+    }
+    else
+    {
+        rpcArgument = L"";
     }
 
-    status = ERROR_PATH_NOT_FOUND;
-    // FIXME hardcoded path
-    // cut off file name (qrexec_agent.exe)
-    separator = wcsrchr(serviceFilePath, L'\\');
-    if (!separator)
-    {
-        LogError("Cannot find dir containing qrexec-agent.exe");
-        goto end;
-    }
-
-    *separator = L'\0';
-    // cut off one dir (bin)
-    separator = wcsrchr(serviceFilePath, L'\\');
-    if (!separator)
-    {
-        LogError("Cannot find dir containing bin\\qrexec-agent.exe");
-        goto end;
-    }
-
-    // Leave trailing backslash
-    separator++;
-    *separator = L'\0';
-    // FIXME hardcoded path
-    if (wcslen(serviceFilePath) + wcslen(L"qubes-rpc\\") + wcslen(serviceName) > MAX_PATH_LONG - 1)
-    {
-        LogError("RPC service config file path too long");
-        goto end;
-    }
-
-    // FIXME hardcoded path
-    if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, L"qubes-rpc", PATHCCH_ALLOW_LONG_PATHS)))
-        goto end;
-
-    if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, serviceName, PATHCCH_ALLOW_LONG_PATHS)))
+    status = GetRpcFile(serviceFilePath, QREXEC_RPC_DEFINITION_DIR, serviceName);
+    if (status != ERROR_SUCCESS)
         goto end;
 
     LogDebug("service config file: %s", serviceFilePath);
@@ -462,39 +540,6 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
         OPEN_EXISTING,         // existing file only
         FILE_ATTRIBUTE_NORMAL, // normal file
         NULL);                 // no attr. template
-
-    WCHAR* serviceCallArg = NULL;
-    if (serviceConfigFile == INVALID_HANDLE_VALUE)
-    {
-        // maybe there is an argument appended? look for a file with
-        // +argument stripped
-        WCHAR *newsep = NULL;
-        newsep = wcschr(serviceName, L'+');
-        if (newsep)
-        {
-            *newsep = L'\0';
-            serviceCallArg = newsep+1;
-            // strip service+arg
-            newsep = wcsrchr(serviceFilePath, L'\\');
-            assert(newsep != NULL);
-
-            newsep++;
-            *newsep = L'\0';
-            if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, serviceName, PATHCCH_ALLOW_LONG_PATHS)))
-                goto end;
-
-            LogDebug("service config file (with args): %s", serviceFilePath);
-
-            serviceConfigFile = CreateFile(
-                serviceFilePath,       // file to open
-                GENERIC_READ,          // open for reading
-                FILE_SHARE_READ,       // share for reading
-                NULL,                  // default security
-                OPEN_EXISTING,         // existing file only
-                FILE_ATTRIBUTE_NORMAL, // normal file
-                NULL);                 // no attr. template
-        }
-    }
 
     if (serviceConfigFile == INVALID_HANDLE_VALUE)
     {
@@ -537,12 +582,8 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
 
     if (PathIsRelative(rawServiceFilePath))
     {
-        // relative path are based in qubes-rpc-services
-        // reuse separator found when preparing previous file path
-        *separator = L'\0';
-        if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, L"qubes-rpc-services", PATHCCH_ALLOW_LONG_PATHS))) // FIXME hardcoded path
-            goto end;
-        if (FAILED(status = PathCchAppendEx(serviceFilePath, MAX_PATH_LONG, rawServiceFilePath, PATHCCH_ALLOW_LONG_PATHS)))
+        status = GetRpcFile(serviceFilePath, QREXEC_RPC_HANDLER_DIR, rawServiceFilePath);
+        if (status != ERROR_SUCCESS)
             goto end;
     }
     else
@@ -560,18 +601,16 @@ static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceC
             goto end;
     }
 
-    // replace "%1" with an argument, if there was any, otherwise remove it
-    if (!serviceCallArg)
-        serviceCallArg = L"";
-
-    *serviceCommandLine = StrReplace(serviceFilePath, L"%1", serviceCallArg);
+    // replace "%1" with the argument, if there was any, otherwise remove it
+    *serviceCommandLine = StrReplace(serviceFilePath, L"%1", rpcArgument);
     if (*serviceCommandLine == NULL)
     {
         LogError("Failed to format service call with arguments");
         status = ERROR_INVALID_DATA;
         goto end;
     }
-    LogDebug("RPC %s: %s\n", serviceName, *serviceCommandLine);
+
+    LogDebug("RPC '%s' final cmdline: %s\n", serviceName, *serviceCommandLine);
 
     status = ERROR_SUCCESS;
     LogVerbose("success");
