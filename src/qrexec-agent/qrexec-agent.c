@@ -45,7 +45,7 @@
 #include <qubes-io.h>
 #include <list.h>
 
-libvchan_t *g_DaemonVchan;
+libvchan_t* g_DaemonVchan;
 
 CRITICAL_SECTION g_DaemonCriticalSection;
 CRITICAL_SECTION g_RequestCriticalSection;
@@ -66,7 +66,7 @@ void DumpRequestList(void)
     {
         PSERVICE_REQUEST context = (PSERVICE_REQUEST)CONTAINING_RECORD(entry, SERVICE_REQUEST, ListEntry);
         LogDebug("request %S, service %S, domain %S, user %s, cmd %s",
-                 context->ServiceParams.request_id, context->ServiceParams.service_name,
+            context->ServiceParams.request_id, context->ServiceParams.service_name,
             context->ServiceParams.target_domain, context->UserName, context->CommandLine);
         entry = entry->Flink;
     }
@@ -131,12 +131,12 @@ BOOL WaitForQdb(void)
  * @return TRUE on success.
  */
 BOOL VchanSendMessage(
-    _Inout_ libvchan_t *vchan,
+    _Inout_ libvchan_t* vchan,
     _In_ ULONG messageType,
-    _In_reads_bytes_opt_(cbData) const void *data,
+    _In_reads_bytes_opt_(cbData) const void* data,
     _In_ ULONG cbData,
     _In_ const PWSTR what
-    )
+)
 {
     struct msg_header header;
     BOOL status = FALSE;
@@ -217,20 +217,20 @@ static void release_connection(int id)
 
 // based on https://stackoverflow.com/a/780024
 // Caller must free the returned string.
-WCHAR* StrReplace(WCHAR const * const original,
-        WCHAR const * const pattern,
-        WCHAR const * const replacement
-    ) {
+WCHAR* StrReplace(WCHAR const* const original,
+    WCHAR const* const pattern,
+    WCHAR const* const replacement
+) {
     size_t const replen = wcslen(replacement);
     size_t const patlen = wcslen(pattern);
     size_t const orilen = wcslen(original);
 
     size_t patcnt = 0;
-    const WCHAR * oriptr;
-    const WCHAR * patloc;
+    const WCHAR* oriptr;
+    const WCHAR* patloc;
 
-    WCHAR *returned = NULL;
-    WCHAR *retptr = NULL;
+    WCHAR* returned = NULL;
+    WCHAR* retptr = NULL;
     size_t retlen;
 
     // find how many times the pattern occurs in the original string
@@ -241,7 +241,7 @@ WCHAR* StrReplace(WCHAR const * const original,
 
     // allocate memory for the new string
     retlen = orilen + patcnt * (replen - patlen) + 1;
-    returned = (WCHAR *) malloc( sizeof(WCHAR) * retlen);
+    returned = (WCHAR*)malloc(sizeof(WCHAR) * retlen);
 
     if (returned == NULL)
         goto fail;
@@ -282,12 +282,12 @@ fail:
  * @param runInteractively Determines whether the command should be run interactively.
  * @return Error code.
  */
-static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
-                              OUT WCHAR **commandLine, OUT BOOL *runInteractively)
+static DWORD ParseUtf8Command(IN const char* commandUtf8, OUT WCHAR** userName,
+    OUT WCHAR** commandLine, OUT BOOL* runInteractively)
 {
     DWORD status;
-    WCHAR *separator = NULL;
-    WCHAR *commandUtf16 = NULL;
+    WCHAR* separator = NULL;
+    WCHAR* commandUtf16 = NULL;
 
     if (!commandUtf8 || !runInteractively)
         return ERROR_INVALID_PARAMETER;
@@ -296,7 +296,7 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
     *commandLine = NULL;
     *runInteractively = TRUE;
 
-    commandUtf16 = (WCHAR*) malloc(CONVERT_MAX_BUFFER_SIZE_UTF16);
+    commandUtf16 = (WCHAR*)malloc(CONVERT_MAX_BUFFER_SIZE_UTF16);
     if (!commandUtf16)
     {
         return win_perror2(ERROR_OUTOFMEMORY, "allocating utf16 conversion buffer");
@@ -327,7 +327,7 @@ static DWORD ParseUtf8Command(IN const char *commandUtf8, OUT WCHAR **userName,
     {
         separator = wcschr(separator, L':');
 #pragma warning (suppress:28182) // separator can't be NULL here
-        *separator = L'\0';
+        * separator = L'\0';
         separator++;
 
         *runInteractively = FALSE;
@@ -462,7 +462,7 @@ static const WCHAR* ExtractRpcArgument(IN OUT WCHAR* serviceName)
  * @param sourceDomainName Source domain (if available) to be set in environment. Must be freed by caller.
  * @return Error code.
  */
-static DWORD InterceptRPCRequest(IN OUT WCHAR *commandLine, OUT WCHAR **serviceCommandLine, OUT WCHAR **sourceDomainName)
+static DWORD InterceptRPCRequest(IN OUT WCHAR* commandLine, OUT WCHAR** serviceCommandLine, OUT WCHAR** sourceDomainName)
 {
     DWORD status = ERROR_INVALID_PARAMETER;
     HANDLE serviceConfigFile = INVALID_HANDLE_VALUE;
@@ -637,14 +637,14 @@ end:
  * @param bufferSize Size of the exec params (variable, includes command line).
  * @return Exec params on success or NULL. Must be freed by the caller.
  */
-struct exec_params *ReceiveExecParams(IN int bufferSize)
+struct exec_params* ReceiveExecParams(IN int bufferSize)
 {
-    struct exec_params *params;
+    struct exec_params* params;
 
     if (bufferSize == 0)
         return NULL;
 
-    params = (struct exec_params *) malloc(bufferSize);
+    params = (struct exec_params*)malloc(bufferSize);
     if (!params)
         return NULL;
 
@@ -664,8 +664,8 @@ struct exec_params *ReceiveExecParams(IN int bufferSize)
 * @return TRUE on success.
 */
 BOOL VchanSendHello(
-    _Inout_ libvchan_t *vchan
-    )
+    _Inout_ libvchan_t* vchan
+)
 {
     struct peer_info info;
 
@@ -712,11 +712,11 @@ static DWORD StartChild(int domain, int port, PWSTR userName, PWSTR commandLine,
     if (interactive) flags |= 0x04;
 
     StringCchPrintf(command, MAX_PATH_LONG, L"qrexec-wrapper.exe %d%c%d%c%s%c%d%c%s",
-                    domain, QUBES_ARGUMENT_SEPARATOR,
-                    port, QUBES_ARGUMENT_SEPARATOR,
-                    userName, QUBES_ARGUMENT_SEPARATOR,
-                    flags, QUBES_ARGUMENT_SEPARATOR,
-                    commandLine);
+        domain, QUBES_ARGUMENT_SEPARATOR,
+        port, QUBES_ARGUMENT_SEPARATOR,
+        userName, QUBES_ARGUMENT_SEPARATOR,
+        flags, QUBES_ARGUMENT_SEPARATOR,
+        commandLine);
 
     LogDebug("domain %d, port %d, user '%s', isServer %d, piped %d, interactive %d, cmd '%s', final command '%s'",
         domain, port, userName, isServer, piped, interactive, commandLine, command);
@@ -737,7 +737,7 @@ static DWORD StartChild(int domain, int port, PWSTR userName, PWSTR commandLine,
  */
 static PSERVICE_REQUEST FindServiceRequest(
     IN  PCHAR requestId
-    )
+)
 {
     PLIST_ENTRY entry;
     PSERVICE_REQUEST returnContext = NULL;
@@ -761,7 +761,7 @@ static PSERVICE_REQUEST FindServiceRequest(
     if (returnContext)
     {
         LogDebug("found request: domain '%S', service '%S', user '%s', command '%s'",
-                 returnContext->ServiceParams.target_domain, returnContext->ServiceParams.service_name,
+            returnContext->ServiceParams.target_domain, returnContext->ServiceParams.service_name,
             returnContext->UserName, returnContext->CommandLine);
     }
     else
@@ -775,10 +775,10 @@ static PSERVICE_REQUEST FindServiceRequest(
  * @param header Qrexec header with data connection parameters.
  * @return Error code.
  */
-DWORD HandleServiceConnect(IN const struct msg_header *header)
+DWORD HandleServiceConnect(IN const struct msg_header* header)
 {
     DWORD status;
-    struct exec_params *params = NULL;
+    struct exec_params* params = NULL;
     PSERVICE_REQUEST context = NULL;
 
     LogVerbose("msg 0x%x, len %d", header->type, header->len);
@@ -825,7 +825,7 @@ cleanup:
 * @param header Qrexec header with refused request id.
 * @return Error code.
 */
-DWORD HandleServiceRefused(IN const struct msg_header *header)
+DWORD HandleServiceRefused(IN const struct msg_header* header)
 {
     struct service_params serviceParams;
     PSERVICE_REQUEST context;
@@ -845,7 +845,7 @@ DWORD HandleServiceRefused(IN const struct msg_header *header)
     }
 
     LogInfo("Qrexec service refused by daemon: domain '%S', service '%S', user '%s, local command '%s'",
-            context->ServiceParams.target_domain, context->ServiceParams.service_name, context->UserName, context->CommandLine);
+        context->ServiceParams.target_domain, context->ServiceParams.service_name, context->UserName, context->CommandLine);
 
     // TODO: notify user?
 
@@ -868,12 +868,12 @@ DWORD HandleServiceRefused(IN const struct msg_header *header)
  * @param runInteractively Determines whether the local command should be run in the interactive session.
  * @return Exec params on success (even if parsing command line fails). Must be freed by the caller.
  */
-struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OUT WCHAR **commandLine, OUT BOOL *runInteractively)
+struct exec_params* HandleExecCommon(IN int bufferSize, OUT WCHAR** userName, OUT WCHAR** commandLine, OUT BOOL* runInteractively)
 {
-    struct exec_params *exec = NULL;
+    struct exec_params* exec = NULL;
     DWORD status;
-    WCHAR *remoteDomainName = NULL;
-    WCHAR *serviceCommandLine = NULL;
+    WCHAR* remoteDomainName = NULL;
+    WCHAR* serviceCommandLine = NULL;
 
     exec = ReceiveExecParams(bufferSize);
     if (!exec)
@@ -933,13 +933,13 @@ struct exec_params *HandleExecCommon(IN int bufferSize, OUT WCHAR **userName, OU
  * @param piped Determines whether the local executable's I/O should be connected to data vchan.
  * @return Error code.
  */
-static DWORD HandleExec(IN const struct msg_header *header, BOOL piped)
+static DWORD HandleExec(IN const struct msg_header* header, BOOL piped)
 {
     DWORD status;
-    WCHAR *userName = NULL;
-    WCHAR *commandLine = NULL;
+    WCHAR* userName = NULL;
+    WCHAR* commandLine = NULL;
     BOOL interactive;
-    struct exec_params *exec;
+    struct exec_params* exec;
 
     LogVerbose("msg 0x%x, len %d", header->type, header->len);
 
@@ -973,7 +973,7 @@ static DWORD HandleExec(IN const struct msg_header *header, BOOL piped)
  * @param header Qrexec header.
  * @return Error code.
  */
-static DWORD HandleDaemonHello(struct msg_header *header)
+static DWORD HandleDaemonHello(struct msg_header* header)
 {
     struct peer_info info;
 
@@ -990,7 +990,7 @@ static DWORD HandleDaemonHello(struct msg_header *header)
     if (info.version < QREXEC_PROTOCOL_VERSION)
     {
         LogWarning("incompatible protocol version (%d instead of %d)",
-                   info.version, QREXEC_PROTOCOL_VERSION);
+            info.version, QREXEC_PROTOCOL_VERSION);
         return ERROR_INVALID_FUNCTION;
     }
 
@@ -1157,7 +1157,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
                     goto out;
                 }
             }
-out:
+        out:
             LeaveCriticalSection(&g_DaemonCriticalSection);
             continue;
         }
@@ -1197,7 +1197,7 @@ void Usage(void)
  * @param format Message format.
  * @param args Message arguments.
  */
-static void XifLogger(int level, const char *function, const WCHAR *format, va_list args)
+static void XifLogger(int level, const char* function, const WCHAR* format, va_list args)
 {
     WCHAR buf[1024];
 
@@ -1273,8 +1273,8 @@ DWORD WINAPI PipeClientThread(PVOID param)
     }
 
     LogInfo("Received request from client %lu: domain '%S', service '%S', user '%s', local command '%s', request id %lu",
-            ctx->id, context->ServiceParams.target_domain, context->ServiceParams.service_name,
-            context->UserName, context->CommandLine, g_RequestId);
+        ctx->id, context->ServiceParams.target_domain, context->ServiceParams.service_name,
+        context->UserName, context->CommandLine, g_RequestId);
 
     QpsDisconnectClient(ctx->server, ctx->id);
 
@@ -1355,7 +1355,7 @@ DWORD WINAPI PipeServerThread(PVOID param)
  * @param param Worker context.
  * @return Error code.
  */
-DWORD WINAPI ServiceExecutionThread(void *param)
+DWORD WINAPI ServiceExecutionThread(void* param)
 {
     DWORD status;
     HANDLE pipeServerThread;
@@ -1379,15 +1379,15 @@ DWORD WINAPI ServiceExecutionThread(void *param)
     // initialize pipe server for local clients
     PIPE_SERVER pipeServer = NULL;
     status = QpsCreate(TRIGGER_PIPE_NAME,
-                       4096, // pipe buffers
-                       4096, // read buffer
-                       1000, // write timeout
-                       ClientConnectedCallback,
-                       NULL,
-                       NULL,
-                       NULL,
-                       &sa,
-                       &pipeServer);
+        4096, // pipe buffers
+        4096, // read buffer
+        1000, // write timeout
+        ClientConnectedCallback,
+        NULL,
+        NULL,
+        NULL,
+        &sa,
+        &pipeServer);
 
     if (ERROR_SUCCESS != status)
         win_perror2(status, "create pipe server");
@@ -1408,7 +1408,7 @@ DWORD WINAPI ServiceExecutionThread(void *param)
         LogDebug("WatchForEvents failed");
 
     ServiceCleanup();
-// FIXME: pipe server doesn't have the ability for graceful stop
+    // FIXME: pipe server doesn't have the ability for graceful stop
 
     LogDebug("Waiting for the pipe server thread to exit");
     if (WaitForSingleObject(pipeServerThread, 1000) != WAIT_OBJECT_0)
@@ -1433,7 +1433,7 @@ static DWORD WINAPI ServiceCleanup(void)
     return ERROR_SUCCESS;
 }
 
-int wmain(int argc, WCHAR *argv[])
+int wmain(int argc, WCHAR* argv[])
 {
     UNREFERENCED_PARAMETER(argc);
     UNREFERENCED_PARAMETER(argv);
