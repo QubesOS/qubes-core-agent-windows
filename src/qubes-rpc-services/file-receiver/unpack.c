@@ -115,9 +115,9 @@ static int xutftowcsn(wchar_t *wcs, const char *utfs, size_t wcslen, int utflen)
             c |= ((utf[upos++] & 0x3f) << 6);
             c |= (utf[upos++] & 0x3f);
             c -= 0x10000;
-            assert(0xd800 | (c >> 10) <= WCHAR_MAX);
+            assert((0xd800 | (c >> 10)) <= WCHAR_MAX);
             wcs[wpos++] = (wchar_t)(0xd800 | (c >> 10));
-            assert(0xdc00 | (c & 0x3ff) <= WCHAR_MAX);
+            assert((0xdc00 | (c & 0x3ff)) <= WCHAR_MAX);
             wcs[wpos++] = (wchar_t)(0xdc00 | (c & 0x3ff));
         } else if (c >= 0xa0) {
             /* invalid utf-8 byte, printable unicode char: convert 1:1 */
