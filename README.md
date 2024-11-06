@@ -1,6 +1,5 @@
 # Core RPC agent and services for Windows
 
-- TODO: integrate with Qubes builder
 - TODO: rewrite `service-policy` (it's C#, too old for recent .NET)
 
 ### Environment variables

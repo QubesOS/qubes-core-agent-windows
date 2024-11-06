@@ -1,0 +1,38 @@
+vm:
+  windows:
+    build:
+    - vs2022/core-agent-windows.sln
+    bin:
+    - vs2022/x64/@CONFIGURATION@/advertise-tools/advertise-tools.exe
+    - vs2022/x64/@CONFIGURATION@/clipboard-copy/clipboard-copy.exe
+    - vs2022/x64/@CONFIGURATION@/clipboard-paste/clipboard-paste.exe
+    - vs2022/x64/@CONFIGURATION@/file-receiver/file-receiver.exe
+    - vs2022/x64/@CONFIGURATION@/file-sender/file-sender.exe
+    - vs2022/x64/@CONFIGURATION@/get-image-rgba/get-image-rgba.exe
+    - vs2022/x64/@CONFIGURATION@/network-setup/network-setup.exe
+    - vs2022/x64/@CONFIGURATION@/open-in-vm/open-in-vm.exe
+    - vs2022/x64/@CONFIGURATION@/open-url/open-url.exe
+    - vs2022/x64/@CONFIGURATION@/qrexec-agent/qrexec-agent.exe
+    - vs2022/x64/@CONFIGURATION@/qrexec-client-vm/qrexec-client-vm.exe
+    - vs2022/x64/@CONFIGURATION@/qrexec-wrapper/qrexec-wrapper.exe
+    - vs2022/x64/@CONFIGURATION@/relocate-dir/relocate-dir.exe
+    - vs2022/x64/@CONFIGURATION@/set-gui-mode/set-gui-mode.exe
+    - vs2022/x64/@CONFIGURATION@/vm-file-editor/vm-file-editor.exe
+    - vs2022/x64/@CONFIGURATION@/wait-for-logon/wait-for-logon.exe
+    - src/qubes-rpc-services/get-appmenus.ps1
+    - src/qubes-rpc-services/qubes.ClipboardCopy
+    - src/qubes-rpc-services/qubes.ClipboardPaste
+    - src/qubes-rpc-services/qubes.Filecopy
+    - src/qubes-rpc-services/qubes.GetAppmenus
+    - src/qubes-rpc-services/qubes.GetImageRGBA
+    - src/qubes-rpc-services/qubes.OpenInVM
+    - src/qubes-rpc-services/qubes.OpenURL
+    - src/qubes-rpc-services/qubes.SetDateTime
+    - src/qubes-rpc-services/qubes.SetGuiMode
+    - src/qubes-rpc-services/qubes.StartApp
+    - src/qubes-rpc-services/qubes.SuspendPostAll
+    - src/qubes-rpc-services/qubes.VMShell
+    - src/qubes-rpc-services/qubes.WaitForSession
+    - src/qubes-rpc-services/set-time.ps1
+    - src/qubes-rpc-services/start-app.ps1
+    - src/qubes-rpc-services/update-time.bat
