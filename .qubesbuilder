@@ -31,8 +31,11 @@ vm:
     - src/qubes-rpc-services/qubes.SetGuiMode
     - src/qubes-rpc-services/qubes.StartApp
     - src/qubes-rpc-services/qubes.SuspendPostAll
+    - src/qubes-rpc-services/qubes.VMExec
     - src/qubes-rpc-services/qubes.VMShell
     - src/qubes-rpc-services/qubes.WaitForSession
     - src/qubes-rpc-services/set-time.ps1
     - src/qubes-rpc-services/start-app.ps1
     - src/qubes-rpc-services/update-time.bat
+    - src/qubes-rpc-services/VMExec-Decode.ps1
+    - src/qubes-rpc-services/VMExec.ps1
