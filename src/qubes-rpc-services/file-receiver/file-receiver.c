@@ -98,17 +98,23 @@ int __cdecl wmain(int argc, WCHAR *argv[])
             return win_perror2(status, "formatting incoming dir path");
     }
 
-    LogDebug("Incoming dir: %s", incomingDir);
+    LogDebug("Incoming dir: '%s'", incomingDir);
     BOOL success = CreateDirectory(incomingDir, NULL);
-    if (!success && (status = GetLastError()) != ERROR_ALREADY_EXISTS)
+    status = GetLastError();
+    if (!success && status != ERROR_ALREADY_EXISTS)
         return win_perror2(status, "creating incoming directory");
 
-    if (FAILED(status = PathCchAppendEx(incomingDir, MAX_PATH_LONG, remoteDomainName, PATHCCH_ALLOW_LONG_PATHS)))
-        return win_perror2(status, "Formatting incoming dir path");
+    // add the remote domain name subdir if using the default incoming dir
+    if (!arg)
+    {
+        if (FAILED(status = PathCchAppendEx(incomingDir, MAX_PATH_LONG, remoteDomainName, PATHCCH_ALLOW_LONG_PATHS)))
+            return win_perror2(status, "Formatting incoming dir path");
 
-    success = CreateDirectory(incomingDir, NULL);
-    if (!success && (status = GetLastError()) != ERROR_ALREADY_EXISTS)
-        return win_perror2(status, "creating incoming directory");
+        success = CreateDirectory(incomingDir, NULL);
+        status = GetLastError();
+        if (!success && status != ERROR_ALREADY_EXISTS)
+            return win_perror2(status, "creating incoming directory");
+    }
 
     return ReceiveFiles(incomingDir);
 }
