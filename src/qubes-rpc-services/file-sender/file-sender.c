@@ -410,6 +410,7 @@ int wmain(int argc, WCHAR *argv[])
         g_totalSize += ProcessDirectory(argv[i], TRUE);
     }
 
+    LogDebug("Total size: %ld", g_totalSize);
     SetProgressText(L"Sending files...", NULL);
 
     for (int i = 1; i < argc; i++)
@@ -417,7 +418,14 @@ int wmain(int argc, WCHAR *argv[])
         if (g_cancelOperation)
             break;
 
+        for (WCHAR* c = argv[i]; *c; c++)
+        {
+            if (*c == '/')
+                *c = '\\';
+        }
+
         WCHAR* directory = GetAbsolutePath(currentDirectory, argv[i]);
+        LogVerbose("full path: %s", directory);
 
         if (!directory)
         {
@@ -432,6 +440,7 @@ int wmain(int argc, WCHAR *argv[])
         PathStripPath(baseName);
         PathRemoveFileSpec(directory);
 
+        LogVerbose("base: %s, dir: %s", baseName, directory);
         if (!SetCurrentDirectory(directory))
             FcReportError(GetLastError(), L"SetCurrentDirectory(%s)", directory);
 
