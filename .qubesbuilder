@@ -20,6 +20,7 @@ vm:
     - vs2022/x64/@CONFIGURATION@/vm-file-editor/vm-file-editor.exe
     - vs2022/x64/@CONFIGURATION@/wait-for-logon/wait-for-logon.exe
     - src/qubes-rpc-services/get-appmenus.ps1
+    - src/qubes-rpc-services/log.ps1
     - src/qubes-rpc-services/qubes.ClipboardCopy
     - src/qubes-rpc-services/qubes.ClipboardPaste
     - src/qubes-rpc-services/qubes.Filecopy
