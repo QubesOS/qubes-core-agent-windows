@@ -2,15 +2,17 @@
 
 - TODO: rewrite `service-policy` (it's C#, too old for recent .NET)
 
-### Environment variables
+## Local command-line build on Windows
 
-- `QUBES_INCLUDES` must contain paths containing `windows-utils`, `libvchan` and `qubesdb` includes. Normally it's `<src>/qubes-windows-utils/include;<src>/qubes-core-vchan-xen/windows/include;<src>/qubes-core-qubesdb/include`.
-- `QUBES_LIBS` must contain paths containing `windows-utils`, `libvchan` and `qubesdb` libraries. Normally it's `<src>/qubes-windows-utils/bin;<src>/qubes-core-vchan-xen/windows/bin;<src>/qubes-core-qubesdb/windows/bin`.
+### Prerequisites
 
-## Command-line build
+- Microsoft EWDK iso mounted as a drive
+- `qubes-builderv2`
+- `powershell-yaml` PowerShell package (run `powershell -command Install-Package powershell-yaml` as admin)
+  (TODO: provide offline installer for this)
+- `vmm-xen-windows-pvdrivers`, `core-vchan-xen`, `windows-utils` and `core-qubesdb` built with
+  the same `output_dir` as below
 
-`EWDK_PATH` env variable must be set to the root of MS Enterprise WDK for Windows 10/Visual Studio 2022. 
+### Build
 
-`build.cmd` script builds the solution from command line using the EWDK (no need for external VS installation).
-
-Usage: `build.cmd Release|Debug`
+- run `powershell qubes-builderv2\qubesbuilder\plugins\build_windows\scripts\local\build.ps1 src_dir output_dir Release|Debug`
