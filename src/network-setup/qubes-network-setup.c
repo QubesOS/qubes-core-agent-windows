@@ -61,6 +61,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
     DWORD size = 0;
     DWORD status = 0;
     DWORD i;
+    BOOL found = FALSE;
 
     cbAdaptersInfo = 0;
     /* wait for adapters to initialize */
@@ -93,6 +94,7 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
 
             if (AdapterNameMatch(adapterInfoCurrent->Description))
             {
+                found = TRUE;
                 LogDebug("setting interface info");
                 addrCurrent = &adapterInfoCurrent->IpAddressList;
                 while (addrCurrent)
@@ -127,6 +129,13 @@ DWORD SetNetworkParameters(IN DWORD ip, IN DWORD netmask, IN DWORD gateway, OUT 
             }
         }
         adapterInfoCurrent = adapterInfoCurrent->Next;
+    }
+
+    if (!found)
+    {
+        LogDebug("No matching interface found");
+        status = ERROR_NOT_FOUND;
+        goto cleanup;
     }
 
     /* set default gateway */
@@ -289,11 +298,13 @@ DWORD WINAPI SetupNetwork(PVOID param)
     LogInfo("ip: %S, netmask: %S, gateway: %S", qubesIp, qubesNetmask, qubesGateway);
 
     DWORD interfaceIndex;
-    if (SetNetworkParameters(
+    status = SetNetworkParameters(
         inet_addr(qubesIp),
         inet_addr(qubesNetmask),
         inet_addr(qubesGateway),
-        &interfaceIndex) != ERROR_SUCCESS)
+        &interfaceIndex);
+
+    if (status != ERROR_SUCCESS)
     {
         /* error already reported */
         goto cleanup;
@@ -335,6 +346,10 @@ cleanup:
 
     if (qdb)
         qdb_close(qdb);
+
+    // no suitable interface found, ignore
+    if (status == ERROR_NOT_FOUND)
+        status = ERROR_SUCCESS;
 
     return status;
 }
