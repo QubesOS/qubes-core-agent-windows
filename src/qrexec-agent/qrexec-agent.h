@@ -27,6 +27,8 @@
 #define SERVICE_NAME                    L"QrexecAgent"
 #define DEFAULT_USER_PASSWORD_UNICODE   L"userpass"
 
+#define REG_CONFIG_AUTOSTART_VALUE      L"Autostart"
+
 #define	TRIGGER_PIPE_NAME               L"\\\\.\\pipe\\qrexec_trigger"
 
 #define VCHAN_BUFFER_SIZE 65536

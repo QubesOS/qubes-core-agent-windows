@@ -1351,6 +1351,53 @@ DWORD WINAPI PipeServerThread(PVOID param)
 }
 
 /**
+ * @brief Launch QWT-specific autostart entries from the registry config.
+ */
+DWORD ProcessAutostarts()
+{
+    WCHAR* autostarts = NULL;
+    WCHAR moduleName[CFG_MODULE_MAX];
+    DWORD status = CfgGetModuleName(moduleName, RTL_NUMBER_OF(moduleName));
+    if (status != ERROR_SUCCESS)
+    {
+        win_perror2(status, "Failed to get self module name");
+        goto cleanup;
+    }
+
+    DWORD buffer_length = 10 * MAX_PATH_LONG;
+    autostarts = malloc(buffer_length * sizeof(WCHAR)); // arbitrary limit
+    if (!autostarts)
+    {
+        status = ERROR_OUTOFMEMORY;
+        goto cleanup;
+    }
+
+    status = CfgReadMultiString(moduleName, REG_CONFIG_AUTOSTART_VALUE, autostarts, buffer_length, NULL);
+    if (ERROR_SUCCESS != status)
+    {
+        win_perror2(status, "CfgReadMultiString(" REG_CONFIG_AUTOSTART_VALUE L")");
+        status = ERROR_SUCCESS; // this is non-fatal
+        goto cleanup;
+    }
+
+    for (WCHAR* entry = autostarts; *entry; entry += wcslen(entry))
+    {
+        LogDebug("running autostart: %s", entry);
+        HANDLE process;
+        status = CreateNormalProcessAsCurrentUser(entry, &process);
+        if (status == ERROR_SUCCESS)
+            CloseHandle(process);
+        else
+            LogWarning("Failed to start process: %s", entry); // non-fatal
+    }
+
+    status = ERROR_SUCCESS;
+cleanup:
+    free(autostarts);
+    return status;
+}
+
+/**
  * @brief Service worker thread.
  * @param param Worker context.
  * @return Error code.
@@ -1367,6 +1414,8 @@ DWORD WINAPI ServiceExecutionThread(void* param)
     LogInfo("Service started");
 
     libvchan_register_logger(XifLogger, LogGetLevel());
+
+    ProcessAutostarts();
 
     status = CreatePublicPipeSecurityDescriptor(&sd, &acl);
     if (status != ERROR_SUCCESS)
