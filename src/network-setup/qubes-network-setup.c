@@ -30,9 +30,6 @@
 
 #include <qubesdb-client.h>
 #include <log.h>
-#include <service.h>
-
-#define SERVICE_NAME L"QubesNetworkSetup"
 
 // TODO: make this configurable
 const PSTR g_VmAdapterDescriptions[] = { "Xen PV Network Device #0", "Realtek RTL8139C+ Fast Ethernet NIC", "Intel(R) PRO/1000 MT Network Connection"};
@@ -219,6 +216,7 @@ BOOL WaitForQdb(void)
     LogDebug("start");
     while (qdb == NULL && (tick - start) < 60 * 1000) // try for 60 seconds
     {
+        LogVerbose("trying qdb");
         qdb = qdb_open(NULL);
         if (qdb == NULL)
             Sleep(1000);
@@ -236,10 +234,8 @@ BOOL WaitForQdb(void)
     return TRUE;
 }
 
-DWORD WINAPI SetupNetwork(PVOID param)
+DWORD WINAPI SetupNetwork()
 {
-    UNREFERENCED_PARAMETER(param);
-
     qdb_handle_t qdb = NULL;
     char *qubesIp = NULL;
     char *qubesNetmask = NULL;
@@ -347,7 +343,6 @@ cleanup:
     if (qdb)
         qdb_close(qdb);
 
-    // no suitable interface found, ignore
     if (status == ERROR_NOT_FOUND)
         status = ERROR_SUCCESS;
 
@@ -356,12 +351,7 @@ cleanup:
 
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
-    if (argc >= 2 && 0 == wcscmp(argv[1], L"-service"))
-    {
-        return SvcMainLoop(SERVICE_NAME, 0, SetupNetwork, NULL, NULL, NULL);
-    }
-    else
-    {
-        return SetupNetwork(NULL);
-    }
+    UNREFERENCED_PARAMETER(argc);
+    UNREFERENCED_PARAMETER(argv);
+    return SetupNetwork();
 }
