@@ -24,7 +24,7 @@ vm:
     - src/qubes-rpc-services/qubes.ClipboardCopy
     - src/qubes-rpc-services/qubes.ClipboardPaste
     - src/qubes-rpc-services/qubes.Filecopy
-    - src/qubes-rpc-services/qubes.GetAppmenus
+    - src/qubes-rpc-services/qubes.GetAppMenus
     - src/qubes-rpc-services/qubes.GetImageRGBA
     - src/qubes-rpc-services/qubes.OpenInVM
     - src/qubes-rpc-services/qubes.OpenURL
