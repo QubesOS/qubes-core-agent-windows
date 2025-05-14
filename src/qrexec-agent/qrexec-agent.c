@@ -53,6 +53,7 @@ SRWLOCK g_ConnectionsHandlesLock;
 
 LIST_ENTRY g_RequestList; // pending service requests (local)
 ULONG g_RequestId = 0;
+volatile LONG64 g_IdleMilliseconds = 0; // should be naturally aligned by default, required for atomic access
 
 #ifdef _DEBUG
 void DumpRequestList(void)
@@ -1037,6 +1038,49 @@ static DWORD HandleDaemonMessage(void)
 
 static DWORD WINAPI ServiceCleanup(void);
 
+static DWORD WINAPI IdleWatchThread(void* param)
+{
+    HANDLE stopEvent = (HANDLE)param;
+    HANDLE idleEvent = CreateEvent(NULL, /*bManualReset=*/TRUE, /*bInitialState=*/FALSE, IDLE_EVENT_NAME);
+    if (idleEvent == NULL)
+    {
+        return win_perror("creating idle event");
+    }
+
+    BOOL idle = FALSE;
+    while (TRUE)
+    {
+        DWORD stopResult = WaitForSingleObject(stopEvent, 100);
+        if (stopResult == WAIT_OBJECT_0) // signaled
+        {
+            LogDebug("stopping");
+            break;
+        }
+
+        if (stopResult == WAIT_TIMEOUT)
+        {
+            InterlockedAdd64(&g_IdleMilliseconds, 100ULL);
+            ULONG64 current = InterlockedCompareExchange64(&g_IdleMilliseconds, 0, 0);
+            if (current == 100ULL)
+            {
+                LogDebug("idle timer reset");
+                ResetEvent(idleEvent);
+                idle = FALSE;
+            }
+
+            if (!idle && current > IDLE_TIMEOUT_MS)
+            {
+                LogDebug("idle timeout reached");
+                SetEvent(idleEvent);
+                idle = TRUE;
+            }
+        }
+    }
+
+    LogDebug("exiting");
+    return 0;
+}
+
 /**
  * @brief Vchan event loop.
  * @param stopEvent When this event is signaled, the function should exit.
@@ -1091,7 +1135,7 @@ static DWORD WatchForEvents(HANDLE stopEvent)
         LogVerbose("waiting for event");
 
         signaledEvent = WaitForMultipleObjects(waitObjectsIndex, waitObjects, FALSE, INFINITE) - WAIT_OBJECT_0;
-
+        InterlockedExchange64(&g_IdleMilliseconds, 0ULL); // reset idle timer
         LogVerbose("event %d", signaledEvent);
 
         if (WAIT_FAILED == signaledEvent)
@@ -1404,12 +1448,7 @@ cleanup:
  */
 DWORD WINAPI ServiceExecutionThread(void* param)
 {
-    DWORD status;
-    HANDLE pipeServerThread;
     PSERVICE_WORKER_CONTEXT ctx = param; // supplied by the common service code.
-    PSECURITY_DESCRIPTOR sd;
-    PACL acl;
-    SECURITY_ATTRIBUTES sa = { 0 };
 
     LogInfo("Service started");
 
@@ -1417,7 +1456,10 @@ DWORD WINAPI ServiceExecutionThread(void* param)
 
     ProcessAutostarts();
 
-    status = CreatePublicPipeSecurityDescriptor(&sd, &acl);
+    PSECURITY_DESCRIPTOR sd;
+    PACL acl;
+    SECURITY_ATTRIBUTES sa = { 0 };
+    DWORD status = CreatePublicPipeSecurityDescriptor(&sd, &acl);
     if (status != ERROR_SUCCESS)
         return win_perror("create pipe security descriptor");
 
@@ -1443,11 +1485,18 @@ DWORD WINAPI ServiceExecutionThread(void* param)
 
     LogVerbose("pipe server: %p", pipeServer);
 
-    pipeServerThread = CreateThread(NULL, 0, PipeServerThread, pipeServer, 0, NULL);
+    HANDLE pipeServerThread = CreateThread(NULL, 0, PipeServerThread, pipeServer, 0, NULL);
     if (!pipeServerThread)
     {
         status = GetLastError();
         return win_perror2(status, "create pipe server thread");
+    }
+
+    HANDLE idleWatchThread = CreateThread(NULL, 0, IdleWatchThread, ctx->StopEvent, 0, NULL);
+    if (!pipeServerThread)
+    {
+        status = GetLastError();
+        return win_perror2(status, "create idle watch thread");
     }
 
     LogVerbose("pipe thread: %p, entering loop", pipeServerThread);
@@ -1463,6 +1512,11 @@ DWORD WINAPI ServiceExecutionThread(void* param)
     if (WaitForSingleObject(pipeServerThread, 1000) != WAIT_OBJECT_0)
         TerminateThread(pipeServerThread, 0);
     CloseHandle(pipeServerThread);
+
+    LogDebug("Waiting for the idle watch thread to exit");
+    if (WaitForSingleObject(idleWatchThread, 1000) != WAIT_OBJECT_0)
+        TerminateThread(idleWatchThread, 0);
+    CloseHandle(idleWatchThread);
 
     LocalFree(acl);
     LocalFree(sd);

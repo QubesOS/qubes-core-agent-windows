@@ -31,6 +31,10 @@
 
 #define	TRIGGER_PIPE_NAME               L"\\\\.\\pipe\\qrexec_trigger"
 
+// this event is signaled when we receive no events for several seconds
+#define IDLE_TIMEOUT_MS                 5000
+#define IDLE_EVENT_NAME                 L"Global\\QREXEC_IDLE_EVENT"
+
 #define VCHAN_BUFFER_SIZE 65536
 
 // Make sure this matches the installer. TODO: remove hardcoded value from the installer and here
