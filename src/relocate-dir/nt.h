@@ -22,6 +22,9 @@
 #pragma once
 
 // This include is meant for kernel file system drivers, but we can use it for user mode defines as well.
+#ifndef _AMD64_
+#define _AMD64_
+#endif
 #include <ntifs.h>
 
 #pragma intrinsic(memcpy, memset)

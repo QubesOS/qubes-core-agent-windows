@@ -51,26 +51,24 @@
     <Driver_SpectreMitigation>Spectre</Driver_SpectreMitigation>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
-  <ImportGroup Label="ExtensionSettings">
-  </ImportGroup>
+  <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Label="PropertySheets">
-    <Import Project="$(SolutionDir)\dirs.props" Condition="exists('$(SolutionDir)\dirs.props')" Label="Installer include/lib directory overrides" />
-  </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(DDK_INC_PATH)</IncludePath>
-    <LibraryPath>$(VCToolsInstallDir)lib\Spectre\onecore\$(Platform);$(LibraryPath);$(QUBES_LIBS)</LibraryPath>
-    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDES)</IncludePath>
+    <LibraryPath>$(VCToolsInstallDir)lib\Spectre\onecore\$(Platform);$(LibraryPath);$(QUBES_LIBS);$(EWDK_LIBS)</LibraryPath>
+    <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(ProjectDir)\..\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)\..\$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IntDir>$(SolutionDir)\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
-    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(DDK_INC_PATH)</IncludePath>
-    <LibraryPath>$(VCToolsInstallDir)lib\Spectre\onecore\$(Platform);$(LibraryPath);$(QUBES_LIBS)</LibraryPath>
-    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
+    <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(QUBES_INCLUDES);$(EWDK_INCLUDES)</IncludePath>
+    <LibraryPath>$(VCToolsInstallDir)lib\Spectre\onecore\$(Platform);$(LibraryPath);$(QUBES_LIBS);$(EWDK_LIBS)</LibraryPath>
+    <LinkIncremental>false</LinkIncremental>
+    <IntDir>$(ProjectDir)\..\tmp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)\..\$(Platform)\$(Configuration)\$(ProjectName)\</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
