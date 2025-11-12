@@ -14,6 +14,10 @@ function Log {
         [string]$msg
     )
 
+    if ($qwtLogPath -eq $null) {
+        LogStart
+    }
+
     if ($level -le $qwtLogLevel) {
         $ts = Get-Date -Format "yyyyMMdd.HHmmss.fff"
         Add-Content $qwtLogPath -value "[$ts-$("EWIDV"[$level-1])] $msg"
