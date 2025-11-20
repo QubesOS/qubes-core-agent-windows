@@ -19,6 +19,8 @@
  *
  #>
 
+. $env:QUBES_TOOLS\qubes-rpc-services\log.ps1
+
 # Registry location for path hash -> full path mapping
 $RegistryMapPath = 'HKCU:\Software\Invisible Things Lab\Qubes Tools'
 $RegistryMapKey = 'AppMap'
@@ -26,5 +28,13 @@ $RegistryMapKey = 'AppMap'
 $desktopBaseName = $args[0]
 
 $desktopFullName = Get-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $desktopBaseName
+$target = $desktopFullName.$desktopBaseName
 
-Start-Process -Wait $desktopFullName.$desktopBaseName
+while (! (Get-CimInstance -ClassName Win32_ComputerSystem).UserName) {
+    LogDebug "Waiting for user logon"
+    Start-Sleep -Milliseconds 100
+}
+
+LogDebug "Starting $target"
+
+Start-Process -Wait $target

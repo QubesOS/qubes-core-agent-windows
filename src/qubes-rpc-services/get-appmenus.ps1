@@ -19,6 +19,8 @@
  *
  #>
 
+. $env:QUBES_TOOLS\qubes-rpc-services\log.ps1
+
 # Registry location for path hash -> full path mapping for GetImageRGBA
 $RegistryMapPath = 'HKCU:\Software\Invisible Things Lab\Qubes Tools'
 $RegistryMapKey = 'AppMap'
@@ -56,6 +58,8 @@ Function ProcessLink($pathObj, $basepath)
     New-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $targetHash -PropertyType String -Value $pathObj.FullName | Out-Null
     # Store also basename-LNK location for qubes.StartApp service
     New-ItemProperty -Path "$RegistryMapPath\$RegistryMapKey" -Name $desktopFileName.Replace('.lnk', '') -PropertyType String -Value $pathObj.FullName | Out-Null
+
+    LogDebug "$targetHash -> $targetPath"
 
     Write-Host "$($linkBaseName):Name=$appmenuLocation$($pathObj.BaseName)"
     Write-Host "$($linkBaseName):Exec=$($targetPath.Replace('\','\\'))"

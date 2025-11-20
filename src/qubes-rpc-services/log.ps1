@@ -1,6 +1,8 @@
 function LogStart {
     $logDir = Get-ItemPropertyValue "hklm:\Software\Invisible Things Lab\Qubes Tools" LogDir
-    $baseName = (Get-Item $MyInvocation.PSCommandPath).BaseName
+    # get the originating script path
+    $basePath = (Get-PSCallStack | Where-Object { $_.ScriptName } | Select-Object -Last 1).ScriptName
+    $baseName = Split-Path -Leaf -Path $basePath
     $logname = "$baseName-$(Get-Date -Format "yyyyMMdd-HHmmss")-$PID.log"
     $global:qwtLogPath = "$logDir\$logName"
     $global:qwtLogLevel = Get-ItemPropertyValue "hklm:\Software\Invisible Things Lab\Qubes Tools" LogLevel
@@ -11,6 +13,10 @@ function Log {
         [ValidateRange(1,5)][int]$level,
         [string]$msg
     )
+
+    if ($qwtLogPath -eq $null) {
+        LogStart
+    }
 
     if ($level -le $qwtLogLevel) {
         $ts = Get-Date -Format "yyyyMMdd.HHmmss.fff"
