@@ -4,6 +4,7 @@ vm:
     - vs2022/core-agent-windows.sln
     bin:
     - vs2022/x64/@CONFIGURATION@/advertise-tools/advertise-tools.exe
+    - vs2022/x64/@CONFIGURATION@/autologon/autologon.exe
     - vs2022/x64/@CONFIGURATION@/clipboard-copy/clipboard-copy.exe
     - vs2022/x64/@CONFIGURATION@/clipboard-paste/clipboard-paste.exe
     - vs2022/x64/@CONFIGURATION@/file-receiver/file-receiver.exe
