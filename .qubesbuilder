@@ -41,3 +41,21 @@ vm:
     - src/qubes-rpc-services/update-time.bat
     - src/qubes-rpc-services/VMExec-Decode.ps1
     - src/qubes-rpc-services/VMExec.ps1
+    pdb:
+    - vs2022/x64/@CONFIGURATION@/advertise-tools/advertise-tools.pdb
+    - vs2022/x64/@CONFIGURATION@/autologon/autologon.pdb
+    - vs2022/x64/@CONFIGURATION@/clipboard-copy/clipboard-copy.pdb
+    - vs2022/x64/@CONFIGURATION@/clipboard-paste/clipboard-paste.pdb
+    - vs2022/x64/@CONFIGURATION@/file-receiver/file-receiver.pdb
+    - vs2022/x64/@CONFIGURATION@/file-sender/file-sender.pdb
+    - vs2022/x64/@CONFIGURATION@/get-image-rgba/get-image-rgba.pdb
+    - vs2022/x64/@CONFIGURATION@/network-setup/network-setup.pdb
+    - vs2022/x64/@CONFIGURATION@/open-in-vm/open-in-vm.pdb
+    - vs2022/x64/@CONFIGURATION@/open-url/open-url.pdb
+    - vs2022/x64/@CONFIGURATION@/qrexec-agent/qrexec-agent.pdb
+    - vs2022/x64/@CONFIGURATION@/qrexec-client-vm/qrexec-client-vm.pdb
+    - vs2022/x64/@CONFIGURATION@/qrexec-wrapper/qrexec-wrapper.pdb
+    - vs2022/x64/@CONFIGURATION@/relocate-dir/relocate-dir.pdb
+    - vs2022/x64/@CONFIGURATION@/set-gui-mode/set-gui-mode.pdb
+    - vs2022/x64/@CONFIGURATION@/vm-file-editor/vm-file-editor.pdb
+    - vs2022/x64/@CONFIGURATION@/wait-for-logon/wait-for-logon.pdb
